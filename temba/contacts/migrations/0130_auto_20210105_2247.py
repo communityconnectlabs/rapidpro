@@ -2,7 +2,7 @@
 
 # import django.db.models.expressions
 # import django.db.models.functions.text
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -11,25 +11,4 @@ class Migration(migrations.Migration):
         ("contacts", "0129_squashed"),
     ]
 
-    operations = [
-        migrations.AddConstraint(
-            model_name="contacturn",
-            constraint=models.CheckConstraint(
-                check=models.Q(models.Q(("scheme", ""), ("path", ""), _connector="OR"), _negated=True),
-                name="non_empty_scheme_and_path",
-            ),
-        ),
-        # migrations.AddConstraint(
-        #     model_name="contacturn",
-        #     constraint=models.CheckConstraint(
-        #         check=models.Q(
-        #             identity=django.db.models.functions.text.Concat(
-        #                 django.db.models.expressions.F("scheme"),
-        #                 django.db.models.expressions.Value(":"),
-        #                 django.db.models.expressions.F("path"),
-        #             )
-        #         ),
-        #         name="identity_matches_scheme_and_path",
-        #     ),
-        # ),
-    ]
+    operations = []
