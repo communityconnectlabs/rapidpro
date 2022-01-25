@@ -408,7 +408,7 @@
           el.slideDown();
         });
 
-        buildGoogleFontLink($("temba-select[name='google_font']").find("temba-option[selected]")[0].attributes.value.nodeValue);
+        buildGoogleFontLink($("temba-select[name='google_font']").find("temba-option[selected]")[0]?.attributes?.value?.nodeValue);
 
         {% for item in customable_fields %}
         $("{{ item }}").blur(function() {
