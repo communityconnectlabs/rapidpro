@@ -927,6 +927,7 @@ class OrgCRUDL(SmartCRUDL):
         "send_invite",
         "translations",
         "translate",
+        "facebook_json",
     )
 
     model = Org
@@ -3512,6 +3513,12 @@ class OrgCRUDL(SmartCRUDL):
                 if vonage_client:  # pragma: needs cover
                     formax.add_section("vonage", reverse("orgs.org_vonage_account"), icon="icon-vonage")
 
+                facebook_channel = org.get_any_facebook_channel()
+                if facebook_channel:
+                    formax.add_section(
+                        "facebook_ads", reverse("orgs.org_facebook_json"), icon="icon-facebook-official", action="link"
+                    )
+
             if self.has_org_perm("classifiers.classifier_read"):
                 classifiers = org.classifiers.filter(is_active=True).order_by("created_on")
                 for classifier in classifiers:
@@ -4125,6 +4132,35 @@ class OrgCRUDL(SmartCRUDL):
             invitation.send_invitation()
 
             return super().form_valid(form)
+
+    class FacebookJson(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class FacebookJsonForm(forms.ModelForm):
+            facebook_ads = forms.CharField(
+                required=False,
+                label=_("Generate new Facebook Ad JSON"),
+                max_length=30,
+                widget=InputWidget(attrs=dict(placeholder=_("Enter the campaign name"))),
+            )
+
+            class Meta:
+                model = Org
+                fields = ("id", "facebook_ads")
+
+        form_class = FacebookJsonForm
+        success_url = "@orgs.org_facebook_json"
+        permission = "channels.channel_update"
+        submit_button_name = _("Create")
+        success_message = ""
+
+        def save(self, obj):
+            print(self.form.cleaned_data)
+            return obj
+
+        def get_template_names(self):
+            if "HTTP_X_FORMAX" in self.request.META:
+                return ["orgs/org_facebook_json_summary.haml"]
+            else:
+                return super().get_template_names()
 
 
 class TopUpCRUDL(SmartCRUDL):

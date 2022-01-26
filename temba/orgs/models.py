@@ -1094,6 +1094,9 @@ class Org(SmartModel):
             return self.config.get(Org.CONFIG_CHATBASE_API_KEY), self.config.get(Org.CONFIG_CHATBASE_VERSION)
         return None, None
 
+    def get_any_facebook_channel(self):
+        return self.channels.filter(channel_type__in=["FB", "FBA"]).first()
+
     @property
     def default_country_code(self) -> str:
         """
