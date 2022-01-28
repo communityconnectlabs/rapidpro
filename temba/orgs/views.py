@@ -90,7 +90,7 @@ from .models import (
     DEFAULT_INDEXES_FIELDS_PAYLOAD_GIFTCARDS,
     DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS,
 )
-from .models import BackupToken, Invitation, Org, OrgCache, OrgRole, TopUp, get_stripe_credentials
+from .models import BackupToken, Invitation, Org, OrgCache, OrgRole, TopUp, get_stripe_credentials, FacebookJsonAd
 from .tasks import apply_topups_task
 
 # session key for storing a two-factor enabled user's id once we've checked their password
@@ -927,7 +927,6 @@ class OrgCRUDL(SmartCRUDL):
         "send_invite",
         "translations",
         "translate",
-        "facebook_json",
     )
 
     model = Org
@@ -4133,35 +4132,6 @@ class OrgCRUDL(SmartCRUDL):
 
             return super().form_valid(form)
 
-    class FacebookJson(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
-        class FacebookJsonForm(forms.ModelForm):
-            facebook_ads = forms.CharField(
-                required=False,
-                label=_("Generate new Facebook Ad JSON"),
-                max_length=30,
-                widget=InputWidget(attrs=dict(placeholder=_("Enter the campaign name"))),
-            )
-
-            class Meta:
-                model = Org
-                fields = ("id", "facebook_ads")
-
-        form_class = FacebookJsonForm
-        success_url = "@orgs.org_facebook_json"
-        permission = "channels.channel_update"
-        submit_button_name = _("Create")
-        success_message = ""
-
-        def save(self, obj):
-            print(self.form.cleaned_data)
-            return obj
-
-        def get_template_names(self):
-            if "HTTP_X_FORMAX" in self.request.META:
-                return ["orgs/org_facebook_json_summary.haml"]
-            else:
-                return super().get_template_names()
-
 
 class TopUpCRUDL(SmartCRUDL):
     actions = ("list", "create", "read", "manage", "update")
@@ -4390,3 +4360,64 @@ class StripeHandler(View):  # pragma: no cover
 
         # empty response, 200 lets Stripe know we handled it
         return HttpResponse("Ignored, uninteresting event")
+
+
+class FacebookAds(SmartCRUDL):
+    model = Org
+    path = "facebook_ads"
+    actions = ("list", "delete")
+
+    def url_name_for_action(self, action):
+        return "%s.%s_%s" % (self.module_name.lower(), self.path, action)
+
+    class List(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class CreateForm(forms.ModelForm):
+            facebook_ads = forms.CharField(
+                required=False,
+                label=_("Generate new Facebook Ad JSON"),
+                max_length=30,
+                widget=InputWidget(attrs=dict(placeholder=_("Enter the campaign name"))),
+            )
+
+            class Meta:
+                model = Org
+                fields = ("id", "facebook_ads")
+
+        form_class = CreateForm
+        success_url = "@orgs.facebook_ads_list"
+        permission = "channels.channel_update"
+        submit_button_name = _("Create")
+        template_name = "orgs/facebook_ads_list.haml"
+        success_message = ""
+
+        def get_context_data(self, **kwargs):
+            org = self.derive_org()
+            context = super().get_context_data(**kwargs)
+            context["facebook_ads"] = org.facebook_ads.order_by("-modified_on")
+            return context
+
+        def form_valid(self, form):
+            user = self.get_user()
+            org = self.derive_org()
+            if org:
+                org.facebook_ads.create(
+                    campaign_name=form.cleaned_data.get("facebook_ads"),
+                    created_by=user,
+                    modified_by=user,
+                )
+
+            return super().form_valid(form)
+
+        # skip saving called by `super().form_valid()`.
+        def save(self, obj):
+            return obj
+
+        def get_template_names(self):
+            if "HTTP_X_FORMAX" in self.request.META:
+                return ["orgs/facebook_ads_summary.haml"]
+            else:
+                return super().get_template_names()
+
+    class Delete(InferOrgMixin, OrgPermsMixin, SmartDeleteView):
+        model = FacebookJsonAd
+        redirect_url = "@orgs.facebook_ads_list"

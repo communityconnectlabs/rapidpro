@@ -2,6 +2,7 @@ from django.conf.urls import url
 
 from .views import (
     ConfirmAccessView,
+    FacebookAds,
     LoginView,
     OrgCRUDL,
     StripeHandler,
@@ -15,6 +16,7 @@ from .views import (
 urlpatterns = OrgCRUDL().as_urlpatterns()
 urlpatterns += TopUpCRUDL().as_urlpatterns()
 urlpatterns += UserCRUDL().as_urlpatterns()
+urlpatterns += FacebookAds().as_urlpatterns()
 
 urlpatterns += [
     url(r"^login/$", check_login, name="users.user_check_login"),

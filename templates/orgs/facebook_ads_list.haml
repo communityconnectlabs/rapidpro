@@ -1,0 +1,78 @@
+- extends 'smartmin/form.html'
+- load compress temba smartmin i18n
+
+- block title-icon
+  .title-icon
+    %span{class: "glyph {{ icon_slug }}"}
+
+- block title
+  .title-text
+    %h1 Facebook Ads JSON
+
+- block form
+  <form class="smartmin-form" method="post" enctype="multipart/form-data" {% if action_url  %}action="{{ action_url }}"{% endif %}>
+    - csrf_token
+    - if form.non_field_errors
+      %div.alert.alert-error.form-errors
+        = form.non_field_errors
+
+    .new-json-form
+      .ads-input
+        - render_field 'facebook_ads'
+      .ads-submit.ml-auto
+        %input.button-primary{type: "submit", value: "{{ submit_button_name }}"}
+  </form>
+
+  - if facebook_ads
+    %table.list.object-list.lined
+      %thead
+        %tr
+          %th Adds Available
+          %th
+          %th JSON
+          %th Type
+          %th Created On
+          %th Delete
+
+      %tbody
+        - for facebook_ad in facebook_ads
+          %tr
+            %td
+              = facebook_ad.campaign_name
+            %td.permission.action
+              .link
+                Edit
+            %td.permission.action
+              .link
+                Copy
+            %td
+              = facebook_ad.get_ads_type_display
+            %td
+              - format_datetime facebook_ad.created_on
+            %td
+              .glyph.icon-remove-2
+  - else
+    .info
+      No Facebook Ad created yet
+
+
+-block extra-script
+  {{block.super}}
+
+
+-block extra-style
+  {{block.super}}
+  :css
+    .new-json-form {
+      display: flex;
+      align-items: end;
+      width: 100%;
+    }
+
+    .ads-input {
+      width: 70%;
+    }
+
+    .ads-submit {
+      margin-bottom: 10px;
+    }

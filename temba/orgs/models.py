@@ -3055,3 +3055,17 @@ class OrgActivity(models.Model):
 
     class Meta:
         unique_together = ("org", "day")
+
+
+class FacebookJsonAd(SmartModel):
+    TYPE_TEXT = "T"
+    TYPE_VIDEO = "V"
+    ADS_TYPES = (
+        (TYPE_TEXT, "Text"),
+        (TYPE_VIDEO, "Video"),
+    )
+
+    org = models.ForeignKey(Org, models.PROTECT, related_name="facebook_ads")
+    campaign_name = models.CharField(max_length=256)
+    ads_type = models.CharField(max_length=1, choices=ADS_TYPES, default=TYPE_TEXT)
+    advertisement_json = JSONField(blank=True, null=True)
