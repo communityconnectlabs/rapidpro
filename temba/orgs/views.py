@@ -4418,6 +4418,11 @@ class FacebookAds(SmartCRUDL):
             else:
                 return super().get_template_names()
 
-    class Delete(InferOrgMixin, OrgPermsMixin, SmartDeleteView):
+    class Delete(ModalMixin, OrgPermsMixin, SmartDeleteView):
         model = FacebookJsonAd
+        fields = ("id",)
+        submit_button_name = _("Delete")
+        permission = "channels.channel_update"
         redirect_url = "@orgs.facebook_ads_list"
+        cancel_url = "@orgs.facebook_ads_list"
+        template_name = "smartmin/delete_confirm.haml"

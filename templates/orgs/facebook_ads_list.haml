@@ -29,36 +29,96 @@
         %tr
           %th Adds Available
           %th
-          %th JSON
-          %th Type
-          %th Created On
-          %th Delete
+          %th.text-center JSON
+          %th.text-center Type
+          %th.text-center Created On
+          %th.text-center Delete
 
       %tbody
         - for facebook_ad in facebook_ads
           %tr
             %td
               = facebook_ad.campaign_name
-            %td.permission.action
-              .link
+            %td.text-center.action
+              %a
                 Edit
-            %td.permission.action
-              .link
+            %td.text-center.action
+              %a.copy-link{onclick: 'copyToClipboard("{{ facebook_ad.advertisement_json|escapejs }}")'}
                 Copy
-            %td
+            %td.text-center
               = facebook_ad.get_ads_type_display
-            %td
+            %td.text-center
               - format_datetime facebook_ad.created_on
-            %td
-              .glyph.icon-remove-2
+            %td.text-center
+              %a.delete-link{onclick: "showDeleteJsonModal({{ facebook_ad.id }})"}
+                .glyph.icon-remove-2
   - else
     .info
       No Facebook Ad created yet
 
+  %input.hidden#copying-field{type: "text"}
+  %temba-modax{ id:'delete-json', header:'{{_("Delete Facebook Ads JSON")|escapejs}}'}
+  %temba-dialog{ id: 'copy-json', header:'{{_("Copy Facebook Ads JSON")|escapejs}}'}
+    #copy-json-message-body.p-6
 
 -block extra-script
   {{block.super}}
+  :javascript
+    function showDeleteJsonModal(id) {
+      var modax = document.querySelector('#delete-json');
+      modax.endpoint = `/facebook_ads/delete/${id}/`;
+      modax.open = true;
+    }
 
+    function copyToClipboard(adJson) {
+      let copyingField = document.querySelector("#copying-field");
+      try {
+        let parsedJson = JSON.parse(adJson);
+        copyingField.value = JSON.stringify(parsedJson);
+        navigator.clipboard.writeText(copyingField.value).then(() => {
+          showInformationMessage("The Facebook Ad JSON copied!");
+        }).catch(() => {
+          copyingField.select();
+          document.execCommand("copy");
+        })
+      } catch (e) {
+        showErrorMessage("This data can't be copied.")
+      }
+    }
+
+    function showInformationMessage(message) {
+      document.querySelector("#copy-json-message-body").innerText = message;
+      let dialog = document.querySelector("#copy-json");
+      let header = dialog.shadowRoot.querySelector(".header-text");
+      if (header.classList.contains("alert")) {
+        header.classList.remove("alert");
+        header.style.backgroundColor = "var(--color-primary-dark)";
+      }
+      dialog.primaryButtonName = '{{_("OK")|escapejs}}';
+      dialog.cancelButtonName = '';
+      dialog.open = true;
+    }
+
+    function showErrorMessage(message) {
+      document.querySelector("#copy-json-message-body").innerText = message;
+      let dialog = document.querySelector("#copy-json");
+      let header = dialog.shadowRoot.querySelector(".header-text");
+      if (!header.classList.contains("alert")) {
+        header.classList.add("alert");
+        header.style.backgroundColor = "var(--color-error)";
+      }
+      dialog.cancelButtonName = '{{_("Close")|escapejs}}';
+      dialog.primaryButtonName = '';
+      dialog.destructive = true;
+      dialog.open = true;
+    }
+
+    window.addEventListener("DOMContentLoaded", function() {
+      let dialog = document.querySelector("#copy-json");
+      dialog.addEventListener("temba-button-clicked", function(event){
+        dialog.open = false;
+      });
+    });
 
 -block extra-style
   {{block.super}}
@@ -75,4 +135,8 @@
 
     .ads-submit {
       margin-bottom: 10px;
+    }
+
+    .text-center {
+      text-align: center !important;
     }

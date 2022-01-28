@@ -3069,3 +3069,6 @@ class FacebookJsonAd(SmartModel):
     campaign_name = models.CharField(max_length=256)
     ads_type = models.CharField(max_length=1, choices=ADS_TYPES, default=TYPE_TEXT)
     advertisement_json = JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return self.campaign_name
