@@ -19,14 +19,12 @@ class PublicFileStorage(DefaultStorage):
 class PrivateFileStorage(DefaultStorage):
     default_acl = "private"
 
-    def save_with_public_url(self, *args, request=None, **kwargs) -> str:
-        assert request is not None
+    def save_with_public_url(self, *args, **kwargs) -> str:
         location = super(type(self._wrapped), self).save(*args, **kwargs)
         if isinstance(self._wrapped, S3Boto3Storage):
+            protocol = "http" if settings.DEBUG else "https"
             relative_path = reverse("file_storage", kwargs={"file_path": location})
-            if request is not None:
-                return request.build_absolute_uri(relative_path)
-            return f"https://{settings.HOSTNAME}/{relative_path}"
+            return f"{protocol}://{settings.HOSTNAME}{relative_path}"
         return f"{settings.STORAGE_URL}/{location}"
 
 

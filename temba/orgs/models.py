@@ -49,7 +49,7 @@ from temba.utils.dates import datetime_to_str
 from temba.utils.email import send_template_email
 from temba.utils.legacy.dates import str_to_datetime
 from temba.utils.models import JSONAsTextField, JSONField, SquashableModel
-from temba.utils.s3 import public_file_storage
+from temba.utils.s3 import private_file_storage
 from temba.utils.text import generate_token, random_string
 from temba.utils.timezones import timezone_to_country_code
 from temba.utils.uuid import uuid4
@@ -1879,9 +1879,8 @@ class Org(SmartModel):
             filename = "%s.%s" % (filename, extension)
 
         path = "%s/%d/media/%s" % (settings.STORAGE_ROOT_DIR, self.pk, filename)
-        location = public_file_storage.save(path, file)
-
-        return f"{settings.STORAGE_URL}/{location}"
+        public_url = private_file_storage.save_with_public_url(path, file)
+        return public_url
 
     def release(self, user, *, release_users=True):
         """

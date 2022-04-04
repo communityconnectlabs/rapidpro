@@ -1059,7 +1059,6 @@ class FlowCRUDL(SmartCRUDL):
             public_url = private_file_storage.save_with_public_url(
                 "attachments/%d/%d/steps/%s.%s" % (flow.org.pk, flow.id, name_uuid, extension),
                 file,
-                request=self.request,
             )
             return {"type": file.content_type, "url": public_url}
 
