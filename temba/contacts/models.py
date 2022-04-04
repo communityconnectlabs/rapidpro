@@ -2125,7 +2125,8 @@ class ExportContactsTask(BaseExportTask):
             else:
                 return ""
         elif field["key"] == "group_membership":
-            return ", ".join(contact.all_groups.exclude(name="All Contacts").values_list("name", flat=True))
+            groups = contact.all_groups.exclude(name="All Contacts").order_by("name")
+            return ", ".join(groups.values_list("name", flat=True))
         else:
             return contact.get_field_display(field["field"])
 
