@@ -1593,16 +1593,13 @@ class FlowCRUDL(SmartCRUDL):
 
             feature_filters = []
 
-            facebook_channel = flow.org.get_channel_for_role(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
+            facebook_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
             if facebook_channel is not None:
                 feature_filters.append("facebook")
 
-            whatsapp_channel = flow.org.get_channel_for_role(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
+            whatsapp_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
             if whatsapp_channel is not None:
                 feature_filters.append("whatsapp")
-
-            if flow.org.is_connected_to_dtone():
-                feature_filters.append("airtime")
 
             if flow.org.classifiers.filter(is_active=True).exists():
                 feature_filters.append("classifier")
