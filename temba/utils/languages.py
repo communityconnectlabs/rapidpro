@@ -73,7 +73,7 @@ def choices(codes: set, sort: bool = True) -> tuple:
     """
     Converts language codes into a list of code/name tuples suitable for choices on a form.
     """
-    cs = tuple((c, NAMES[c]) for c in codes)
+    cs = tuple((c, NAMES[c]) for c in codes if NAMES.get(c))
     if sort:
         cs = sorted(cs, key=lambda x: x[1])
     return cs
