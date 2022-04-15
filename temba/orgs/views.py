@@ -3430,7 +3430,7 @@ class OrgCRUDL(SmartCRUDL):
 
                 # Converting dataframe into list of rows for the next processing
                 headers = spamreader.columns.tolist()
-                rows_list = spamreader.get_values().tolist()
+                rows_list = spamreader.values.tolist()
                 spamreader = [headers] + rows_list
 
                 if spamreader:
