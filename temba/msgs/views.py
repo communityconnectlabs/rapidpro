@@ -785,7 +785,7 @@ class MsgCRUDL(SmartCRUDL):
                     dict(
                         id="delete-label",
                         title=_("Delete Label"),
-                        href=reverse("msgs.label_delete", args=[label.pk]),
+                        href=reverse("msgs.label_delete", args=[label.uuid]),
                         modax=_("Delete Label"),
                     )
                 )
