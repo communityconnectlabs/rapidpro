@@ -210,3 +210,40 @@ class MockTwilioClient(Client):
             self.sid = sid
             self.friendly_name = friendly_name
             self.status = status
+
+    @property
+    def lookups(self):
+        return MockTwilioClient.MockLookups()
+
+    class MockLookups:
+        @property
+        def v1(self):
+            return MockTwilioClient.MockLookupPhoneNumbers()
+
+    class MockLookupPhoneNumbers(MockInstanceResource):
+        def __init__(self):
+            self.phone_number = ""
+            self._properties = {
+                "caller_name": None,
+                "carrier": {
+                    "error_code": None,
+                    "mobile_country_code": "310",
+                    "mobile_network_code": "456",
+                    "name": "verizon",
+                    "type": "mobile",
+                },
+                "country_code": "US",
+                "national_format": "",
+                "phone_number": "",
+                "add_ons": None,
+                "url": "https://lookups.twilio.com/v1/PhoneNumbers/+15108675310",
+            }
+
+        def phone_numbers(self, phone_number):
+            self.phone_number = phone_number
+            self._properties["phone_number"] = phone_number
+            self._properties["national_format"] = phone_number
+            return self
+
+        def fetch(self, *args, **kwargs):
+            return self

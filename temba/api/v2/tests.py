@@ -45,6 +45,7 @@ from temba.utils import json
 from . import fields
 from .serializers import format_datetime, normalize_extra
 from .validators import is_uuid_valid
+from ...tests.twilio import MockTwilioClient
 
 NUM_BASE_REQUEST_QUERIES = 6  # number of db queries required for any API request
 
@@ -4498,3 +4499,12 @@ class APITest(TembaTest):
 
         valid = is_uuid_valid("6df7f177-6d1b-4493-8cea-086de5dcff5e")
         self.assertTrue(valid)
+
+    def test_twilio_phone_validation(self):
+        self.login(self.admin)
+        url = reverse("api.v2.twilio_phone_validation")
+
+        with patch("temba.orgs.models.Org.get_twilio_client") as tw_client:
+            tw_client.return_value = MockTwilioClient("", "", self.org)
+            response = self.client.get(url, data={"phone_number": "+15108675310"})
+            self.assertContains(response, "+15108675310")
