@@ -29,6 +29,7 @@ from django.db.models import Prefetch, Q, Count, QuerySet
 from django.http import HttpResponse, JsonResponse, Http404
 from django.utils.translation import ugettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
+from twilio.base.exceptions import TwilioRestException
 
 from temba.api.models import APIToken, Resthook, ResthookSubscriber, WebHookEvent
 from temba.api.v2.views_base import (
@@ -98,6 +99,7 @@ from .serializers import (
     TicketerReadSerializer,
     TicketReadSerializer,
     TicketWriteSerializer,
+    TwilioNumberValidationSerializer,
     UrlAttachmentValidationSerializer,
     WebHookEventReadSerializer,
     WorkspaceReadSerializer,
@@ -145,6 +147,7 @@ class RootView(views.APIView):
      * [/api/v2/flow_variable_report](/api/v2/flow_variable_report) - to generate a report about flow variable
      * [/api/v2/messages_report](/api/v2/messages_report) - to generate a report about messages
      * [/api/v2/trackable_link_report](/api/v2/trackable_link_report) - to generate a report about trackable links
+     * [/api/v2/twilio_phone_validation](/api/v2/twilio_phone_validation) - to retrieve additional information about a phone number
 
     To use the endpoint simply append _.json_ to the URL. For example [/api/v2/flows](/api/v2/flows) will return the
     documentation for that endpoint but a request to [/api/v2/flows.json](/api/v2/flows.json) will return a JSON list of
@@ -250,6 +253,7 @@ class RootView(views.APIView):
                 "runs": reverse("api.v2.runs", request=request),
                 "templates": reverse("api.v2.templates", request=request),
                 "ticketers": reverse("api.v2.ticketers", request=request),
+                "twilio_phone_validation": reverse("api.v2.twilio_phone_validation", request=request),
                 # "tickets": reverse("api.v2.tickets", request=request),
                 "workspace": reverse("api.v2.workspace", request=request),
             }
@@ -322,6 +326,7 @@ class ExplorerView(SmartTemplateView):
             FlowReportEndpoint.get_read_explorer(),
             FlowVariableReportEndpoint.get_read_explorer(),
             TrackableLinkReportEndpoint.get_read_explorer(),
+            TwilioPhoneValidationEndpoint.get_read_explorer(),
         ]
         return context
 
@@ -5736,3 +5741,80 @@ class TrackableLinkReportEndpoint(BaseAPIView, ReportEndpointMixin):
                 query="export_csv=false",
             ),
         )
+
+
+class TwilioPhoneValidationEndpoint(BaseAPIView):
+    """
+    This endpoint provides a way to retrieve additional information about a phone number
+
+    A **GET** returns information about the specified phone number
+
+    * **phone_number** - the phone number you are requesting information about
+
+    Example:
+
+        GET /api/v2/twilio_phone_validation.json
+        {
+            "phone_number": "+15108675310",
+        }
+
+    Response:
+
+        {
+            "caller_name": null,
+            "carrier": {
+                "error_code": null,
+                "mobile_country_code": "310",
+                "mobile_network_code": "456",
+                "name": "verizon",
+                "type": "mobile"
+            },
+            "country_code": "US",
+            "national_format": "(510) 867-5310",
+            "phone_number": "+15108675310",
+            "add_ons": null,
+            "url": "https://lookups.twilio.com/v1/PhoneNumbers/+15108675310"
+        }
+    """
+
+    permission = "orgs.org_api"
+
+    def get(self, request, *args, **kwargs):
+        org = self.request.user.get_org()
+        client = None if org is None else org.get_twilio_client()
+        error_response = Response(
+            {"error": "Your organization is not connected to a Twilio account or the credentials are expired."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+        if not client:
+            return error_response
+
+        params = {key: request.data.get(key) for key in request.data}
+        params.update({key: request.query_params.get(key) for key in request.query_params})
+        serializer = TwilioNumberValidationSerializer(data=params)
+        if not serializer.is_valid():
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            response = client.lookups.v1.phone_numbers(serializer.validated_data["phone_number"]).fetch(
+                type=["carrier"]
+            )
+            return Response(response._properties, status=status.HTTP_200_OK)
+        except TwilioRestException:
+            return error_response
+
+    @classmethod
+    def get_read_explorer(cls):
+        return {
+            "method": "GET",
+            "title": "Twilio Phone Validation",
+            "url": reverse("api.v2.twilio_phone_validation"),
+            "slug": "twilio-phone-validation",
+            "params": [
+                {
+                    "name": "phone_number",
+                    "required": True,
+                    "help": "The phone number you are requesting information about",
+                },
+            ],
+        }

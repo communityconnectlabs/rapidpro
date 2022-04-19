@@ -1118,7 +1118,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 250,
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "DEFAULT_RENDERER_CLASSES": ("temba.api.support.DocumentationRenderer", "rest_framework.renderers.JSONRenderer"),
-    "EXCEPTION_HANDLER": "temba.api.support.temba_exception_handler",
+    # "EXCEPTION_HANDLER": "temba.api.support.temba_exception_handler",
     "UNICODE_JSON": False,
     "STRICT_JSON": False,
 }
