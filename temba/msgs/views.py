@@ -780,16 +780,6 @@ class MsgCRUDL(SmartCRUDL):
                     )
                 )
 
-            if self.has_org_perm("msgs.label_delete"):
-                links.append(
-                    dict(
-                        id="delete-label",
-                        title=_("Delete Label"),
-                        href=reverse("msgs.label_delete", args=[label.uuid]),
-                        modax=_("Delete Label"),
-                    )
-                )
-
             if label.is_folder():
                 if self.has_org_perm("msgs.label_delete_folder"):
                     links.append(
