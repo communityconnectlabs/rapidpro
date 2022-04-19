@@ -299,7 +299,7 @@ class ContactListView(OrgPermsMixin, BulkActionMixin, SmartListView):
                 self.parsed_query = results.query if len(results.query) > 0 else None
                 self.save_dynamic_search = results.metadata.allow_as_group
 
-                return IDSliceQuerySet(Contact, results.contact_ids, offset, results.total)
+                return IDSliceQuerySet(Contact, results.contact_ids, offset, results.total, active_only=True)
             except SearchException as e:
                 self.search_error = str(e)
 

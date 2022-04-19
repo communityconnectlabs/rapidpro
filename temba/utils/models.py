@@ -40,7 +40,8 @@ class IDSliceQuerySet(models.query.RawQuerySet):
     QuerySet defined by a model, set of ids, offset and total count
     """
 
-    def __init__(self, model, ids, offset, total):
+    def __init__(self, model, ids, offset, total, active_only=False):
+        active_filter = "WHERE model.is_active=true" if active_only and hasattr(model, "is_active") else ""
         if len(ids) > 0:
             # build a list of sequence to model id, so we can sort by the sequence in our results
             pairs = ",".join(str((seq, model_id)) for seq, model_id in enumerate(ids, start=1))
@@ -52,7 +53,7 @@ class IDSliceQuerySet(models.query.RawQuerySet):
                 FROM
                   {model._meta.db_table} AS model
                 JOIN (VALUES {pairs}) tmp_resultset (seq, model_id)
-                ON model.id = tmp_resultset.model_id
+                ON model.id = tmp_resultset.model_id {active_filter}
                 ORDER BY tmp_resultset.seq
                 """,
                 model,
