@@ -5782,12 +5782,11 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
     def get(self, request, *args, **kwargs):
         org = self.request.user.get_org()
         client = None if org is None else org.get_twilio_client()
-        error_response = Response(
-            {"error": "Your organization is not connected to a Twilio account or the credentials are expired."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
         if not client:
-            return error_response
+            return Response(
+                {"error": "Your organization is not connected to a Twilio account or the credentials are expired."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         params = {key: request.data.get(key) for key in request.data}
         params.update({key: request.query_params.get(key) for key in request.query_params})
@@ -5800,8 +5799,8 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
                 type=["carrier"]
             )
             return Response(response._properties, status=status.HTTP_200_OK)
-        except TwilioRestException:
-            return error_response
+        except TwilioRestException as e:
+            return Response({"error": e.msg}, status=e.status)
 
     @classmethod
     def get_read_explorer(cls):
