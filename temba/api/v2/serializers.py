@@ -1546,3 +1546,13 @@ class WorkspaceReadSerializer(ReadSerializer):
             "credits",
             "anon",
         )
+
+
+class TwilioNumberValidationSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(required=True)
+
+    def update(self, instance, validated_data):
+        return instance
+
+    def create(self, validated_data):
+        return None
