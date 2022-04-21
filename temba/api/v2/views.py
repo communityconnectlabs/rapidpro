@@ -5747,13 +5747,13 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
     """
     This endpoint provides a way to retrieve additional information about a phone number
 
-    A **GET** returns information about the specified phone number
+    A **POST** returns information about the specified phone number
 
     * **phone_number** - the phone number you are requesting information about
 
     Example:
 
-        GET /api/v2/twilio_phone_validation.json
+        POST /api/v2/twilio_phone_validation.json
         {
             "phone_number": "+15108675310",
         }
@@ -5779,7 +5779,7 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
 
     permission = "orgs.org_api"
 
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         org = self.request.user.get_org()
         client = None if org is None else org.get_twilio_client()
         if not client:
@@ -5805,15 +5805,16 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
     @classmethod
     def get_read_explorer(cls):
         return {
-            "method": "GET",
+            "method": "POST",
             "title": "Twilio Phone Validation",
             "url": reverse("api.v2.twilio_phone_validation"),
             "slug": "twilio-phone-validation",
-            "params": [
+            "fields": [
                 {
                     "name": "phone_number",
                     "required": True,
                     "help": "The phone number you are requesting information about",
                 },
             ],
+            "example": {"body": json.dumps({"phone_number": "+15108675310"})},
         }
