@@ -4506,5 +4506,5 @@ class APITest(TembaTest):
 
         with patch("temba.orgs.models.Org.get_twilio_client") as tw_client:
             tw_client.return_value = MockTwilioClient("", "", self.org)
-            response = self.client.get(url, data={"phone_number": "+15108675310"})
+            response = self.client.post(url, data={"phone_number": "+15108675310"})
             self.assertContains(response, "+15108675310")
