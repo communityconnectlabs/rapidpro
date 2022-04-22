@@ -861,6 +861,7 @@ class LabelForm(BaseLabelForm):
         label=_("Folder"),
         widget=SelectWidget(attrs={"placeholder": _("Select folder")}),
         help_text=_("Optional folder which can be used to group related labels."),
+        empty_label=" --------- ",
     )
 
     messages = forms.CharField(required=False, widget=forms.HiddenInput)
