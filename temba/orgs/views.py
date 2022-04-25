@@ -20,7 +20,7 @@ from django.core.paginator import Paginator
 from django.utils.functional import cached_property
 from packaging.version import Version
 from rest_framework.views import APIView
-from smartmin.users.models import FailedLogin, RecoveryToken
+from smartmin.users.models import FailedLogin, RecoveryToken, is_password_complex
 from smartmin.users.views import Login
 from smartmin.views import (
     SmartCreateView,
@@ -404,6 +404,17 @@ class OrgSignupForm(forms.ModelForm):
                 raise forms.ValidationError(_("That email address is already used"))
 
         return email.lower()
+
+    def clean_password(self):
+        password = self.cleaned_data["password"]
+        if not is_password_complex(password):
+            raise forms.ValidationError(
+                _(
+                    "Passwords must have at least 8 characters, including one uppercase, "
+                    "one lowercase and one number"
+                )
+            )
+        return password
 
     class Meta:
         model = Org
