@@ -31,7 +31,7 @@
                   %temba-modax{ header:"Create Campaign", endpoint:"/campaign/create/" }
                     .button-primary.block
                       -trans "Create Campaign"
-              
+
               .lp-nav.upper
                 -for folder in folders
                   .lp-nav-item{'class': '{% if folder.url == request_url %}font-normal{% endif %}' }
@@ -64,7 +64,7 @@
               .gear-links
                 -include "gear_links_include.haml"
 
-            %form#search-form.mb-4(method="get" action="{% url 'campaigns.campaign_list'%}")
+            %form#search-form.mb-4(method="get")
               %temba-textinput(type='text' placeholder='{% trans "Search" %}' name="search" value="{{search}}")
             %table.list.lined.selectable
               %tbody
@@ -89,7 +89,7 @@
                       -trans "No matching campaigns"
 
                 - block extra-rows
-            
+
             .flex.flex-col.mx-4.mt-3.mb-16
               .flex.flex-wrap
                 .text-gray-700
