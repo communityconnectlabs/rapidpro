@@ -9,6 +9,7 @@ from celery.signals import worker_process_init
 
 from temba.channels.views import register, sync
 from temba.utils.analytics import init_analytics
+from temba.utils.s3.views import PrivateFileCallbackView
 from django.shortcuts import render
 
 # javascript translation packages
@@ -45,6 +46,7 @@ urlpatterns = [
     url(r"^imports/", include("smartmin.csv_imports.urls")),
     url(r"^assets/", include("temba.assets.urls")),
     url(r"^jsi18n/$", JavaScriptCatalog.as_view(), js_info_dict, name="django.views.i18n.javascript_catalog"),
+    url(r"^storage/(?P<file_path>.+)$", PrivateFileCallbackView.as_view(), name="file_storage"),
 ]
 
 if settings.DEBUG:
