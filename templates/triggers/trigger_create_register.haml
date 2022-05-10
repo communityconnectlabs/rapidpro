@@ -28,8 +28,8 @@
       const options = {
         formContainerId: '#id-trigger-register',
         confirmationBoxId: '#confirm-register-trigger',
-        flowFieldId: '#id_register_flow',
-        postUrl: '/trigger/register/',
+        flowFieldId: '#id_flow',
+        postUrl: '{% url "triggers.trigger_create_register" %}',
         successFunc: onRegisterSuccess
       };
       initForm(options);

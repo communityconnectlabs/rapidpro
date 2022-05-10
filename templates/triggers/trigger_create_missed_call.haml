@@ -27,7 +27,7 @@
         formContainerId: '#id-trigger-missedcall',
         confirmationBoxId: '#confirm-missed-call-trigger',
         flowFieldId: '#id_missed_call_flow',
-        postUrl: '/trigger/missed_call/',
+        postUrl: '{% url "triggers.trigger_create_missed_call" %}',
         successFunc: onMissedCallSuccess
       };
       initForm(options);
