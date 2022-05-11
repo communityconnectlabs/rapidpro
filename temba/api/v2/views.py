@@ -147,7 +147,7 @@ class RootView(views.APIView):
      * [/api/v2/flow_variable_report](/api/v2/flow_variable_report) - to generate a report about flow variable
      * [/api/v2/messages_report](/api/v2/messages_report) - to generate a report about messages
      * [/api/v2/trackable_link_report](/api/v2/trackable_link_report) - to generate a report about trackable links
-     * [/api/v2/twilio_phone_validation](/api/v2/twilio_phone_validation) - to retrieve additional information about a phone number
+     * [/api/v2/phone_validation](/api/v2/phone_validation) - to retrieve additional information about a phone number
 
     To use the endpoint simply append _.json_ to the URL. For example [/api/v2/flows](/api/v2/flows) will return the
     documentation for that endpoint but a request to [/api/v2/flows.json](/api/v2/flows.json) will return a JSON list of
@@ -253,7 +253,7 @@ class RootView(views.APIView):
                 "runs": reverse("api.v2.runs", request=request),
                 "templates": reverse("api.v2.templates", request=request),
                 "ticketers": reverse("api.v2.ticketers", request=request),
-                "twilio_phone_validation": reverse("api.v2.twilio_phone_validation", request=request),
+                "phone_validation": reverse("api.v2.phone_validation", request=request),
                 # "tickets": reverse("api.v2.tickets", request=request),
                 "workspace": reverse("api.v2.workspace", request=request),
             }
@@ -326,7 +326,7 @@ class ExplorerView(SmartTemplateView):
             FlowReportEndpoint.get_read_explorer(),
             FlowVariableReportEndpoint.get_read_explorer(),
             TrackableLinkReportEndpoint.get_read_explorer(),
-            TwilioPhoneValidationEndpoint.get_read_explorer(),
+            PhoneValidationEndpoint.get_read_explorer(),
         ]
         return context
 
@@ -5743,7 +5743,7 @@ class TrackableLinkReportEndpoint(BaseAPIView, ReportEndpointMixin):
         )
 
 
-class TwilioPhoneValidationEndpoint(BaseAPIView):
+class PhoneValidationEndpoint(BaseAPIView):
     """
     This endpoint provides a way to retrieve additional information about a phone number
 
@@ -5753,7 +5753,7 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
 
     Example:
 
-        POST /api/v2/twilio_phone_validation.json
+        POST /api/v2/phone_validation.json
         {
             "phone_number": "+15108675310",
         }
@@ -5771,9 +5771,7 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
             },
             "country_code": "US",
             "national_format": "(510) 867-5310",
-            "phone_number": "+15108675310",
-            "add_ons": null,
-            "url": "https://lookups.twilio.com/v1/PhoneNumbers/+15108675310"
+            "phone_number": "+15108675310"
         }
     """
 
@@ -5798,7 +5796,13 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
             response = client.lookups.v1.phone_numbers(serializer.validated_data["phone_number"]).fetch(
                 type=["carrier"]
             )
-            return Response(response._properties, status=status.HTTP_200_OK)
+            response_data = response._properties
+            for field in ["add_ons", "url"]:
+                try:
+                    response_data.pop(field)
+                except KeyError:
+                    pass
+            return Response(response_data, status=status.HTTP_200_OK)
         except TwilioRestException as e:
             return Response({"error": e.msg}, status=e.status)
 
@@ -5806,9 +5810,9 @@ class TwilioPhoneValidationEndpoint(BaseAPIView):
     def get_read_explorer(cls):
         return {
             "method": "POST",
-            "title": "Twilio Phone Validation",
-            "url": reverse("api.v2.twilio_phone_validation"),
-            "slug": "twilio-phone-validation",
+            "title": "Phone Validation",
+            "url": reverse("api.v2.phone_validation"),
+            "slug": "phone-validation",
             "fields": [
                 {
                     "name": "phone_number",

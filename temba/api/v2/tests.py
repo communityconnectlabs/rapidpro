@@ -4500,9 +4500,9 @@ class APITest(TembaTest):
         valid = is_uuid_valid("6df7f177-6d1b-4493-8cea-086de5dcff5e")
         self.assertTrue(valid)
 
-    def test_twilio_phone_validation(self):
+    def test_phone_validation(self):
         self.login(self.admin)
-        url = reverse("api.v2.twilio_phone_validation")
+        url = reverse("api.v2.phone_validation")
 
         with patch("temba.orgs.models.Org.get_twilio_client") as tw_client:
             tw_client.return_value = MockTwilioClient("", "", self.org)
