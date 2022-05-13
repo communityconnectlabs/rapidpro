@@ -44,7 +44,7 @@ from .views import (
     FlowVariableReportEndpoint,
     ContactVariablesReportEndpoint,
     TrackableLinkReportEndpoint,
-    TwilioPhoneValidationEndpoint,
+    PhoneValidationEndpoint,
 )
 
 urlpatterns = [
@@ -90,7 +90,7 @@ urlpatterns = [
     url(r"^flow_variable_report$", FlowVariableReportEndpoint.as_view(), name="api.v2.flow_variable_report"),
     url(r"^contact_variable_report$", ContactVariablesReportEndpoint.as_view(), name="api.v2.contact_variable_report"),
     url(r"^trackable_link_report$", TrackableLinkReportEndpoint.as_view(), name="api.v2.trackable_link_report"),
-    url(r"^twilio_phone_validation$", TwilioPhoneValidationEndpoint.as_view(), name="api.v2.twilio_phone_validation"),
+    url(r"^phone_validation$", PhoneValidationEndpoint.as_view(), name="api.v2.phone_validation"),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api"])
