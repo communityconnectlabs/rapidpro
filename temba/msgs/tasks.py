@@ -1,7 +1,6 @@
 import logging
 from datetime import timedelta
 
-from celery import shared_task
 from django.core.cache import cache
 from django.db.models import IntegerField, Case, Count, When, Q
 from django.utils import timezone
@@ -157,7 +156,7 @@ def squash_msgcounts():
     BroadcastMsgCount.squash()
 
 
-@shared_task(track_started=True, name="get_calculated_values")
+@task(track_started=True, name="get_calculated_values")
 def get_calculated_values(org_id):  # pragma: no cover
     label_mapping = dict(
         text_flows=SystemLabel.TYPE_FLOWS,
