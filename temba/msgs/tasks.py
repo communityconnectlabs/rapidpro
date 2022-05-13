@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 
 from django.core.cache import cache
+from django.db.models import IntegerField, Case, Count, When, Q
 from django.utils import timezone
 
 from celery.task import task
@@ -10,14 +11,21 @@ from temba.utils import analytics
 from temba.utils.celery import nonoverlapping_task
 
 from .models import (
+    IVR,
+    SENT,
+    FLOW,
+    WIRED,
     ERRORED,
     OUTGOING,
+    INCOMING,
+    DELIVERED,
     Broadcast,
     BroadcastMsgCount,
     ExportMessagesTask,
     LabelCount,
     Msg,
     SystemLabelCount,
+    SystemLabel,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,3 +154,68 @@ def squash_msgcounts():
     SystemLabelCount.squash()
     LabelCount.squash()
     BroadcastMsgCount.squash()
+
+
+@task(track_started=True, name="get_calculated_values")
+def get_calculated_values(org_id):  # pragma: no cover
+    label_mapping = dict(
+        text_flows=SystemLabel.TYPE_FLOWS,
+        voice_flows=SystemLabel.TYPE_FLOW_VOICE,
+        sent_text=SystemLabel.TYPE_SENT,
+        sent_voice=SystemLabel.TYPE_SENT_VOICE,
+    )
+
+    results = Msg.objects.filter(org=org_id).aggregate(
+        text_flows=Count(
+            Case(
+                When(direction=INCOMING, visibility=Msg.VISIBILITY_VISIBLE, msg_type=FLOW, then=1),
+                output_field=IntegerField(),
+            )
+        ),
+        voice_flows=Count(
+            Case(
+                When(direction=INCOMING, visibility=Msg.VISIBILITY_VISIBLE, msg_type=IVR, then=1),
+                output_field=IntegerField(),
+            )
+        ),
+        sent_voice=Count(
+            Case(
+                When(
+                    direction=OUTGOING,
+                    visibility=Msg.VISIBILITY_VISIBLE,
+                    status__in=(WIRED, SENT, DELIVERED),
+                    msg_type=IVR,
+                    then=1,
+                ),
+                output_field=IntegerField(),
+            )
+        ),
+        sent_text=Count(
+            Case(
+                When(
+                    Q(direction=OUTGOING)
+                    & Q(visibility=Msg.VISIBILITY_VISIBLE)
+                    & Q(status__in=(WIRED, SENT, DELIVERED))
+                    & ~Q(msg_type=IVR),
+                    then=1,
+                ),
+                output_field=IntegerField(),
+            )
+        ),
+    )
+
+    for key, count in results.items():
+        label_type = label_mapping[key]
+        print(f"Recalculating for Org {org_id}, label type {label_type}, message count {count}.")
+        update_system_label_counts(count, org_id, label_type)
+
+
+def update_system_label_counts(count, org_id, label_type):  # pragma: no cover
+    try:
+        obj = SystemLabelCount.objects.get(org_id=org_id, label_type=label_type)
+        obj.count = count
+        obj.save()
+    except SystemLabelCount.DoesNotExist:
+        if count > 0:
+            obj = SystemLabelCount(org_id=org_id, label_type=label_type, count=count)
+            obj.save()
