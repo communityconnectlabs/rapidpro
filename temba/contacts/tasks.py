@@ -1,4 +1,6 @@
+import json
 import logging
+import requests
 from datetime import timedelta
 
 import iso8601
@@ -117,3 +119,38 @@ def check_elasticsearch_lag():
                 return False
 
     return True
+
+
+def block_deactivated_contacts():
+    from temba.orgs.models import Org
+
+    for org in Org.objects.filter(is_active=True):
+        client = org.get_twilio_client()
+        if not client:
+            continue
+
+        response = client.request("GET", "https://messaging.twilio.com/v1/Deactivations", {"Date": "2020-09-05"})
+        try:
+            response_json = json.loads(response.text)
+            if not response.ok or not response_json.get("redirect_to"):
+                continue
+
+            redirect_to = response_json.get("redirect_to")
+            response = requests.get(redirect_to)
+            if not response.ok:
+                continue
+
+            numbers = response.text.split("\n")
+            formatted_numbers = ", ".join(map(lambda x: f"('{x}')", numbers[:3])) or "('')"
+            contacts_to_block = Contact.objects.raw(
+                f"""
+                SELECT * FROM contacts_contact
+                INNER JOIN contacts_contacturn ON contacts_contact.id = contacts_contacturn.contact_id
+                INNER JOIN (VALUES {formatted_numbers}) AS ci(number)
+                ON replace(contacts_contacturn.path, '+', '') = replace(ci.number, '+', '')
+                WHERE contacts_contacturn.scheme = 'tel' AND contacts_contact.status = 'A';
+                """
+            )
+            Contact.apply_action_block(org.get_admins().first(), contacts_to_block)
+        except json.JSONDecodeError:
+            continue
