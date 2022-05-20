@@ -1057,6 +1057,7 @@ CELERYBEAT_SCHEDULE = {
         "schedule": crontab(hour=5, minute=30),
     },
     "preload-twilio-statistic": {"task": "cache_twilio_stats_task", "schedule": timedelta(minutes=30)},
+    "block-deactivated-contacts": {"task": "block_deactivated_contacts_task", "schedule": crontab(hour=0, minute=30)},
 }
 
 # Mapping of task name to task function path, used when CELERY_ALWAYS_EAGER is set to True

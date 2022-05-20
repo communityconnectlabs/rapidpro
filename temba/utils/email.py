@@ -2,7 +2,7 @@ import re
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.mail import EmailMultiAlternatives, get_connection as get_smtp_connection, send_mail
+from django.core.mail import EmailMultiAlternatives, get_connection as get_smtp_connection, send_mail, EmailMessage
 from django.core.validators import EmailValidator
 from django.template import loader
 
@@ -126,6 +126,22 @@ def send_temba_email(subject, text, html, from_email, recipient_list, connection
             message.send()
         else:
             send_mail(subject, text, from_email, recipient_list, connection=connection)
+    else:
+        # just print to console if we aren't meant to send emails
+        print("----------- Skipping sending email, SEND_EMAILS to set False -----------")
+        print(text)
+        print("------------------------------------------------------------------------")
+
+
+def send_email_with_attachments(subject, text, from_email, recipient_list, attachments=None):
+    if attachments is None:
+        attachments = []
+
+    if settings.SEND_EMAILS:
+        message = EmailMessage(subject, text, from_email, to=recipient_list)
+        for file_name, content, mime_type in attachments:
+            message.attach(file_name, content, mime_type)
+        message.send()
     else:
         # just print to console if we aren't meant to send emails
         print("----------- Skipping sending email, SEND_EMAILS to set False -----------")
