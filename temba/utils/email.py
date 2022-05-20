@@ -133,7 +133,10 @@ def send_temba_email(subject, text, html, from_email, recipient_list, connection
         print("------------------------------------------------------------------------")
 
 
-def send_email_with_attachments(subject, text, from_email, recipient_list, attachments=None):
+def send_email_with_attachments(subject, text, recipient_list, attachments=None, from_email=None):
+    if from_email is None:
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "website@rapidpro.io")
+
     if attachments is None:
         attachments = []
 

@@ -14,14 +14,13 @@ from django.utils import timezone
 
 from celery.task import task
 
+from temba.orgs.models import Org
 from temba.utils import chunk_list
 from temba.utils.celery import nonoverlapping_task
 from temba.utils.email import send_email_with_attachments
 
 from .models import Contact, ContactGroup, ContactGroupCount, ContactImport, ExportContactsTask
 from .search import elastic
-from ..middleware import BrandingMiddleware
-from ..orgs.models import Org
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +127,6 @@ def check_elasticsearch_lag():
 
 @nonoverlapping_task(track_started=True, name="block_deactivated_contacts_task")
 def block_deactivated_contacts_task():
-    branding = BrandingMiddleware.get_branding_for_host("")
-    from_email = branding.get("from_email", getattr(settings, "DEFAULT_FROM_EMAIL", "website@rapidpro.io"))
     email_subject = f"{timezone.now().strftime('%B %d, %Y')} - list of deactivated phone numbers."
     email_text = """
     Hi There!
@@ -178,7 +175,7 @@ def block_deactivated_contacts_task():
             # send emails to admins if there any blocked contact
             if contacts_to_block:
                 admin_emails = [admin.email for admin in org.get_admins().order_by("email")]
-                if len(admin_emails) == 0 or not from_email:
+                if len(admin_emails) == 0:
                     return
 
                 memory_file = io.StringIO()
@@ -190,7 +187,6 @@ def block_deactivated_contacts_task():
                 send_email_with_attachments(
                     subject=email_subject,
                     text=email_text,
-                    from_email=from_email,
                     recipient_list=admin_emails,
                     attachments=[
                         (
@@ -211,7 +207,6 @@ def block_deactivated_contacts_task():
         send_email_with_attachments(
             subject=email_subject,
             text=email_text,
-            from_email=from_email,
             recipient_list=["josh@communityconnectlabs.com"],
             attachments=[
                 (
