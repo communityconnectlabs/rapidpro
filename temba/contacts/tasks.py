@@ -166,7 +166,8 @@ def block_deactivated_contacts_task():
                 INNER JOIN contacts_contacturn ON contacts_contact.id = contacts_contacturn.contact_id
                 INNER JOIN (VALUES {formatted_numbers}) AS ci(number)
                 ON replace(contacts_contacturn.path, '+', '') = replace(ci.number, '+', '')
-                WHERE contacts_contacturn.scheme = 'tel' AND contacts_contact.status = 'A';
+                WHERE contacts_contacturn.scheme = 'tel' AND contacts_contact.status = 'A'
+                AND contacts_contact.org_id = {org.id};
                 """
                 )
             )

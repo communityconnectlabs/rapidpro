@@ -41,8 +41,10 @@ from temba.tests import (
     TembaTest,
     matchers,
     mock_mailroom,
+    MockResponse,
 )
 from temba.tests.engine import MockSessionWriter
+from temba.tests.twilio import MockTwilioClient
 from temba.tickets.models import Ticketer
 from temba.triggers.models import Trigger
 from temba.utils import json
@@ -58,7 +60,7 @@ from .models import (
     ContactURN,
     ExportContactsTask,
 )
-from .tasks import check_elasticsearch_lag, squash_contactgroupcounts
+from .tasks import check_elasticsearch_lag, squash_contactgroupcounts, block_deactivated_contacts_task
 from .templatetags.contacts import contact_field, history_class, history_icon
 
 
@@ -6004,3 +6006,30 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
         read_url = reverse("contacts.contactimport_read", args=[imp.id])
 
         self.assertReadFetch(read_url, allow_viewers=True, allow_editors=True, context_object=imp)
+
+
+class BlockDeactivatedNumberContactsTest(TembaTest):
+    @mock_mailroom
+    def test_deactivated_phone_numbers_contacts(self, _):
+        deactivated_numbers = "17143367890\n17015502875\n13023829550"
+        contacts = [
+            self.create_contact("Deactivated 1", phone="+13023829550"),
+            self.create_contact("Deactivated 2", phone="+17015502875"),
+            self.create_contact("Deactivated 3", phone="+17143367890"),
+        ]
+        for contact in contacts:
+            contact.refresh_from_db(fields=["status"])
+            self.assertEqual(contact.status, "A")
+
+        with patch("temba.orgs.models.Org.get_twilio_client") as tw_client:
+            mock_twilio = MockTwilioClient("", "", self.org)
+            mock_twilio.request = lambda *a: MockResponse(307, '{"redirect_to": "https://localhost:8000"}')
+            tw_client.return_value = mock_twilio
+
+            with patch("requests.get") as mock_request:
+                mock_request.return_value = MockResponse(200, deactivated_numbers)
+                block_deactivated_contacts_task()
+
+        for contact in contacts:
+            contact.refresh_from_db(fields=["status"])
+            self.assertEqual(contact.status, "B")
