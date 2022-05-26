@@ -203,7 +203,7 @@ def block_deactivated_contacts_task():
         except json.JSONDecodeError:
             continue
 
-    if all_blocked_contacts:
+    if all_blocked_contacts and settings.DEACTIVATED_CONTACTS_EMAILS:
         memory_file = io.StringIO()
         phone_numbers_df = pd.DataFrame(all_blocked_contacts)
         phone_numbers_df.to_csv(memory_file, index=False)
@@ -211,7 +211,7 @@ def block_deactivated_contacts_task():
         send_email_with_attachments(
             subject=email_subject,
             text=email_text,
-            recipient_list=["josh@communityconnectlabs.com"],
+            recipient_list=settings.DEACTIVATED_CONTACTS_EMAILS,
             attachments=[
                 (
                     f"deactivated_phone_numbers_{timezone.now().strftime('%Y_%m_%d')}.csv",
