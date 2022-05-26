@@ -128,14 +128,7 @@ def check_elasticsearch_lag():
 @nonoverlapping_task(track_started=True, name="block_deactivated_contacts_task")
 def block_deactivated_contacts_task():
     email_subject = f"{timezone.now().strftime('%B %d, %Y')} - list of deactivated phone numbers."
-    email_text = """
-    Hi There!
-    We have prepared a list of contacts that were blocked because of deactivated phone number.
-    You can download it in the attached file.
-
-    Thanks,
-    The CommunityConnectLabs Team.
-    """
+    email_template = "contacts/email/deactivated_contacts_email"
 
     all_blocked_contacts = {}
     numbers, formatted_numbers = None, "('')"
@@ -190,7 +183,7 @@ def block_deactivated_contacts_task():
                 memory_file.seek(0)
                 send_email_with_attachments(
                     subject=email_subject,
-                    text=email_text,
+                    template=email_template,
                     recipient_list=admin_emails,
                     attachments=[
                         (
@@ -210,7 +203,7 @@ def block_deactivated_contacts_task():
         memory_file.seek(0)
         send_email_with_attachments(
             subject=email_subject,
-            text=email_text,
+            template=email_template,
             recipient_list=settings.DEACTIVATED_CONTACTS_EMAILS,
             attachments=[
                 (

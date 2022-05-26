@@ -558,18 +558,24 @@ class EmailTest(TembaTest):
 
     @override_settings(SEND_EMAILS=True)
     def test_send_email_with_attachments(self):
-        send_email_with_attachments("Test Subject", "Test Body", ["recipient@bar.com"], [("text.csv", "", "text/csv")])
-        self.assertOutbox(0, settings.DEFAULT_FROM_EMAIL, "Test Subject", "Test Body", ["recipient@bar.com"])
+        from django.template import loader
+
+        template = "contacts/email/deactivated_contacts_email"
+        text_template = loader.get_template(template + ".txt")
+        text_template = text_template.render({"branding": settings.BRANDING.get(settings.DEFAULT_BRAND)})
+
+        send_email_with_attachments("Test Subject", template, ["recipient@bar.com"], [("text.csv", "", "text/csv")])
+        self.assertOutbox(0, settings.DEFAULT_FROM_EMAIL, "Test Subject", text_template, ["recipient@bar.com"])
         self.assertGreater(len(mail.outbox[0].attachments), 0)
 
         send_email_with_attachments(
             "Test Subject",
-            "Test Body",
+            template,
             ["recipient@bar.com"],
             [("text.csv", "", "text/csv")],
             from_email="no-reply@foo.com",
         )
-        self.assertOutbox(1, "no-reply@foo.com", "Test Subject", "Test Body", ["recipient@bar.com"])
+        self.assertOutbox(1, "no-reply@foo.com", "Test Subject", text_template, ["recipient@bar.com"])
         self.assertGreater(len(mail.outbox[1].attachments), 0)
 
     def test_is_valid_address(self):
