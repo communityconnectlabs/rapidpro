@@ -138,27 +138,30 @@ def block_deactivated_contacts_task():
     """
 
     all_blocked_contacts = {}
+    numbers, formatted_numbers = None, "('')"
     for org in Org.objects.filter(is_active=True):
         client = org.get_twilio_client()
         if not client:
             continue
 
         try:
-            # get the link from twilio to download deactivated phone numbers
-            response = client.request("GET", "https://messaging.twilio.com/v1/Deactivations", {"Date": "2020-09-05"})
-            response_json = json.loads(response.text)
-            if not response.ok or not response_json.get("redirect_to"):
-                continue
+            if numbers is None:
+                # get the link from twilio to download deactivated phone numbers
+                yesterday = (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                response = client.request("GET", "https://messaging.twilio.com/v1/Deactivations", {"Date": yesterday})
+                response_json = json.loads(response.text)
+                if not response.ok or not response_json.get("redirect_to"):
+                    continue
 
-            # download and parse deactivated phone numbers
-            redirect_to = response_json.get("redirect_to")
-            response = requests.get(redirect_to)
-            if not response.ok:
-                continue
-            numbers = response.text.split("\n")
+                # download and parse deactivated phone numbers
+                redirect_to = response_json.get("redirect_to")
+                response = requests.get(redirect_to)
+                if not response.ok:
+                    continue
+                numbers = response.text.split("\n")
+                formatted_numbers = ", ".join(map(lambda x: f"('{x}')", numbers)) or "('')"
 
             # get contacts from the db that have phone number deactivated and block them
-            formatted_numbers = ", ".join(map(lambda x: f"('{x}')", numbers[:3])) or "('')"
             contacts_to_block = list(
                 Contact.objects.raw(
                     f"""
