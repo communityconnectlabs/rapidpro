@@ -3770,8 +3770,9 @@ class OrgCRUDL(SmartCRUDL):
             for origin_category, items in origin_stats.items():
                 category = origin_category.removesuffix("bound").replace("-", "_")
                 for start, value in items:
-                    table_stats[start][category] = value
-                    total_stats[category] += int(value)
+                    int_value = str(value).split(".")[0]
+                    table_stats[start][category] = int_value
+                    total_stats[category] += int(int_value)
 
             twilio_sid = twilio_client.account_sid
             sid_length = len(twilio_sid)
