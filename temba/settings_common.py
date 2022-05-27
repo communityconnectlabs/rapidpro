@@ -1057,6 +1057,7 @@ CELERYBEAT_SCHEDULE = {
         "schedule": crontab(hour=5, minute=30),
     },
     "preload-twilio-statistic": {"task": "cache_twilio_stats_task", "schedule": timedelta(minutes=30)},
+    "block-deactivated-contacts": {"task": "block_deactivated_contacts_task", "schedule": crontab(hour=0, minute=30)},
 }
 
 # Mapping of task name to task function path, used when CELERY_ALWAYS_EAGER is set to True
@@ -1438,3 +1439,4 @@ CORS_ALLOW_METHODS = ["GET"]
 # Contacts import via excel
 # if set to True will not raise error on duplicate, instead will use last row
 ALLOW_DUPLICATE_CONTACT_IMPORT = os.environ.get("ALLOW_DUPLICATE_CONTACT_IMPORT", "").lower() == "true"
+DEACTIVATED_CONTACTS_EMAILS = os.environ.get("DEACTIVATED_CONTACTS_EMAILS", "").split(",")
