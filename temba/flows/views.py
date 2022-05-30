@@ -40,6 +40,8 @@ from django.views.generic import FormView
 
 from temba import mailroom
 from temba.archives.models import Archive
+from temba.classifiers.models import Classifier
+from temba.classifiers.types.dialogflow.type import DialogflowType
 from temba.channels.models import Channel
 from temba.contacts.models import URN, ContactField, ContactGroup
 from temba.contacts.search import SearchException, parse_query
@@ -472,6 +474,7 @@ class FlowCRUDL(SmartCRUDL):
         "merge_flows",
         "merging_flows_table",
         "launch_studio_flow",
+        "dialogflow_api",
     )
 
     model = Flow
@@ -520,6 +523,21 @@ class FlowCRUDL(SmartCRUDL):
                 collection_full_name = collection_full_name.replace("-", "")
                 collections.append(dict(id=collection_full_name, text=collection))
             return JsonResponse(dict(results=collections))
+
+    class DialogflowApi(OrgPermsMixin, SmartListView):
+        def get(self, request, *args, **kwargs):
+            org = self.request.user.get_org()
+
+            response = self.get_projects(org)
+            return JsonResponse(dict(results=response))
+
+        @classmethod
+        def get_projects(cls, org):
+            items = Classifier.objects.filter(classifier_type=DialogflowType.slug, org=org, is_active=True)
+            projects = []
+            for item in items:
+                projects.append(dict(id=item.uuid, text=item.name))
+            return projects
 
     class FlowParameters(OrgPermsMixin, SmartListView):
         def get(self, request, *args, **kwargs):
