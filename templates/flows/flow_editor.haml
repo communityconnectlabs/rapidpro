@@ -46,7 +46,7 @@
     /* case_list_case is the dnd portal under body */
     #rp-flow-editor, .case_list_case {
       --curvature: 4px;
-      --curvature-widget: 4px; 
+      --curvature-widget: 4px;
     }
 
     #rp-flow-editor input[type=text] {
@@ -145,7 +145,7 @@
 
     #rp-flow-editor #canvas-container #canvas:after {
       box-shadow: inset 0 7px 9px -10px rgba(0,0,0,0.4);
-      
+
     }
 
     #rp-flow-editor > div {
@@ -353,10 +353,10 @@
       var confirmation = document.getElementById("confirm-language");
       confirmation.classList.remove("hide");
       confirmation.dataset.code = code;
-      
+
       var body = confirmation.querySelector('.body');
       body.innerHTML = body.innerHTML.replace(/%LANG%/g, name);
-      confirmation.open = true;      
+      confirmation.open = true;
     }
 
     const config = {
@@ -404,6 +404,7 @@
         lookups: '/flow/lookups_api/',
         giftcard: '/flow/giftcards_api/',
         link: '/link/api/',
+        dialogflow: '/flow/dialogflow_api/',
         {% if has_translator %}
           translation: '/org/translate/',
         {% endif %}

@@ -501,6 +501,7 @@ PERMISSIONS = {
         "export_pdf",
         "merge_flows",
         "merging_flows_table",
+        "dialogflow_api",
     ),
     "flows.flowimage": ("read", "filter", "archived", "download", "action_delete", "action_archive", "action_restore"),
     "flows.flowsession": ("json",),
@@ -1192,6 +1193,7 @@ CLASSIFIER_TYPES = [
     "temba.classifiers.types.wit.WitType",
     "temba.classifiers.types.luis.LuisType",
     "temba.classifiers.types.bothub.BothubType",
+    "temba.classifiers.types.dialogflow.DialogflowType",
 ]
 
 TICKETER_TYPES = [
