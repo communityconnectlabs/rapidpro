@@ -32,7 +32,7 @@
     "videojs-ie8": "1.1.2",
     "videojs-swf": "5.0.1",
     "videojs-vtt.js": "^0.12.1",
-    "xhr": "~2.2.0"
+    "xhr": "~2.6.0"
   },
   "devDependencies": {
     "babel": "^5.2.2",
