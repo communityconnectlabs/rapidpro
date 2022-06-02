@@ -31,7 +31,7 @@
     "videojs-font": "1.5.1",
     "videojs-ie8": "1.1.2",
     "videojs-swf": "5.0.1",
-    "videojs-vtt.js": "^0.12.1",
+    "videojs-vtt.js": "^0.15.3",
     "xhr": "~2.2.0"
   },
   "devDependencies": {
