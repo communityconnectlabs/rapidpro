@@ -29,12 +29,9 @@ class DialogflowType(ClassifierType):
         from temba.classifiers.types.dialogflow.client import Client
 
         intents = []
-        try:
-            client = Client(classifier.config)
-            intent_data = client.list_intents()
-            for intent in intent_data:
-                intents.append(Intent(name=intent.display_name, external_id=intent.name))
-        except Exception as e:
-            print(e)
+        client = Client(classifier.config)
+        intent_data = client.list_intents()
+        for intent in intent_data:
+            intents.append(Intent(name=intent.display_name, external_id=intent.name))
 
         return intents
