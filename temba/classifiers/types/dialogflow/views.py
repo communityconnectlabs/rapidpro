@@ -60,8 +60,7 @@ class ConnectView(BaseConnectView):
             client = Client(config)
             agent = client.get_agent()
             name = agent.display_name
-        except Exception as e:
-            print(e)
+        except Exception:
             name = project_id
 
         self.object = Classifier.create(self.org, self.request.user, DialogflowType.slug, name, config)
