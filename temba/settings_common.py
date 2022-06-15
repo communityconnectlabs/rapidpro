@@ -501,6 +501,7 @@ PERMISSIONS = {
         "export_pdf",
         "merge_flows",
         "merging_flows_table",
+        "dialogflow_api",
     ),
     "flows.flowimage": ("read", "filter", "archived", "download", "action_delete", "action_archive", "action_restore"),
     "flows.flowsession": ("json",),
@@ -1057,6 +1058,7 @@ CELERYBEAT_SCHEDULE = {
         "schedule": crontab(hour=5, minute=30),
     },
     "preload-twilio-statistic": {"task": "cache_twilio_stats_task", "schedule": timedelta(minutes=30)},
+    "block-deactivated-contacts": {"task": "block_deactivated_contacts_task", "schedule": crontab(hour=0, minute=30)},
 }
 
 # Mapping of task name to task function path, used when CELERY_ALWAYS_EAGER is set to True
@@ -1192,6 +1194,7 @@ CLASSIFIER_TYPES = [
     "temba.classifiers.types.wit.WitType",
     "temba.classifiers.types.luis.LuisType",
     "temba.classifiers.types.bothub.BothubType",
+    "temba.classifiers.types.dialogflow.DialogflowType",
 ]
 
 TICKETER_TYPES = [
@@ -1439,3 +1442,4 @@ CORS_ALLOW_METHODS = ["GET"]
 # Contacts import via excel
 # if set to True will not raise error on duplicate, instead will use last row
 ALLOW_DUPLICATE_CONTACT_IMPORT = os.environ.get("ALLOW_DUPLICATE_CONTACT_IMPORT", "").lower() == "true"
+DEACTIVATED_CONTACTS_EMAILS = os.environ.get("DEACTIVATED_CONTACTS_EMAILS", "").split(",")

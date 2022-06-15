@@ -16,7 +16,7 @@ from smartmin.tests import SmartminTest, SmartminTestMixin
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser, User
-from django.core import checks
+from django.core import checks, mail
 from django.core.management import call_command, CommandError
 from django.db import connection, models
 from django.forms import ValidationError
@@ -48,7 +48,7 @@ from . import (
 from .cache import get_cacheable_attr, get_cacheable_result, incrby_existing
 from .celery import nonoverlapping_task
 from .dates import datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
-from .email import is_valid_address, send_simple_email
+from .email import is_valid_address, send_simple_email, send_email_with_attachments
 from .export import TableExporter
 from .fields import validate_external_url
 from .gsm7 import calculate_num_segments, is_gsm7, replace_non_gsm7_accents
@@ -555,6 +555,28 @@ class EmailTest(TembaTest):
 
         send_simple_email(["recipient@bar.com"], "Test Subject", "Test Body", from_email="no-reply@foo.com")
         self.assertOutbox(1, "no-reply@foo.com", "Test Subject", "Test Body", ["recipient@bar.com"])
+
+    @override_settings(SEND_EMAILS=True)
+    def test_send_email_with_attachments(self):
+        from django.template import loader
+
+        template = "contacts/email/deactivated_contacts_email"
+        text_template = loader.get_template(template + ".txt")
+        text_template = text_template.render({"branding": settings.BRANDING.get(settings.DEFAULT_BRAND)})
+
+        send_email_with_attachments("Test Subject", template, ["recipient@bar.com"], [("text.csv", "", "text/csv")])
+        self.assertOutbox(0, settings.DEFAULT_FROM_EMAIL, "Test Subject", text_template, ["recipient@bar.com"])
+        self.assertGreater(len(mail.outbox[0].attachments), 0)
+
+        send_email_with_attachments(
+            "Test Subject",
+            template,
+            ["recipient@bar.com"],
+            [("text.csv", "", "text/csv")],
+            from_email="no-reply@foo.com",
+        )
+        self.assertOutbox(1, "no-reply@foo.com", "Test Subject", text_template, ["recipient@bar.com"])
+        self.assertGreater(len(mail.outbox[1].attachments), 0)
 
     def test_is_valid_address(self):
 
