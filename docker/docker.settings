@@ -72,6 +72,7 @@ EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "false") == "true"
 
 SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "true") == "true"
 CSRF_COOKIE_SECURE = os.environ.get("CSRF_COOKIE_SECURE", "true") == "true"
+SESSION_COOKIE_AGE = int(os.environ.get("SESSION_COOKIE_AGE", 86400))
 
 FLOW_FROM_EMAIL = DEFAULT_FROM_EMAIL
 
