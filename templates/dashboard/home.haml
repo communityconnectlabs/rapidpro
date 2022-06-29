@@ -2,10 +2,13 @@
 
 -load smartmin temba compress i18n humanize tz
 
--block page-title
-  -trans "Dashboard"
-
--block page-top
+-block title
+  .row-fluid
+    .span6
+      %span.title-icon
+        .glyph.icon-pie
+      .title-text
+        %h2 Dashboard
 
 -block messages
 
@@ -14,13 +17,6 @@
   %input.range{id:"begin", name:"begin", type:"hidden", value:'{{begin|date:"Y-m-d"}}'}
   %input.range{id:"end", name:"end", type:"hidden", value:'{{end|date:"Y-m-d"}}'}
   %input.range{id:"direction", name:"direction", type:"hidden", value:"IO"}
-
-  .row-fluid
-    .span6
-      %span.title-icon
-        .glyph.icon-pie
-      .title-text
-        %h2 Dashboard
 
   #range-group
     .row-fluid

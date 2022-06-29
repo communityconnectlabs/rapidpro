@@ -1,6 +1,7 @@
 import time
 from datetime import datetime, timedelta
 
+from django.urls import reverse
 from smartmin.views import SmartTemplateView
 
 from django.db.models import Q, Sum
@@ -10,6 +11,7 @@ from django.utils import timezone
 from temba.channels.models import Channel, ChannelCount
 from temba.orgs.models import Org
 from temba.orgs.views import OrgPermsMixin
+from django.utils.translation import ugettext_lazy as _
 
 
 class Home(OrgPermsMixin, SmartTemplateView):
@@ -19,6 +21,17 @@ class Home(OrgPermsMixin, SmartTemplateView):
 
     permission = "orgs.org_dashboard"
     template_name = "dashboard/home.haml"
+
+    def get_gear_links(self):
+        links = [
+            dict(
+                title=_("New Dashboards"),
+                modax=_("New Dashboards"),
+                style="button-primary",
+                href=reverse("api.webhookresult_list"),
+            )
+        ]
+        return links
 
 
 class MessageHistory(OrgPermsMixin, SmartTemplateView):
