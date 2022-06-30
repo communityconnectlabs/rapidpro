@@ -1,8 +1,9 @@
 import time
 from datetime import datetime, timedelta
 
+from django import forms
 from django.urls import reverse
-from smartmin.views import SmartTemplateView
+from smartmin.views import SmartTemplateView, SmartCRUDL, SmartCreateView, SmartUpdateView
 
 from django.db.models import Q, Sum
 from django.http import JsonResponse
@@ -10,8 +11,11 @@ from django.utils import timezone
 
 from temba.channels.models import Channel, ChannelCount
 from temba.orgs.models import Org
-from temba.orgs.views import OrgPermsMixin
+from temba.orgs.views import OrgPermsMixin, ModalMixin
+from temba.dashboard.models import EmbeddedBoard
 from django.utils.translation import ugettext_lazy as _
+
+from temba.utils.fields import InputWidget
 
 
 class Home(OrgPermsMixin, SmartTemplateView):
@@ -22,13 +26,19 @@ class Home(OrgPermsMixin, SmartTemplateView):
     permission = "orgs.org_dashboard"
     template_name = "dashboard/home.haml"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["embedded_boards"] = EmbeddedBoard.objects.all()
+        return context
+
     def get_gear_links(self):
         links = [
             dict(
+                id="new_dashboards",
                 title=_("New Dashboards"),
                 modax=_("New Dashboards"),
                 style="button-primary",
-                href=reverse("api.webhookresult_list"),
+                href=reverse("dashboard.embeddedboard_create"),
             )
         ]
         return links
@@ -206,3 +216,33 @@ class RangeDetails(OrgPermsMixin, SmartTemplateView):
             context["direction"] = direction
 
         return context
+
+
+class EmbeddedBoardCRUDL(SmartCRUDL):
+    actions = ("create", "delete")
+    model = EmbeddedBoard
+
+    class Create(ModalMixin, SmartCreateView):
+        class Form(forms.ModelForm):
+            title = forms.CharField(label="Title", widget=InputWidget)
+            url = forms.URLField(label="Link to the new embedded dashboard", widget=InputWidget)
+
+            class Meta:
+                model = EmbeddedBoard
+                fields = "__all__"
+
+        form_class = Form
+        fields = ("title", "url")
+        success_message = ""
+        success_url = "@dashboard.dashboard_home"
+
+    class Delete(ModalMixin, SmartUpdateView):
+        submit_button_name = _("Delete")
+        fields = ()
+        success_message = ""
+        default_template = "smartmin/delete_confirm.html"
+        success_url = "@dashboard.dashboard_home"
+
+        def save(self, obj):
+            obj.delete()
+            return obj

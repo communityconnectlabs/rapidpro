@@ -32,6 +32,17 @@
         .range-content{ic-include:".range", ic-get-from:"/dashboard/range_details", ic-trigger-on:"load"}
           Loading..
 
+    - for embedded_board in embedded_boards
+      .row-fluid
+        .span12.range-details
+          .embedded-board
+            .board-title
+              {{embedded_board.title}}
+              .delete-icon
+                %temba-modax(header='{% trans "Delete Dashboard" %}' endpoint="{% url 'dashboard.embeddedboard_delete' embedded_board.id %}")
+                  .glyph.icon-remove
+            %iframe{"title": "{{embedded_board.title}}", "src": "{{embedded_board.url}}", "width": "640px", "height": "420px"}
+
 -block extra-script
   {{block.super}}
   <script src="{{ STATIC_URL }}bower/highcharts/highstock.js?v=3.0"></script>
@@ -222,5 +233,15 @@
 
         .small-format {
           width: 70px;
+        }
+
+        .board-title {
+          display: flex;
+          flex-direction: row;
+        }
+
+        .delete-icon {
+          margin-left: auto;
+          cursor: pointer;
         }
     {% endlessblock %}
