@@ -34,6 +34,5 @@ class EmbeddedBoard(models.Model):
             }
             token = jwt.encode(payload, settings.METABASE_SECRET_KEY, algorithm="HS256").decode()
             iframe_url = f"{settings.METABASE_SITE_URL}/embed/dashboard/{token}#bordered=true&titled=true"
-            print(iframe_url)
             return iframe_url
         return self.url

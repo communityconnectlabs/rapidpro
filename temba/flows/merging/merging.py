@@ -60,7 +60,7 @@ class Node:
     def __eq__(self, other):
         # Here we have method that allows us to compare similar nodes
         if isinstance(other, Node):
-            # set of instructions to chack if one node match another node by different metrics
+            # set of instructions to check if one node match another node by different metrics
             common_types = self.node_types.intersection(other.node_types)
             both_routers = self.has_router == other.has_router
             self_router = self.data.get("router")
@@ -113,6 +113,12 @@ class Node:
 
                 if self_actions and self_actions[0]["type"] == "call_giftcard":
                     for self_action, other_action in get_action_pairs_for_comparing("call_giftcard"):
+                        if self_action["result_name"] == other_action["result_name"]:
+                            return True
+                    return False
+
+                if self_actions and self_actions[0]["type"] == "call_dialogflow":
+                    for self_action, other_action in get_action_pairs_for_comparing("call_dialogflow"):
                         if self_action["result_name"] == other_action["result_name"]:
                             return True
                     return False

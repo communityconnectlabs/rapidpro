@@ -276,6 +276,18 @@ ORG1 = dict(
                 admin_user_id="ADMIN346",
             ),
         ),
+        dict(
+            uuid="07d1b73e-2e36-4c0a-9cb8-6baf714c09e4",
+            name="TwilioFlex",
+            ticketer_type="twilioflex",
+            config=dict(
+                auth_token="token",
+                account_sid="AC81d44315e19273181bdaefac12cd3c12",
+                flex_flow_sid="FObbde8f8e54f04afaef924046f728a44d",
+                workspace_sid="WS645912e5aefc6727d71fe638c0173119",
+                chat_service_sid="IS83760ec293f6814bc6f5de5612f21fc2",
+            ),
+        ),
     ),
 )
 

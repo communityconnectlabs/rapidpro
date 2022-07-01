@@ -1,0 +1,9 @@
+{% load tz %}
+{% load i18n %}
+
+<p>{% trans "Hi there!" %}</p>
+<p>{% trans "We have prepared a list of contacts that were blocked because of deactivated phone number." %}</p>
+<p>{% trans "You can download it in the attached file." %}</p>
+
+<p>{% trans "Thanks," %}</p>
+<p>{% blocktrans with brand=branding.name %}The {{ brand }} Team {% endblocktrans %}</p>

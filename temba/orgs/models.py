@@ -2197,7 +2197,7 @@ class Org(SmartModel):
         for record in records:
             if record.category in allowed_categories:
                 start_datetime = timezone.datetime(record.start_date.year, record.start_date.month, 1)
-                result_stats[record.category].append((start_datetime, record.count))
+                result_stats[record.category].append((start_datetime, record.usage))
         return result_stats
 
 

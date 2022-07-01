@@ -1,4 +1,8 @@
+import io
+import json
 import logging
+import requests
+import pandas as pd
 from datetime import timedelta
 
 import iso8601
@@ -10,8 +14,10 @@ from django.utils import timezone
 
 from celery.task import task
 
+from temba.orgs.models import Org
 from temba.utils import chunk_list
 from temba.utils.celery import nonoverlapping_task
+from temba.utils.email import send_email_with_attachments
 
 from .models import Contact, ContactGroup, ContactGroupCount, ContactImport, ExportContactsTask
 from .search import elastic
@@ -117,3 +123,93 @@ def check_elasticsearch_lag():
                 return False
 
     return True
+
+
+@nonoverlapping_task(track_started=True, name="block_deactivated_contacts_task")
+def block_deactivated_contacts_task():
+    email_subject = f"{timezone.now().strftime('%B %d, %Y')} - list of deactivated phone numbers."
+    email_template = "contacts/email/deactivated_contacts_email"
+
+    all_blocked_contacts = {}
+    numbers, formatted_numbers = None, "('')"
+    for org in Org.objects.filter(is_active=True):
+        client = org.get_twilio_client()
+        if not client:
+            continue
+
+        try:
+            if numbers is None:
+                # get the link from twilio to download deactivated phone numbers
+                yesterday = (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+                response = client.request("GET", "https://messaging.twilio.com/v1/Deactivations", {"Date": yesterday})
+                response_json = json.loads(response.text)
+                if not response.ok or not response_json.get("redirect_to"):
+                    continue
+
+                # download and parse deactivated phone numbers
+                redirect_to = response_json.get("redirect_to")
+                response = requests.get(redirect_to)
+                if not response.ok:
+                    continue
+                numbers = response.text.split("\n")
+                formatted_numbers = ", ".join(map(lambda x: f"('{x}')", numbers)) or "('')"
+
+            # get contacts from the db that have phone number deactivated and block them
+            contacts_to_block = list(
+                Contact.objects.raw(
+                    f"""
+                SELECT contacts_contact.*, contacts_contacturn.path as phone_number FROM contacts_contact
+                INNER JOIN contacts_contacturn ON contacts_contact.id = contacts_contacturn.contact_id
+                INNER JOIN (VALUES {formatted_numbers}) AS ci(number)
+                ON replace(contacts_contacturn.path, '+', '') = replace(ci.number, '+', '')
+                WHERE contacts_contacturn.scheme = 'tel' AND contacts_contact.status = 'A'
+                AND contacts_contact.org_id = {org.id};
+                """
+                )
+            )
+            Contact.apply_action_block(org.get_admins().first(), contacts_to_block)
+
+            # send emails to admins if there any blocked contact
+            if contacts_to_block:
+                admin_emails = [admin.email for admin in org.get_admins().order_by("email")]
+                if len(admin_emails) == 0:
+                    return
+
+                memory_file = io.StringIO()
+                org_phone_numbers = [contact.phone_number for contact in contacts_to_block]
+                all_blocked_contacts[org.name] = org_phone_numbers
+                phone_numbers_df = pd.DataFrame({"Disconnected Phone Numbers": org_phone_numbers})
+                phone_numbers_df.to_csv(memory_file, index=False)
+                memory_file.seek(0)
+                send_email_with_attachments(
+                    subject=email_subject,
+                    template=email_template,
+                    recipient_list=admin_emails,
+                    attachments=[
+                        (
+                            f"deactivated_phone_numbers_{timezone.now().strftime('%Y_%m_%d')}.csv",
+                            memory_file.read(),
+                            "text/csv",
+                        )
+                    ],
+                )
+        except json.JSONDecodeError:
+            continue
+
+    if all_blocked_contacts and settings.DEACTIVATED_CONTACTS_EMAILS:
+        memory_file = io.StringIO()
+        phone_numbers_df = pd.DataFrame(all_blocked_contacts)
+        phone_numbers_df.to_csv(memory_file, index=False)
+        memory_file.seek(0)
+        send_email_with_attachments(
+            subject=email_subject,
+            template=email_template,
+            recipient_list=settings.DEACTIVATED_CONTACTS_EMAILS,
+            attachments=[
+                (
+                    f"deactivated_phone_numbers_{timezone.now().strftime('%Y_%m_%d')}.csv",
+                    memory_file.read(),
+                    "text/csv",
+                )
+            ],
+        )
