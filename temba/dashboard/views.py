@@ -1,8 +1,11 @@
 import time
 from datetime import datetime, timedelta
 
+import requests
 from django import forms
+from django.conf import settings
 from django.urls import reverse
+from django_redis import get_redis_connection
 from smartmin.views import SmartTemplateView, SmartCRUDL, SmartCreateView, SmartUpdateView
 
 from django.db.models import Q, Sum
@@ -15,7 +18,7 @@ from temba.orgs.views import OrgPermsMixin, ModalMixin
 from temba.dashboard.models import EmbeddedBoard
 from django.utils.translation import ugettext_lazy as _
 
-from temba.utils.fields import InputWidget
+from temba.utils.fields import InputWidget, SelectWidget
 
 
 class Home(OrgPermsMixin, SmartTemplateView):
@@ -224,17 +227,69 @@ class EmbeddedBoardCRUDL(SmartCRUDL):
 
     class Create(ModalMixin, SmartCreateView):
         class Form(forms.ModelForm):
+            embedding_type = forms.ChoiceField(choices=EmbeddedBoard.EMBEDDING_TYPES, widget=SelectWidget)
+            url = forms.URLField(label="Link to the new embedded dashboard", widget=InputWidget, required=False)
+            metabase_dashboard = forms.IntegerField(label="Metabase Dashboard", required=False)
             title = forms.CharField(label="Title", widget=InputWidget)
-            url = forms.URLField(label="Link to the new embedded dashboard", widget=InputWidget)
 
             class Meta:
                 model = EmbeddedBoard
                 fields = "__all__"
 
         form_class = Form
-        fields = ("title", "url")
+        fields = ("embedding_type", "title", "url", "metabase_id")
         success_message = ""
         success_url = "@dashboard.dashboard_home"
+        template_name = "dashboard/embeddedboard_craete.haml"
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            if all([settings.METABASE_SITE_URL, settings.METABASE_USERNAME, settings.METABASE_PASSWORD]):
+                metabase_token = self._metabase_session_token
+                if not metabase_token:
+                    return context
+                dashboards = self._metabase_dashboards(metabase_token)
+                if dashboards:
+                    context["metabase_boards"] = dashboards
+            return context
+
+        @property
+        def _metabase_session_token(self):
+            r = get_redis_connection()
+            key_name = "metabase_auth_token"
+            cached = r.get(key_name)
+            if cached:
+                if isinstance(cached, (bytes, bytearray)):
+                    return cached.decode()
+                return cached
+
+            auth_response = requests.post(
+                f"{settings.METABASE_SITE_URL}/api/session",
+                json={
+                    "username": settings.METABASE_USERNAME,
+                    "password": settings.METABASE_PASSWORD,
+                },
+            )
+            if auth_response.ok:
+                auth_response_json = auth_response.json()
+                metabase_api_token = auth_response_json.get("id", "")
+                if metabase_api_token:
+                    r.set(key_name, metabase_api_token, ex=1123200)
+                return metabase_api_token
+            return ""
+
+        @staticmethod
+        def _metabase_dashboards(token):
+            dashboards = requests.get(
+                f"{settings.METABASE_SITE_URL}/api/dashboard",
+                headers={
+                    "X-Metabase-Session": token,
+                },
+            )
+            dashboards = filter(lambda x: x["enable_embedding"], dashboards.json())
+            dashboards = [(dashboard.get("id"), dashboard.get("name")) for dashboard in dashboards]
+            dashboards = list(sorted(dashboards, key=lambda x: x[1]))
+            return dashboards
 
     class Delete(ModalMixin, SmartUpdateView):
         submit_button_name = _("Delete")

@@ -41,7 +41,7 @@
               .delete-icon
                 %temba-modax(header='{% trans "Delete Dashboard" %}' endpoint="{% url 'dashboard.embeddedboard_delete' embedded_board.id %}")
                   .glyph.icon-remove
-            %iframe{"title": "{{embedded_board.title}}", "src": "{{embedded_board.url}}", "width": "640px", "height": "420px"}
+            %iframe{"title": "{{embedded_board.title}}", "src": "{{embedded_board.dashboard_link}}", "width": "640px", "height": "420px"}
 
 -block extra-script
   {{block.super}}

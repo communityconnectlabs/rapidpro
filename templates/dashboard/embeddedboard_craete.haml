@@ -1,0 +1,55 @@
+- extends "smartmin/form.html"
+- load smartmin
+
+
+- block fields
+  - if metabase_boards
+    %fieldset
+      - render_field "embedding_type"
+      .public-dashboards
+        - render_field "title"
+        - render_field "url"
+      .metabase-dashboards.hidden
+        %temba-select#id_metabase_dashboard(name="metabase_id" label='{{_("Metabase Dashboard")|escapejs}}')
+          -for board in metabase_boards
+            %temba-option(name="{{board.1}}" value="{{board.0}}")
+  - else
+    %fieldset
+      - render_field "title"
+      - render_field "url"
+
+
+-block modal-script
+  = block.super
+  - if metabase_boards
+    :javascript
+      var modax = document.querySelector("#new_dashboards");
+      var body = modax.shadowRoot.querySelector(".modax-body");
+      var embeddingType = body.querySelector("#id_embedding_type");
+      var metabaseDashboard = body.querySelector("#id_metabase_dashboard");
+      var titleField = body.querySelector("#id_title");
+      var publicDashboards = body.querySelector(".public-dashboards");
+      var metabaseDashboards = body.querySelector(".metabase-dashboards");
+
+      embeddingType.addEventListener('change', function(event) {
+        if (embeddingType.value.value === "M") {
+          publicDashboards.classList.add("hidden");
+          metabaseDashboards.classList.remove("hidden");
+          titleField.value = metabaseDashboard.value.name;
+        } else {
+          metabaseDashboards.classList.add("hidden");
+          publicDashboards.classList.remove("hidden");
+          titleField.value = "";
+        }
+      });
+      metabaseDashboard.addEventListener('change', function(event) {
+        titleField.value = metabaseDashboard.value.name;
+      });
+
+
+-block modal-extra-style
+  = block.super
+  :css
+    .hidden {
+      display: none;
+    }

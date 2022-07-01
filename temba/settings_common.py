@@ -1438,3 +1438,8 @@ CORS_ALLOW_METHODS = ["GET"]
 # Contacts import via excel
 # if set to True will not raise error on duplicate, instead will use last row
 ALLOW_DUPLICATE_CONTACT_IMPORT = os.environ.get("ALLOW_DUPLICATE_CONTACT_IMPORT", "").lower() == "true"
+
+METABASE_SITE_URL = os.environ.get("METABASE_SITE_URL", "")
+METABASE_SECRET_KEY = os.environ.get("METABASE_SECRET_KEY", "")
+METABASE_USERNAME = os.environ.get("METABASE_USERNAME", "")
+METABASE_PASSWORD = os.environ.get("METABASE_PASSWORD", "")
