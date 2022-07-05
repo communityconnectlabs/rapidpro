@@ -45,6 +45,7 @@ from .views import (
     ContactVariablesReportEndpoint,
     TrackableLinkReportEndpoint,
     PhoneValidationEndpoint,
+    ReplaceAccentedCharsEndpoint,
 )
 
 urlpatterns = [
@@ -91,6 +92,7 @@ urlpatterns = [
     url(r"^contact_variable_report$", ContactVariablesReportEndpoint.as_view(), name="api.v2.contact_variable_report"),
     url(r"^trackable_link_report$", TrackableLinkReportEndpoint.as_view(), name="api.v2.trackable_link_report"),
     url(r"^phone_validation$", PhoneValidationEndpoint.as_view(), name="api.v2.phone_validation"),
+    url(r"^replace_accented_chars$", ReplaceAccentedCharsEndpoint.as_view(), name="api.v2.replace_accented_chars"),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api"])
