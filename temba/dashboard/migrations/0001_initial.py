@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
                         max_length=1,
                     ),
                 ),
-                ("metabase_id", models.PositiveIntegerField(blank=True, null=True)),
+                ("metabase_dashboard", models.PositiveIntegerField(blank=True, null=True)),
                 ("url", models.URLField(blank=True)),
             ],
         ),

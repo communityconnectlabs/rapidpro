@@ -10,7 +10,7 @@
         - render_field "title"
         - render_field "url"
       .metabase-dashboards.hidden
-        %temba-select#id_metabase_dashboard(name="metabase_id" label='{{_("Metabase Dashboard")|escapejs}}')
+        %temba-select#id_metabase_dashboard(name="metabase_dashboard" label='{{_("Metabase Dashboard")|escapejs}}')
           -for board in metabase_boards
             %temba-option(name="{{board.1}}" value="{{board.0}}")
   - else

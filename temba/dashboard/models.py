@@ -16,7 +16,7 @@ class EmbeddedBoard(models.Model):
 
     title = models.CharField(max_length=256, blank=True)
     embedding_type = models.CharField(max_length=1, choices=EMBEDDING_TYPES, default=TYPE_PUBLIC)
-    metabase_id = models.PositiveIntegerField(null=True, blank=True)
+    metabase_dashboard = models.PositiveIntegerField(null=True, blank=True)
     url = models.URLField(blank=True)
 
     def __str__(self):
@@ -28,7 +28,7 @@ class EmbeddedBoard(models.Model):
     def dashboard_link(self):
         if self.embedding_type == "M" and all([settings.METABASE_SITE_URL, settings.METABASE_SECRET_KEY]):
             payload = {
-                "resource": {"dashboard": self.metabase_id},
+                "resource": {"dashboard": self.metabase_dashboard},
                 "exp": round(time.time()) + (60 * 10),  # 10 minute expiration
                 "params": {},
             }

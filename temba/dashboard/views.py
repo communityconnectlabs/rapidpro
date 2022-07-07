@@ -237,10 +237,10 @@ class EmbeddedBoardCRUDL(SmartCRUDL):
                 fields = "__all__"
 
         form_class = Form
-        fields = ("embedding_type", "title", "url", "metabase_id")
+        fields = ("embedding_type", "title", "url", "metabase_dashboard")
         success_message = ""
         success_url = "@dashboard.dashboard_home"
-        template_name = "dashboard/embeddedboard_craete.haml"
+        template_name = "dashboard/embeddedboard_create.haml"
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
