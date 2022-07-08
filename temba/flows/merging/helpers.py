@@ -9,6 +9,7 @@ actions_names = {
     "call_resthook": {"description": "Call Zapier", "name": "Call Zapier"},
     "call_shorten_url": {"name": "Shorten Trackable Links"},
     "call_webhook": {"description": "Call a webhook", "name": "Call Webhook"},
+    "call_dialogflow": {"description": "Call Dialogflow", "name": "Call Dialogflow"},
     "enter_flow": {"description": "Enter another flow", "name": "Enter a Flow"},
     "play_audio": {"description": "Play a contact recording", "name": "Play Recording"},
     "play_message": {"description": "Play a message", "name": "Play Message"},
