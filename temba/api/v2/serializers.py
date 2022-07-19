@@ -1556,3 +1556,13 @@ class TwilioNumberValidationSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         return None
+
+
+class ReplaceAccentedCharsSerializer(serializers.Serializer):
+    message = serializers.CharField(required=True)
+
+    def update(self, instance, validated_data):
+        return instance
+
+    def create(self, validated_data):
+        return None

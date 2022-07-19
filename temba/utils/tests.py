@@ -51,7 +51,7 @@ from .dates import datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
 from .email import is_valid_address, send_simple_email, send_email_with_attachments
 from .export import TableExporter
 from .fields import validate_external_url
-from .gsm7 import calculate_num_segments, is_gsm7, replace_non_gsm7_accents
+from .gsm7 import calculate_num_segments, is_gsm7, replace_non_gsm7_accents, replace_accented_chars
 from .http import http_headers
 from .locks import LockNotAcquiredException, NonBlockingLock
 from .models import IDSliceQuerySet, JSONAsTextField, patch_queryset_count
@@ -822,6 +822,21 @@ class GSM7Test(TembaTest):
 
         # 136 characters with quotes should be three segments
         self.assertEqual(3, calculate_num_segments(ten_chars * 13 + "“word”"))
+
+    def test_replace_accented_chars(self):
+        text = "@ΔSP0¡P¿p£_!1AQaq$Φ\"2BRbr¥Γ#3CScsèΛ¤4DTdtéΩ%5EUeuùΠ&6FVfvìΨ'7GWgwòΣ(8HXhxÇΘ)9IYiy"
+        result = replace_accented_chars(text)
+
+        self.assertEqual(result["updated"], "@SP0Pp_!1AQaq$\"2BRbrΓ#3CScse4DTdte%5EUeuu&6FVfvi'7GWgwo(8HXhxCO)9IYiy")
+        self.assertEqual(result["removed"], ["Δ", "¡", "¿", "£", "Φ", "¥", "Λ", "¤", "Ω", "Π", "Ψ", "Σ"])
+        self.assertEqual(result["replaced"]["ò"], "o")
+        self.assertEqual(result["replaced"]["Θ"], "O")
+
+        result = replace_accented_chars("simple      text")
+
+        self.assertEqual(result["updated"], "simple text")
+        self.assertEqual(result["removed"], [])
+        self.assertEqual(result["replaced"], dict())
 
 
 class ModelsTest(TembaTest):

@@ -103,9 +103,11 @@ from .serializers import (
     UrlAttachmentValidationSerializer,
     WebHookEventReadSerializer,
     WorkspaceReadSerializer,
+    ReplaceAccentedCharsSerializer,
 )
 from ...links.models import Link, LinkContacts
 from ...orgs.models import LOOKUPS, DEFAULT_FIELDS_PAYLOAD_LOOKUPS, DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS
+from ...utils.gsm7 import replace_accented_chars
 
 
 class RootView(views.APIView):
@@ -148,6 +150,7 @@ class RootView(views.APIView):
      * [/api/v2/messages_report](/api/v2/messages_report) - to generate a report about messages
      * [/api/v2/trackable_link_report](/api/v2/trackable_link_report) - to generate a report about trackable links
      * [/api/v2/phone_validation](/api/v2/phone_validation) - to retrieve additional information about a phone number
+     * [/api/v2/replace_accented_chars](/api/v2/replace_accented_chars) - to replace accented characters in a message
 
     To use the endpoint simply append _.json_ to the URL. For example [/api/v2/flows](/api/v2/flows) will return the
     documentation for that endpoint but a request to [/api/v2/flows.json](/api/v2/flows.json) will return a JSON list of
@@ -254,6 +257,7 @@ class RootView(views.APIView):
                 "templates": reverse("api.v2.templates", request=request),
                 "ticketers": reverse("api.v2.ticketers", request=request),
                 "phone_validation": reverse("api.v2.phone_validation", request=request),
+                "replace_accented_chars": reverse("api.v2.replace_accented_chars", request=request),
                 # "tickets": reverse("api.v2.tickets", request=request),
                 "workspace": reverse("api.v2.workspace", request=request),
             }
@@ -327,6 +331,7 @@ class ExplorerView(SmartTemplateView):
             FlowVariableReportEndpoint.get_read_explorer(),
             TrackableLinkReportEndpoint.get_read_explorer(),
             PhoneValidationEndpoint.get_read_explorer(),
+            ReplaceAccentedCharsEndpoint.get_read_explorer(),
         ]
         return context
 
@@ -5821,4 +5826,61 @@ class PhoneValidationEndpoint(BaseAPIView):
                 },
             ],
             "example": {"body": json.dumps({"phone_number": "+15108675310"})},
+        }
+
+
+class ReplaceAccentedCharsEndpoint(BaseAPIView):
+    """
+    This endpoint provides a way to replace accented characters in a text
+
+    A **POST** returns message without accented characters
+
+    * **message** - The message string you want to replace accented chars
+
+    Example:
+
+        POST /api/v2/replace_accented_chars.json
+        {
+            "message": "compàre our résumé",
+        }
+
+    Response:
+
+        {
+          "updated": "compare our resume",
+          "replaced": {
+            "à": "a",
+            "é": "e"
+          },
+          "removed": []
+        }
+    """
+
+    permission = "orgs.org_api"
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        serializer = ReplaceAccentedCharsSerializer(data=data)
+        if not serializer.is_valid():
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        response = replace_accented_chars(data.get("message", ""))
+
+        return Response(response)
+
+    @classmethod
+    def get_read_explorer(cls):
+        return {
+            "method": "POST",
+            "title": "Replace Accented Chars",
+            "url": reverse("api.v2.replace_accented_chars"),
+            "slug": "replace-accented-chars",
+            "fields": [
+                {
+                    "name": "message",
+                    "required": True,
+                    "help": "The Message string you want to replace accented chars",
+                },
+            ],
+            "example": {"body": json.dumps({"message": "compàre our résumé"})},
         }
