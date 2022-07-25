@@ -1203,6 +1203,7 @@ TICKETER_TYPES = [
     "temba.tickets.types.zendesk.ZendeskType",
     "temba.tickets.types.rocketchat.RocketChatType",
     "temba.tickets.types.twilioflex.TwilioFlexType",
+    "temba.tickets.types.amazonconnect.AmazonConnectType",
 ]
 
 CHANNEL_TYPES = [
@@ -1443,3 +1444,5 @@ CORS_ALLOW_METHODS = ["GET"]
 # if set to True will not raise error on duplicate, instead will use last row
 ALLOW_DUPLICATE_CONTACT_IMPORT = os.environ.get("ALLOW_DUPLICATE_CONTACT_IMPORT", "").lower() == "true"
 DEACTIVATED_CONTACTS_EMAILS = os.environ.get("DEACTIVATED_CONTACTS_EMAILS", "").split(",")
+
+AMAZON_CONNECT_LAMBDA_FUNCTION_URL = os.environ.get("AMAZON_CONNECT_LAMBDA_FUNCTION_URL", "")
