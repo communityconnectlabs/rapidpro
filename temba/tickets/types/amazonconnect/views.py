@@ -1,3 +1,5 @@
+import requests
+
 from django.conf import settings
 from django.contrib import messages
 from django.utils.translation import ugettext_lazy as _
@@ -20,6 +22,11 @@ class ConnectView(BaseConnectView):
         ).first()
         if org_existing_ticketer:
             messages.error(self.request, _("This organization is already connected to Amazon Connect"))
+            return super().get(self.request, *self.args, **self.kwargs)
+
+        response = requests.get(f"{settings.AMAZON_CONNECT_LAMBDA_FUNCTION_URL}/healthcheck")
+        if response.status_code != 200:
+            messages.error(self.request, _("The Amazon Connect lambda function is not available"))
             return super().get(self.request, *self.args, **self.kwargs)
 
         self.object = Ticketer(
