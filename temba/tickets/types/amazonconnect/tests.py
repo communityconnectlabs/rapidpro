@@ -4,6 +4,7 @@ from requests.exceptions import Timeout
 
 from django.urls import reverse
 
+from temba.tests import MockResponse
 from temba.tests.base import TembaTest
 from temba.tickets.models import Ticketer
 
@@ -37,12 +38,16 @@ class TwilioflexViewTest(AmazonconnectMixin):
             self.assertEqual(len(response.context["messages"]), 1)
             self.assertEqual([f"{m}" for m in response.context["messages"]][0], msg)
 
-    @patch("random.choice")
-    def test_form_valid(self, mock_choices):
+    @patch("requests.get")
+    def test_form_valid(self, mock_request):
         self.client.force_login(self.admin)
+
+        mock_request.return_value = MockResponse(200, '[{"result":"OK"}]')
+
         data = {"endpoint_url": "https://aws.lambda.com"}
         response = self.client.post(self.connect_url, data=data)
 
+        mock_request.return_value = MockResponse(302, None)
         self.assertEqual(response.status_code, 302)
 
         ticketer = Ticketer.objects.order_by("id").last()
