@@ -22,7 +22,7 @@ class AmazonconnectMixin(TembaTest):
         self.connect_url = reverse("tickets.types.amazonconnect.connect")
 
 
-class TwilioflexViewTest(AmazonconnectMixin):
+class AmazonconnectViewTest(AmazonconnectMixin):
     def check_exceptions(self, mock_choices, mock_request, timeout_msg, exception_msg):
         self.client.force_login(self.admin)
         check = [(Timeout(), timeout_msg), (Exception(), exception_msg)]
