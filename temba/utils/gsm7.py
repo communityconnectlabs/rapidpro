@@ -1,10 +1,11 @@
+import re
+
 GSM7_BASIC = (
     "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>"
     "?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ`¿abcdefghijklmnopqrstuvwxyzäöñüà"
 )
 
 GSM7_EXTENDED = "^{}\\[~]|€"
-
 
 # All valid GSM7 characters, table format
 VALID_GSM7 = GSM7_BASIC + GSM7_EXTENDED
@@ -374,3 +375,95 @@ def calculate_num_segments(text):
             segment_count += 1
 
     return segment_count
+
+
+GSM_REPLACEMENTS = {
+    "\t": " ",
+    "\xa0": " ",
+    "¡": "",
+    "£": "",
+    "¤": "",
+    "¥": "",
+    "§": "",
+    "¿": "",
+    "À": "A",
+    "Á": "A",
+    "Â": "A",
+    "Ã": "A",
+    "Ä": "A",
+    "Å": "A",
+    "Æ": "E",
+    "Ç": "C",
+    "È": "E",
+    "É": "E",
+    "Ê": "E",
+    "Ì": "I",
+    "Í": "I",
+    "Î": "I",
+    "Ñ": "N",
+    "Ò": "O",
+    "Ó": "O",
+    "Ô": "O",
+    "Õ": "O",
+    "Ö": "O",
+    "Ø": "O",
+    "Ù": "U",
+    "Ú": "U",
+    "Û": "U",
+    "Ü": "U",
+    "ß": "",
+    "à": "a",
+    "â": "a",
+    "ã": "a",
+    "ä": "a",
+    "å": "a",
+    "æ": "e",
+    "ç": "c",
+    "è": "e",
+    "é": "e",
+    "ê": "e",
+    "ì": "i",
+    "í": "i",
+    "î": "i",
+    "ñ": "n",
+    "ò": "o",
+    "ó": "o",
+    "ô": "o",
+    "õ": "o",
+    "ö": "o",
+    "ø": "o",
+    "ù": "u",
+    "ú": "u",
+    "û": "u",
+    "ü": "u",
+    "Δ": "",
+    "Θ": "O",
+    "Λ": "",
+    "Ξ": "",
+    "Π": "",
+    "Σ": "",
+    "Φ": "",
+    "Ψ": "",
+    "Ω": "",
+    "–": "-",
+    "‘": "'",
+    "’": "'",
+    "“": '"',
+    "”": '"',
+}
+
+
+def replace_accented_chars(text):
+    removed = []
+    replaced = dict()
+    updated = ""
+    for char in text:
+        replacement = GSM_REPLACEMENTS.get(char, char)
+        if replacement == "":
+            removed.append(char)
+        else:
+            updated += replacement
+            if replacement != char:
+                replaced[char] = replacement
+    updated = re.sub(" +", " ", updated)
+    return dict(updated=updated, replaced=replaced, removed=removed)
