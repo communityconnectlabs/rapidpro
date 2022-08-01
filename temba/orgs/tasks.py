@@ -278,7 +278,7 @@ def delete_orgs_task():
             logging.exception(f"exception while deleting {org.name}")
 
 
-@nonoverlapping_task(track_started=True, name="cache_twilio_stats_task")
+@task(track_started=True, name="cache_twilio_stats_task")
 def cache_twilio_stats_task():
     r = get_redis_connection()
     for org in Org.objects.filter(is_active=True):
