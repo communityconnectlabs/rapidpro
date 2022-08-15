@@ -1,0 +1,231 @@
+<div class="flow-template-container">
+  <div class="lp-frame" >
+    <div class="left">
+      <div class="side-bar-header">
+        Templates
+      </div>
+      <div class="search-box">
+        <temba-textinput value=""></temba-textinput>
+      </div>
+      <div>
+        <div class="lp-nav upper">
+          <div class="font-normal lp-nav-item">
+            <div onclick="goto(event)" href="/msg/inbox/" class="name">All Templates </div>
+            <div onclick="goto(event)" href="/msg/inbox/" class="count">
+              <span class="badge">37</span>
+            </div>
+          </div>
+          {% for category in categories %}
+            <div class=" lp-nav-item">
+              <div onclick="goto(event)" href="/msg/flow/" class="name">{{category.title}} </div>
+              <div onclick="goto(event)" href="/msg/flow/" class="count">
+                <span class="badge">{{category.count}}</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="right-body-header">Create your new flow</div>
+      <div>
+        <div class="blank-flow-button" onclick="createBlank()">
+          <div class="blank-flow-button-icon-1"></div>
+          <div class="blank-flow-button-text">
+            <div class="top-text">Start from scratch</div>
+            <div class="bottom-text">Begin with a blank flow</div>
+          </div>
+          <div class="blank-flow-button-icon-2 icon-arrow-right-7"></div>
+        </div>
+        <div class="template-list">
+          {% for template in templates %}
+            <div class="template-link">
+            <div class="template-link-icon"></div>
+            <div class="template-link-title">{{template.title}}</div>
+            <div class="template-link-description">
+              {{template.description}}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<!--<div class="hidden">-->
+<!--  <input type="submit" value="Create">-->
+<!--</div>-->
+<script type="text/javascript">
+  // function addClass (ele, className) {
+  //   ele.classList.add(className)
+  // }
+  //
+  // function removeClass (ele, className) {
+  //   ele.classList.remove(className)
+  // }
+  //
+  // var modalBody = document.querySelector('#launch-flow').shadowRoot
+  //
+  // var queryField = modalBody.querySelector('.contact-query')
+  // var recipientsField = modalBody.querySelector('.omnibox')
+  // var modeSelect = modalBody.querySelector('temba-select[name=\'mode\']')
+  //
+  // if (modeSelect) {
+  //   modeSelect.addEventListener('change', function (evt) {
+  //     var selected = evt.target.values[0]
+  //     if (selected.value === 'query') {
+  //       removeClass(queryField, 'hidden')
+  //       addClass(recipientsField, 'hidden')
+  //     } else {
+  //       addClass(queryField, 'hidden')
+  //       removeClass(recipientsField, 'hidden')
+  //     }
+  //   })
+  // }
+  //
+  // var typeSwitcher = modalBody.querySelector('#id_launch_type')
+  // var launchImmediatelyBox = modalBody.querySelector('.l-immediately')
+  // var loader = modalBody.querySelector('.loader')
+  //
+  // function showLaunchFlowBox (selected) {
+  //   addClass(launchImmediatelyBox, 'hidden')
+  //   addClass(loader, 'hidden')
+  //   switch (selected) {
+  //     case 'LAUNCH_IMMEDIATELY':
+  //       removeClass(launchImmediatelyBox, 'hidden')
+  //       // showFieldsOnStartType(startFlowTypeSelector.val());
+  //       break
+  //     case 'LAUNCH_ON_KEYWORD_TRIGGER':
+  //       window.location.href = '/trigger/create/?trigger=keyword&flow=4'
+  //       removeClass(loader, 'hidden')
+  //       break
+  //     case 'LAUNCH_ON_SHEDULE_TRIGGER':
+  //       window.location.href = '/trigger/create/?trigger=schedule&flow=4'
+  //       removeClass(loader, 'hidden')
+  //       break
+  //   }
+  // }
+  //
+  // typeSwitcher.addEventListener('change', function (event) {
+  //   let type = event.target.values[0].value
+  //   showLaunchFlowBox(type)
+  // })
+</script>
+<link rel="stylesheet" href="{{ STATIC_URL }}/css/tailwind.css" type="text/css">
+<style type="text/css">
+    .flow-template-container .count {
+        margin-left: 0 !important;
+    }
+    .flow-template-container .count .badge {
+        background-color: #e6f9f9;
+        min-width: 20px;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        display: inline-block;
+        text-align: center;
+        font-size: 0.7rem;
+    }
+    .flow-template-container .left {
+        width: 194px;
+        font-size: 0.8rem;
+        border-right: 1px solid #c1c1c1;
+        margin-left: -20px;
+        padding: 20px 10px;
+    }
+    .flow-template-container .left .upper{
+        width: 100% !important;
+        padding: 0 !important;
+    }
+    .search-box {
+      width: 100%;
+    }
+
+    .flow-template-container .right {
+        padding-top: 20px;
+        width: 518px;
+    }
+    .blank-flow-button {
+        border: 1px solid #C7D8D7;
+        border-radius: 8px;
+        padding: 10px;
+
+        display: grid;
+        grid-template-columns: 10% 85% 5%;
+        cursor: pointer;
+    }
+    .blank-flow-button-icon-1, .blank-flow-button-text, .blank-flow-button-icon-2 {
+        /*float: left;*/
+        /*display: table-column;*/
+    }
+    .blank-flow-button-icon-1, .blank-flow-button-icon-2 {
+        background-repeat: no-repeat;
+        height: 48px;
+    }
+    .blank-flow-button-icon-1 {
+        background-color: #E7F9F9;
+        background-position: center;
+        background-image: url("{{ STATIC_URL }}/images/doc.png");
+        border-radius: 12px;
+    }
+    .blank-flow-button-icon-2 {
+        background-image: url("{{ STATIC_URL }}/images/left-arrow.png");
+        background-position: right;
+    }
+    .blank-flow-button-text {
+        margin-left: 10px;
+    }
+    .blank-flow-button-text .top-text {
+        font-weight: 500;
+        font-size: 14px;
+        line-height: 16px;
+    }
+    .blank-flow-button-text .bottom-text {
+        font-weight: 400;
+        font-size: 12px;
+        line-height: 14px;
+        color: #66707A;
+    }
+    .right-body-header, .side-bar-header {
+        font-weight: 500;
+        font-size: 16px;
+        line-height: 19px;
+        margin-bottom: 20px;
+    }
+    .template-list {
+        padding-top: 10px;
+        display: grid;
+        grid-gap: 10px;
+        grid-template-columns: 1fr 1fr 1fr;
+        max-height: 40vh;
+        overflow-y: auto;
+        margin-right: -15px;
+        margin-top: 15px;
+    }
+    .template-link {
+        height: 157px;
+        border: 1px solid #C7D8D7;
+        border-radius: 8px;
+    }
+    .template-link-icon {
+        height: 85px;
+        background-image: url("{{ STATIC_URL }}/images/template-icon.png");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-color: #F8FAFC;
+        border-radius: 8px;
+    }
+    .template-link-title {
+        font-weight: 500;
+        font-size: 12px;
+        line-height: 14px;
+        padding: 10px 10px 0;
+    }
+    .template-link-description {
+        font-weight: 400;
+        font-size: 10px;
+        line-height: 12px;
+        color: #66707A;
+        opacity: 0.8;
+        padding: 5px 10px 10px;
+    }
+</style>
