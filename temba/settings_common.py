@@ -502,6 +502,7 @@ PERMISSIONS = {
         "merge_flows",
         "merging_flows_table",
         "dialogflow_api",
+        "show_templates",
     ),
     "flows.flowimage": ("read", "filter", "archived", "download", "action_delete", "action_archive", "action_restore"),
     "flows.flowsession": ("json",),
