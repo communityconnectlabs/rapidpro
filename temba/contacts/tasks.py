@@ -198,8 +198,8 @@ def block_deactivated_contacts_task():
 
     if all_blocked_contacts and settings.DEACTIVATED_CONTACTS_EMAILS:
         memory_file = io.StringIO()
-        phone_numbers_df = pd.DataFrame(all_blocked_contacts)
-        phone_numbers_df.to_csv(memory_file, index=False)
+        phone_numbers_df = pd.DataFrame.from_dict(all_blocked_contacts, orient="index")
+        phone_numbers_df.to_csv(memory_file, index=True, header=False)
         memory_file.seek(0)
         send_email_with_attachments(
             subject=email_subject,
