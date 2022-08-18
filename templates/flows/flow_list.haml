@@ -19,7 +19,7 @@
           .flex.flex-col
             -if org_perms.flows.flow_create
               .w-64.mr-5
-                %temba-modax#create-flow-modal{ header:'{% trans "Create Flow" %}', endpoint:"{% url 'flows.flow_create' %}" }
+                %temba-modax#create-flow-modal{ width: "712px", header:'{% trans "Create Flow" %}', endpoint:"{% url 'flows.flow_show_templates' %}"}
                   .button-primary.block
                     -trans "Create Flow"
 
@@ -232,6 +232,157 @@
   {{ block.super }}
 
   :javascript
+    function createErrorAlert(message) {
+      const alertElem = document.createElement('div');
+      alertElem.innerText = message;
+      alertElem.classList.add('alert-error');
+      return alertElem;
+    }
+
+    function getFieldFromElement(form) {
+      const textInput = form.querySelector('temba-textinput');
+      return textInput.shadowRoot.querySelector('temba-field').shadowRoot.querySelector('.field');
+    }
+
+    function addErrorAlert(form, message) {
+      const alertElem = createErrorAlert(message);
+      const field = getFieldFromElement(form);
+      field.append(alertElem);
+    }
+
+    function removeErrorAlert(form) {
+      const field = getFieldFromElement(form);
+      const alertElem = field.querySelector('.alert-error');
+      if (alertElem) field.removeChild(alertElem);
+    }
+
+    function submitData() {
+      const POST_URL = '/flow/create/';
+      const { modaxBody } = getModalResources();
+      const form = modaxBody.querySelector('form');
+      const formData = new FormData(form);
+      const oReq = new XMLHttpRequest();
+
+      removeErrorAlert(form);
+      oReq.open('POST', POST_URL, true);
+      oReq.send(formData);
+      oReq.onload = (oEvent) => {
+        const responseURL = oEvent.currentTarget.responseURL;
+        if (responseURL.indexOf(POST_URL) > -1) {
+          const responseForm = $($.parseHTML(oReq.responseText));
+          const textInput = responseForm.find('temba-textinput')[0];
+          if (textInput && textInput.errors.length > 0) addErrorAlert(form, textInput.errors[0]);
+        } else window.location.href = responseURL;
+      };
+    }
+
+    function handleCreateFlowForm() {
+      const { dialogFooter } = getModalResources();
+      setTimeout(() => {
+        const createBtn = createButton({ name: 'Create', primary: true, onclick: submitData });
+        const buttons = dialogFooter.querySelectorAll('temba-button');
+        dialogFooter.removeChild(buttons[0]);
+        dialogFooter.prepend(createBtn);
+      }, 500);
+    }
+
+    function createButton(options) {
+      const buttonOptions = Object.prototype.toString.call(options) === '[object Object]' ? options : {};
+      const buttonElement = document.createElement('temba-button');
+      buttonElement.name = buttonOptions.name;
+      if (options.onclick) buttonElement.onclick = options.onclick;
+      if (options.primary) buttonElement.primary = true;
+      else buttonElement.secondary = true;
+      return buttonElement;
+    }
+
+    function getModalResources() {
+      const modalView = document.querySelector('temba-modax#create-flow-modal');
+      const dialogWrapper =  modalView.shadowRoot.querySelector('temba-dialog');
+      const dialogFooter = dialogWrapper.shadowRoot.querySelector('.dialog-footer');
+      const dialogBody = dialogWrapper.shadowRoot.querySelector('.dialog-body');
+      const modaxBody = modalView.shadowRoot.querySelector('temba-dialog').querySelector('.modax-body');
+      return { modalView, dialogWrapper, dialogBody, dialogFooter, modaxBody };
+    }
+
+    function createBlank() {
+      const { modalView, dialogWrapper, dialogFooter, dialogBody, modaxBody } = getModalResources();
+      modalView.open = false;
+      dialogBody.style.maxHeight = '55vh';
+      dialogBody.style.overflowY = 'auto';
+      modalView.endpoint = "/flow/create/";
+
+      const options = {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': getCookie('csrftoken')
+        }
+      };
+      fetch(modalView.endpoint, options)
+        .then((response) => {
+          response.text().then((body) => {
+            modalView.width = '600px';
+            modalView.cancelName = 'Cancel';
+            modaxBody.innerHTML = body;
+            addBackButton(dialogFooter);
+            modalView.open = true;
+          });
+        })
+        .catch(error => { console.log(error); });
+    }
+
+    function resetModal(close = false) {
+      const { modalView, dialogWrapper, dialogFooter, dialogBody, modaxBody } = getModalResources();
+      modalView.open = false;
+      modalView.endpoint = '/flow/show_templates/';
+      dialogBody.style.maxHeight = 'none';
+      dialogBody.style.overflowY = 'visible';
+
+      const buttons = dialogFooter.querySelectorAll('temba-button');
+      const names = ['Ok', 'Cancel'];
+      for (let i = 0; i < buttons.length; i += 1) {
+        const node = buttons[i];
+        if (!names.includes(node.name)) dialogFooter.removeChild(node);
+      }
+
+      const options = {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': getCookie('csrftoken')
+        }
+      };
+
+      fetch(modalView.endpoint, options)
+        .then((response) => {
+          response.text().then((body) => {
+            modalView.width = '712px';
+            modalView.cancelName = 'Cancel';
+            modaxBody.innerHTML = body;
+            modalView.open = true;
+          });
+        })
+        .catch(error => { console.log(error); });
+    }
+
+    function addBackButton(dialogFooter) {
+      const buttonElement = createButton({ name: 'Back', primary: true, onclick: resetModal });
+      dialogFooter.appendChild(buttonElement);
+    }
+
+    function setStartPage() {
+        const { modalView, dialogWrapper, dialogFooter, dialogBody } = getModalResources();
+        if (modalView.endpoint === '/flow/show_templates/' && !modalView.opened) {
+          dialogBody.style.maxHeight = 'none';
+          dialogBody.style.overflowY = 'visible';
+          const button = dialogFooter.querySelector('temba-button');
+          button.name = 'Cancel';
+          button.shadowRoot.querySelector('.button-name').innerHTML = 'Cancel';
+          modalView.opened == true;
+        }
+      }
+
+    document.querySelector('temba-modax#create-flow-modal')
+      .addEventListener('click', setStartPage, { once: true });
     {% if org_perms.flows.flow_update %}
       function handleAddLabelClicked() {
         document.getElementById("create-label-modal").open = true;
