@@ -57,7 +57,7 @@ class ClaimView(ClaimViewMixin, SmartFormView):
         self.object = Channel.create(
             org,
             self.request.user,
-            None,
+            self.form.cleaned_data.get("country", None),
             self.channel_type,
             name=self.form.cleaned_data.get("phone_number", ""),
             address=self.form.cleaned_data.get("phone_number", ""),

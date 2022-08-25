@@ -21,6 +21,7 @@ class MGageChannelTypeTest(TembaTest):
         post_data = response.context["form"].initial
 
         post_data["phone_number"] = "+18889999999"
+        post_data["country"] = "US"
 
         response = self.client.post(url, post_data)
         self.assertEqual(302, response.status_code)
@@ -29,6 +30,7 @@ class MGageChannelTypeTest(TembaTest):
 
         self.assertEqual("MGA", channel.channel_type)
         self.assertEqual(post_data["phone_number"], channel.address)
+        self.assertEqual(post_data["country"], channel.country)
 
         Channel.objects.all().delete()
 
@@ -36,6 +38,7 @@ class MGageChannelTypeTest(TembaTest):
         post_data = response.context["form"].initial
 
         post_data["phone_number"] = "+18889999999"
+        post_data["country"] = "US"
 
         response = self.client.post(url, post_data)
         self.assertEqual(302, response.status_code)
@@ -44,3 +47,4 @@ class MGageChannelTypeTest(TembaTest):
 
         self.assertEqual("MGA", channel.channel_type)
         self.assertEqual(post_data["phone_number"], channel.address)
+        self.assertEqual(post_data["country"], channel.country)
