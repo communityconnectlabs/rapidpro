@@ -17,7 +17,7 @@ class SMPPType(ChannelType):
     name = "SMPP Channel"
     show_config_page = False
 
-    claim_blurb = _("Add a SMPP channel phone number.")
+    claim_blurb = _("Add a SMPP short code or long code number.")
     claim_view = ClaimView
 
     schemes = [URN.TEL_SCHEME]
