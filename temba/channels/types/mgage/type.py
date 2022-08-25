@@ -6,18 +6,18 @@ from ...models import ChannelType
 from .views import ClaimView
 
 
-class SMPPType(ChannelType):
+class MGageType(ChannelType):
     """
-    A SMPP bot channel
+    A mGage SMS channel that's based on SMPP
     """
 
-    code = "SMP"
+    code = "MGA"
     category = ChannelType.Category.PHONE
 
-    name = "SMPP Channel"
+    name = "mGage Channel"
     show_config_page = False
 
-    claim_blurb = _("Add a SMPP short code or long code number.")
+    claim_blurb = _("Add a mGage phone number.")
     claim_view = ClaimView
 
     schemes = [URN.TEL_SCHEME]
