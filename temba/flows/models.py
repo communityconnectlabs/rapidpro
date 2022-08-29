@@ -26,7 +26,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.cache import cache
 from django.core.files.temp import NamedTemporaryFile
 from django.db import connection as db_connection, models, transaction
-from django.db.models import Max, Q, Sum
+from django.db.models import Max, Q, Sum, Count
 from django.db.models.functions import TruncDate
 from django.dispatch import receiver
 from django.urls import reverse
@@ -56,7 +56,7 @@ from temba.utils.models import (
     TembaModel,
     generate_uuid,
 )
-from temba.utils.uuid import uuid4
+from temba.utils.uuid import uuid4, is_valid_uuid
 
 from . import legacy
 
@@ -3132,3 +3132,49 @@ class StudioFlowStart(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"StudioFlowStart[id={self.id}, flow={self.flow_sid}]"
+
+
+class FlowTemplateGroup(models.Model):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    name = models.CharField(max_length=64, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_or_create_obj(cls, value):
+        obj = None
+        valid_uuid = is_valid_uuid(value)
+        if valid_uuid:
+            obj = cls.objects.filter(uuid=value).first()
+        if not obj and not valid_uuid:
+            obj = cls.objects.create(name=value)
+        return obj
+
+    @classmethod
+    def get_group_count(cls):
+        groups = cls.objects.annotate(total=Count("group"))
+        return groups.values("name", "total", "uuid")
+
+    def has_templates(self):
+        return self.group.count() > 0
+
+
+class FlowTemplate(models.Model):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    name = models.CharField(max_length=64, unique=True)
+    document = JSONAsTextField(help_text=_("imported flow file"), default=dict)
+    tags = ArrayField(models.CharField(max_length=10, null=True), default=list, null=True)
+    description = models.TextField(null=True)
+    group = models.ForeignKey(FlowTemplateGroup, on_delete=models.PROTECT, related_name="group")
+
+    # the org that can view this template
+    orgs = models.ManyToManyField(Org, related_name="flow_template")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="flow_template"
+    )
+    created_on = models.DateTimeField(default=timezone.now, editable=False)
+    modified_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    def __str__(self):
+        return f"{self.name}({self.group.name})"

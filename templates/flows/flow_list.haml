@@ -19,7 +19,7 @@
           .flex.flex-col
             -if org_perms.flows.flow_create
               .w-64.mr-5
-                %temba-modax#create-flow-modal{ width: "712px", header:'{% trans "Create Flow" %}', endpoint:"{% url 'flows.flow_show_templates' %}"}
+                %temba-modax#create-flow-modal{ width: "712px", header:'{% trans "Create Flow" %}', endpoint:"{% url 'flows.flow_show_templates' %}", onclick: "configureModal()"}
                   .button-primary.block
                     -trans "Create Flow"
 
@@ -232,6 +232,34 @@
   {{ block.super }}
 
   :javascript
+    const debouncedFilterRequest = debounce(filterRequest);
+    let modalOpened = false;
+
+    function configureModal() {
+      const { modalView, dialogFooter, dialogBody } = getModalResources();
+      if (modalView.endpoint === '{% url "flows.flow_show_templates" %}' && !modalOpened) {
+        dialogBody.style.maxHeight = 'none';
+        dialogBody.style.overflowY = 'visible';
+        const button = dialogFooter.querySelector('temba-button');
+        button.shadowRoot.querySelector('.button-name').innerHTML = 'Cancel';
+        modalOpened = true
+      }
+
+      if (!modalView.open) {
+        modalView.removeEventListener("click", configureModal);
+        modalOpened = false;
+      }
+    }
+
+    function getHTTPOptions() {
+      return {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': getCookie('csrftoken')
+        }
+      };
+    }
+
     function createErrorAlert(message) {
       const alertElem = document.createElement('div');
       alertElem.innerText = message;
@@ -257,7 +285,7 @@
     }
 
     function submitData() {
-      const POST_URL = '/flow/create/';
+      const POST_URL = '{% url "flows.flow_create" %}';
       const { modaxBody } = getModalResources();
       const form = modaxBody.querySelector('form');
       const formData = new FormData(form);
@@ -310,31 +338,25 @@
       modalView.open = false;
       dialogBody.style.maxHeight = '55vh';
       dialogBody.style.overflowY = 'auto';
-      modalView.endpoint = "/flow/create/";
+      modalView.endpoint = "{% url "flows.flow_create" %}";
 
-      const options = {
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': getCookie('csrftoken')
-        }
-      };
+      const options = getHTTPOptions();
       fetch(modalView.endpoint, options)
-        .then((response) => {
-          response.text().then((body) => {
-            modalView.width = '600px';
-            modalView.cancelName = 'Cancel';
-            modaxBody.innerHTML = body;
-            addBackButton(dialogFooter);
-            modalView.open = true;
-          });
+        .then((response) => response.text())
+        .then(function (body) {
+          modalView.width = '600px';
+          modalView.cancelName = 'Cancel';
+          modaxBody.innerHTML = body;
+          addBackButton(dialogFooter);
+          modalView.open = true;
         })
         .catch(error => { console.log(error); });
     }
 
-    function resetModal(close = false) {
+    function resetModal() {
       const { modalView, dialogWrapper, dialogFooter, dialogBody, modaxBody } = getModalResources();
       modalView.open = false;
-      modalView.endpoint = '/flow/show_templates/';
+      modalView.endpoint = '{% url "flows.flow_show_templates" %}';
       dialogBody.style.maxHeight = 'none';
       dialogBody.style.overflowY = 'visible';
 
@@ -345,21 +367,13 @@
         if (!names.includes(node.name)) dialogFooter.removeChild(node);
       }
 
-      const options = {
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': getCookie('csrftoken')
-        }
-      };
-
-      fetch(modalView.endpoint, options)
-        .then((response) => {
-          response.text().then((body) => {
-            modalView.width = '712px';
-            modalView.cancelName = 'Cancel';
-            modaxBody.innerHTML = body;
-            modalView.open = true;
-          });
+      fetch(modalView.endpoint, getHTTPOptions())
+        .then((response) => response.text())
+        .then((body) => {
+          modalView.width = '712px';
+          modalView.cancelName = 'Cancel';
+          modaxBody.innerHTML = body;
+          modalView.open = true;
         })
         .catch(error => { console.log(error); });
     }
@@ -369,20 +383,31 @@
       dialogFooter.appendChild(buttonElement);
     }
 
-    function setStartPage() {
-        const { modalView, dialogWrapper, dialogFooter, dialogBody } = getModalResources();
-        if (modalView.endpoint === '/flow/show_templates/' && !modalView.opened) {
-          dialogBody.style.maxHeight = 'none';
-          dialogBody.style.overflowY = 'visible';
-          const button = dialogFooter.querySelector('temba-button');
-          button.name = 'Cancel';
-          button.shadowRoot.querySelector('.button-name').innerHTML = 'Cancel';
-          modalView.opened == true;
-        }
-      }
+    function debounce(func, timeout = 800) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        setTimeout(() => {
+          func.apply(this, args);
+        }, timeout);
+      };
+    }
 
-    document.querySelector('temba-modax#create-flow-modal')
-      .addEventListener('click', setStartPage, { once: true });
+    function filterRequest(e) {
+      const { modaxBody } = getModalResources();
+      const rightBody = modaxBody.querySelector('.right');
+      const searchBarValue = modaxBody.querySelector('input[type=hidden]').getAttribute('value');
+      const urlParam = typeof(e) === 'string' ? `group=${e}` : `q=${searchBarValue}`;
+      fetch(`{% url "flows.flow_show_templates" %}?${urlParam}`, getHTTPOptions())
+        .then((response) => {
+          response.text().then((body) => {
+            const domDoc = $($.parseHTML(body));
+            $(rightBody).html(domDoc.find('.right').html());
+          });
+        })
+        .catch(error => { console.log(error); });
+    }
+
     {% if org_perms.flows.flow_update %}
       function handleAddLabelClicked() {
         document.getElementById("create-label-modal").open = true;

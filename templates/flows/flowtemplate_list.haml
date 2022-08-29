@@ -1,0 +1,111 @@
+-extends "smartmin/list.html"
+-load smartmin sms temba compress i18n humanize
+
+-block page-title
+  -trans "Flow Templates"
+
+-block page-top
+
+-block content
+
+  #pjax
+    -block pjax
+      .lp-frame
+        .left
+          .flex.flex-col
+            .w-64.mr-5
+              .button-primary.block(onclick="goto(event)" href="{% url 'flows.flowtemplate_create' %}")
+                -trans "Create Template"
+              .mt-4
+                .button-light.block.mt-3(onclick="goto(event)" href="{% url 'flows.flow_list' %}")
+                  -trans "Back to Flows"
+
+            .mt-3
+              .lp-nav.lower
+                .font-normal.uppercase.text-xs.text-gray-500.pb-1
+                  -trans "Groups"
+                -for group in groups
+                  .lp-nav-item
+                    .name{ onclick: "goto(event)", href: "{% url 'flows.flowtemplate_filter' group.uuid %}"}
+                      {{group.name}}
+                    .count{ onclick: "goto(event)", href: "{% url 'flows.flowtemplate_filter' group.uuid %}"}
+                      {{group.total}}
+
+            .mt-5
+              %temba-modax#create-group-button{ header: "Create Template Group", endpoint: "{% url 'flows.flowtemplate_create_group' %}", width: "400px" }
+                .button-light.block
+                  -trans "Create Group"
+
+        .right
+          .flex.w-full.items-end.mb-4
+            .flex-grow.ml-2.items-center
+              -block title-text
+                .page-title.leading-tight
+                  {{title}}
+
+            %form#search-form(method="get")
+              %temba-textinput(type='text' placeholder='{% trans "Search" %}' name="search" value="{{search}}")
+              -if request.REQUEST.status
+                %input(type='hidden' name='status' value='{{request.REQUEST.status}}')
+
+            -if gear_links
+              .gear-links
+                -include "gear_links_include.haml"
+
+          -block flow-list
+            %table.list.lined.selectable
+              -if object_list
+                %thead
+                  %tr
+                    %th
+                      -trans "Name"
+                    %th
+                      -trans "Group"
+                    %th
+                      -trans "Tags"
+                    %th
+                      -trans "Orgs"
+                    %th
+                      -trans "Created On"
+                    %th
+                      .whitespace-no-break.flex.items-center.ml-2.justify-end
+                        -trans "Modified On"
+                    %th
+              %tbody
+                -for object in object_list
+                  %tr.object-row.select-row
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-start
+                        %a(href="{% url 'flows.flowtemplate_update' object.id%}" )
+                          {{ object.name }}
+
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-start
+                        {{ object.group.name }}
+
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-start
+                        {{ object.tags|join:", " }}
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-start
+                        -for org in object.orgs.all
+                          {{org}}
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-start
+                        {{ object.created_on|date:"SHORT_DATE_FORMAT" }}
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-end
+                        {{ object.modified_on|date:"SHORT_DATE_FORMAT" }}
+                    %td.action-td
+                      %temba-modax{ header: '{% trans "Delete Template" %}', endpoint: "{% url 'flows.flowtemplate_delete' object.id %}"}
+                        %span.icon-remove
+                -empty
+                  %tr.empty_list
+                    %td(colspan="99")
+                      -trans "No matching templates."
+                    %td
+
+
+
+            .flex.flex-col.mb-16
+              -include "includes/pagination.haml"
