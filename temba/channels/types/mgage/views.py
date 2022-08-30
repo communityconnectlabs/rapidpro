@@ -31,7 +31,6 @@ class ClaimView(ClaimViewMixin, SmartFormView):
             return phonenumbers.format_number(phone, phonenumbers.PhoneNumberFormat.E164)
 
         def clean(self):
-            org = self.request.user.get_org()
             cleaned_data = super().clean()
 
             phone_number = cleaned_data.get("phone_number", "")
@@ -40,12 +39,16 @@ class ClaimView(ClaimViewMixin, SmartFormView):
 
             channel = Channel.objects.filter(
                 address=phone_number,
-                org=org,
                 is_active=True,
                 channel_type=self.channel_type.code,
             )
             if channel:
-                raise forms.ValidationError(_("A mGage channel with this phone number already exists."))
+                raise forms.ValidationError(
+                    _(
+                        "A mGage channel with this phone number already exists. "
+                        "Each mGage phone number must be unique on the platform."
+                    )
+                )
 
             return cleaned_data
 
