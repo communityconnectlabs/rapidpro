@@ -338,6 +338,7 @@
       modalView.open = false;
       dialogBody.style.maxHeight = '55vh';
       dialogBody.style.overflowY = 'auto';
+
       modalView.endpoint = "{% url "flows.flow_create" %}";
 
       const options = getHTTPOptions();
@@ -356,6 +357,7 @@
       const { modalView, dialogWrapper, dialogFooter, dialogBody, modaxBody } = getModalResources();
       modalView.open = false;
       modalView.endpoint = '{% url "flows.flow_show_templates" %}';
+
       dialogBody.style.maxHeight = 'none';
       dialogBody.style.overflowY = 'visible';
 
