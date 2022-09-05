@@ -77,6 +77,7 @@ from temba.utils.fields import (
     OmniboxChoice,
     SelectMultipleWidget,
     SelectWidget,
+    CompletionTextarea,
 )
 from temba.utils.s3 import private_file_storage
 from temba.utils.text import slugify_with
@@ -3464,7 +3465,7 @@ class FlowTemplateForm(forms.ModelForm):
         max_length=200,
         label=_("Description"),
         required=False,
-        widget=forms.Textarea,
+        widget=CompletionTextarea(attrs={"placeholder": _("Enter description here")}),
     )
 
     group_text = forms.ChoiceField(
