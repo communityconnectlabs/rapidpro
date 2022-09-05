@@ -3444,7 +3444,7 @@ class FlowTemplateForm(forms.ModelForm):
         Org.objects.all(),
         required=False,
         widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Org"}),
-        help_text="Select organizations that can use this template"
+        help_text="Select organizations that can use this template",
     )
     tags_text = forms.CharField(
         required=False,
@@ -3661,7 +3661,6 @@ class FlowTemplateCRUDL(SmartCRUDL):
         success_url = "@flows.flowtemplate_list"
         success_message = ""
         submit_button_name = _("Delete")
-        # template_name = "flows/template/delete.haml"
 
         def get_object_org(self):
             return self.get_user().get_org()
