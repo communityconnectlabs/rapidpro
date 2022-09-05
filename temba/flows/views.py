@@ -3444,6 +3444,7 @@ class FlowTemplateForm(forms.ModelForm):
         Org.objects.all(),
         required=False,
         widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Org"}),
+        help_text="Select organizations that can use this template"
     )
     tags_text = forms.CharField(
         required=False,
@@ -3460,14 +3461,12 @@ class FlowTemplateForm(forms.ModelForm):
             }
         ),
     )
-
     description = forms.CharField(
         max_length=200,
         label=_("Description"),
         required=False,
         widget=CompletionTextarea(attrs={"placeholder": _("Enter description here")}),
     )
-
     group_text = forms.ChoiceField(
         required=True,
         label=_("Template Group"),
@@ -3480,7 +3479,6 @@ class FlowTemplateForm(forms.ModelForm):
             }
         ),
     )
-
     file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=("json",))])
 
     def __init__(self, *args, **kwargs):
