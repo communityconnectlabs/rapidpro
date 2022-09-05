@@ -475,6 +475,7 @@ class FlowCRUDL(SmartCRUDL):
         "merging_flows_table",
         "launch_studio_flow",
         "dialogflow_api",
+        "show_templates",
     )
 
     model = Flow
@@ -694,6 +695,34 @@ class FlowCRUDL(SmartCRUDL):
                 detail = None
 
             return JsonResponse({"status": "failure", "description": error, "detail": detail}, status=400)
+
+    class ShowTemplates(OrgObjPermsMixin, SmartTemplateView):
+        def get_template_names(self):
+            return "flows/flow_templates.html"
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["templates"] = [
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+                dict(title="some title", category="", caategory_id="", description="", id=""),
+            ]
+            context["categories"] = [
+                dict(title="Community Motivator", id=1, count=12),
+                dict(title="Contact Center", id=2, count=6),
+                dict(title="Covid-19", id=3, count=11),
+                dict(title="Elections", id=4, count=3),
+                dict(title="Screener", id=5, count=5),
+            ]
+            return context
 
     class Create(ModalMixin, OrgPermsMixin, SmartCreateView):
         class FlowCreateForm(BaseFlowForm):
