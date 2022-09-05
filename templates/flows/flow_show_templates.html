@@ -218,8 +218,7 @@
           if (body.flow_url) redirectUrl = body.flow_url;
           window.location.href = redirectUrl;
         })
-        .catch(function(error) {
-          console.log(error);
+        .catch(function() {
           confirmationBox.classList.add('hide');
           confirmationBox.open = false;
         });

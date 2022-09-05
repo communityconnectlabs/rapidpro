@@ -349,8 +349,7 @@
           modaxBody.innerHTML = body;
           addBackButton(dialogFooter);
           modalView.open = true;
-        })
-        .catch(error => { console.log(error); });
+        });
     }
 
     function resetModal() {
@@ -374,8 +373,7 @@
           modalView.cancelName = 'Cancel';
           modaxBody.innerHTML = body;
           modalView.open = true;
-        })
-        .catch(error => { console.log(error); });
+        });
     }
 
     function addBackButton(dialogFooter) {
@@ -404,8 +402,7 @@
             const domDoc = $($.parseHTML(body));
             $(rightBody).html(domDoc.find('.right').html());
           });
-        })
-        .catch(error => { console.log(error); });
+        });
     }
 
     {% if org_perms.flows.flow_update %}
