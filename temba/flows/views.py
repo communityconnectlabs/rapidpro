@@ -3448,7 +3448,7 @@ class FlowTemplateForm(forms.ModelForm):
     tags_text = forms.CharField(
         required=False,
         label=_("Tags"),
-        help_text=_("keywords to make it easy to locate related items that have the same tag"),
+        help_text=_("Keywords to make it easy to locate related items that have the same tag"),
         widget=SelectWidget(
             attrs={
                 "widget_only": False,
