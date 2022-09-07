@@ -475,6 +475,7 @@ PERMISSIONS = {
         "create_group",
         "update_group",
         "delete_group",
+        "create_from_flow",
     ),
     "flows.flow": (
         "activity",

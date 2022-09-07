@@ -1563,7 +1563,16 @@ class FlowCRUDL(SmartCRUDL):
                         modax=_("Delete Flow"),
                     )
                 )
-
+            if self.has_org_perm("flows.flowtemplate_create_from_flow"):
+                links.append(dict(divider=True)),
+                links.append(
+                    dict(
+                        id="create-template-flow",
+                        title=_("Copy as template"),
+                        href=f"{reverse('flows.flowtemplate_create_from_flow', args=[self.object.pk])}",
+                        modax=_(f'Copy "{self.object.name}" as template'),
+                    )
+                )
             links.append(dict(divider=True)),
 
             if self.has_org_perm("orgs.org_export"):
@@ -3545,6 +3554,7 @@ class FlowTemplateCRUDL(SmartCRUDL):
         "create_group",
         "update_group",
         "delete_group",
+        "create_from_flow",
     )
 
     class Create(ModalMixin, OrgPermsMixin, SmartCreateView):
@@ -3561,6 +3571,8 @@ class FlowTemplateCRUDL(SmartCRUDL):
             document = self.form.cleaned_data["document"]
             description = self.form.cleaned_data["description"]
             group = FlowTemplateGroup.get_or_create_obj(group_text)
+            if obj.document:
+                document = obj.document
 
             self.object = FlowTemplate.objects.create(
                 name=name, group=group, document=document, tags=tags, description=description, created_by=user
@@ -3671,6 +3683,26 @@ class FlowTemplateCRUDL(SmartCRUDL):
             response = HttpResponse()
             response["Temba-Success"] = self.get_success_url()
             return response
+
+    class CreateFromFlow(Create):
+        exclude = ("file",)
+
+        @classmethod
+        def derive_url_pattern(cls, path, action):
+            return r"^%s/%s/(?P<flow>[^/]+)/$" % (path, action)
+
+        def get_context_data(self, *args, **kwargs):
+            context = super().get_context_data(*args, **kwargs)
+            context["ignore_upload"] = True
+            return context
+
+        def derive_initial(self):
+            flow = Flow.objects.get(pk=self.kwargs["flow"])
+            return {"name": flow.name}
+
+        def pre_save(self, obj):
+            obj.document = FlowTemplate.get_flow_dict(self.kwargs.get("flow"), self.request)
+            return obj
 
     class CreateFlow(OrgPermsMixin, SmartUpdateView):
         slug_url_kwarg = "uuid"

@@ -19,15 +19,16 @@
   .template-description
     -render_field 'description'
 
-  #file-upload
-    %input(type="file" name="file" id="import-file" onchange='onFileChange()')
-    #real-button.flex.mb-4
-      %input(type="text" id="file-field")
-      .button-light.ml-4(style="margin-top:-1px")
-        -trans "Choose File"
-    -if form.file.errors
-      %div.alert-error
-        {{ form.file.errors }}
+  -if not ignore_upload
+    #file-upload
+      %input(type="file" name="file" id="import-file" onchange='onFileChange()')
+      #real-button.flex.mb-4
+        %input(type="text" id="file-field")
+        .button-light.ml-4(style="margin-top:-1px")
+          -trans "Choose File"
+      -if form.file.errors
+        %div.alert-error
+          {{ form.file.errors }}
 
 -block form-buttons
   .form-actions.mt-10
