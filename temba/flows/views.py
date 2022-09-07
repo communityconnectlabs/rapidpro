@@ -708,10 +708,8 @@ class FlowCRUDL(SmartCRUDL):
 
     class ShowTemplates(OrgPermsMixin, SmartTemplateView):
         def get_queryset(self):
-            user = self.request.user
-            org = user.get_org()
-
-            return org.flow_template.all()
+            org = self.request.user.get_org()
+            return FlowTemplate.get_base_queryset(org)
 
         def get_groups(self):
             return (
@@ -3481,13 +3479,15 @@ class FlowTemplateForm(forms.ModelForm):
     )
     file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=("json",))])
 
+    global_view = forms.BooleanField(required=False, initial=False, widget=CheckboxWidget(attrs={"widget_only": True}))
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["group_text"].choices = list(FlowTemplateGroup.objects.values_list("uuid", "name"))
 
     class Meta:
         model = FlowTemplate
-        fields = ("name", "tags", "orgs", "file", "description", "group_text")
+        fields = ("name", "tags", "orgs", "global_view", "file", "description", "group_text")
         widgets = {"name": InputWidget()}
 
     @classmethod
@@ -3666,8 +3666,7 @@ class FlowTemplateCRUDL(SmartCRUDL):
             return self.get_user().get_org()
 
         def post(self, request, *args, **kwargs):
-            id = kwargs.get("pk")
-            instance = FlowTemplate.objects.get(pk=id)
+            instance = FlowTemplate.objects.get(pk=kwargs.get("pk"))
             instance.delete()
             response = HttpResponse()
             response["Temba-Success"] = self.get_success_url()

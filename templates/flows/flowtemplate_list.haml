@@ -66,6 +66,8 @@
                     %th
                       -trans "Orgs"
                     %th
+                      -trans "Global Access"
+                    %th
                       -trans "Created On"
                     %th
                       .whitespace-no-break.flex.items-center.ml-2.justify-end
@@ -92,6 +94,12 @@
                           {{org}}
                     %td
                       .whitespace-no-break.flex.items-center.ml-2.justify-start
+                        -if object.global_view
+                          %span.icon-checkmark.text-success.global-view-icon
+                        -else
+                          %span.icon-close.text-error.global-view-icon
+                    %td
+                      .whitespace-no-break.flex.items-center.ml-2.justify-start
                         {{ object.created_on|date:"SHORT_DATE_FORMAT" }}
                     %td
                       .whitespace-no-break.flex.items-center.ml-2.justify-end
@@ -109,3 +117,11 @@
 
             .flex.flex-col.mb-16
               -include "includes/pagination.haml"
+
+
+-block extra-style
+  {{block.super}}
+  :css
+    .global-view-icon{
+      font-size: 20px;
+    }

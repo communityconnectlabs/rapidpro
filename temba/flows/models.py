@@ -1,3 +1,4 @@
+import itertools
 import os
 import logging
 import time
@@ -3168,8 +3169,11 @@ class FlowTemplate(models.Model):
     description = models.TextField(null=True)
     group = models.ForeignKey(FlowTemplateGroup, on_delete=models.PROTECT, related_name="group")
 
-    # the org that can view this template
+    # The org that can view this template
     orgs = models.ManyToManyField(Org, related_name="flow_template")
+
+    # Override above and will show template to all org
+    global_view = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="flow_template"
     )
@@ -3178,3 +3182,23 @@ class FlowTemplate(models.Model):
 
     def __str__(self):
         return f"{self.name}({self.group.name})"
+
+    @classmethod
+    def get_base_queryset(cls, org):
+        return cls.objects.filter(Q(orgs=org) | Q(global_view=True))
+
+    @classmethod
+    def get_flow_dict(cls, flow_id, request):
+        org = request.user.get_org()
+        # org_obj = Org.objects.get(pk=org.id)
+        branding_link = request.branding.get("link")
+        flow = Flow.objects.get(pk=flow_id)
+        campaigns = []
+        links = []
+
+        components = set(itertools.chain([flow], campaigns, links))
+
+        # add triggers for the selected flow
+        components.update(flow.triggers.filter(is_active=True, is_archived=False))
+
+        return org.export_definitions(branding_link, components)
