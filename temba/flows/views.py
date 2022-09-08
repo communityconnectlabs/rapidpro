@@ -3567,6 +3567,7 @@ class FlowTemplateCRUDL(SmartCRUDL):
             group_text = self.form.cleaned_data["group_text"]
             name = self.form.cleaned_data["name"]
             orgs = self.form.cleaned_data["orgs"]
+            global_view = self.form.cleaned_data["global_view"]
             tags = self.form.cleaned_data["tags_text"].strip("[]").replace("'", "").replace(" ", "").split(",")
             document = self.form.cleaned_data["document"]
             description = self.form.cleaned_data["description"]
@@ -3576,7 +3577,13 @@ class FlowTemplateCRUDL(SmartCRUDL):
 
             name = FlowTemplate.get_unique_name(name)
             self.object = FlowTemplate.objects.create(
-                name=name, group=group, document=document, tags=tags, description=description, created_by=user
+                name=name,
+                group=group,
+                global_view=global_view,
+                document=document,
+                tags=tags,
+                description=description,
+                created_by=user,
             )
 
             self.object.orgs.add(*orgs)
