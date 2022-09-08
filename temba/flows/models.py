@@ -3135,7 +3135,28 @@ class StudioFlowStart(models.Model):
         return f"StudioFlowStart[id={self.id}, flow={self.flow_sid}]"
 
 
-class FlowTemplateGroup(models.Model):
+class FlowTemplateMixin(object):
+    @classmethod
+    def get_unique_name(cls, base_name):
+        """
+        Generates a unique name based on the given base name
+        """
+        name = base_name[:64].strip()
+
+        count = 2
+        while True:
+            instances = cls.objects.filter(name=name)
+
+            if not instances.exists():
+                break
+
+            name = "%s %d" % (base_name[:59].strip(), count)
+            count += 1
+
+        return name
+
+
+class FlowTemplateGroup(models.Model, FlowTemplateMixin):
     uuid = models.UUIDField(unique=True, default=uuid4)
     name = models.CharField(max_length=64, unique=True)
 
@@ -3161,7 +3182,7 @@ class FlowTemplateGroup(models.Model):
         return self.group.count() > 0
 
 
-class FlowTemplate(models.Model):
+class FlowTemplate(models.Model, FlowTemplateMixin):
     uuid = models.UUIDField(unique=True, default=uuid4)
     name = models.CharField(max_length=64, unique=True)
     document = JSONAsTextField(help_text=_("imported flow file"), default=dict)

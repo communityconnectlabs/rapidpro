@@ -3574,6 +3574,7 @@ class FlowTemplateCRUDL(SmartCRUDL):
             if obj.document:
                 document = obj.document
 
+            name = FlowTemplate.get_unique_name(name)
             self.object = FlowTemplate.objects.create(
                 name=name, group=group, document=document, tags=tags, description=description, created_by=user
             )
@@ -3720,7 +3721,7 @@ class FlowTemplateCRUDL(SmartCRUDL):
                     data = FlowTemplate.objects.get(uuid=template_uuid)
                     document = data.document
                     exported_flow = document["flows"][0]
-                    flow_template_name = f"Template from {template_name}"
+                    flow_template_name = template_name
                     flow_template_name = Flow.get_unique_name(org, flow_template_name)
                     exported_flow["name"] = flow_template_name
                     document["flows"] = [exported_flow]
@@ -3745,7 +3746,8 @@ class FlowTemplateCRUDL(SmartCRUDL):
         success_message = ""
 
         def save(self, obj):
-            FlowTemplateGroup.objects.create(name=obj.name)
+            name = FlowTemplateGroup.get_unique_name(obj.name)
+            FlowTemplateGroup.objects.create(name=name)
 
     class UpdateGroup(ModalMixin, OrgPermsMixin, SmartUpdateView):
         def get_object(self, *args, **kwargs):

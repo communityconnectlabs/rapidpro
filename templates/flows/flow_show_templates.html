@@ -65,8 +65,17 @@
   destructive="true"
 >
   <div class="p-6">
-    You are about to create a flow from the selected template.<br>
-    Kindly confirm to continue.
+    <div class="dialog-message mb-10">
+      You are about to create a flow from the selected template.<br>
+      Kindly confirm to continue.
+    </div>
+
+    <temba-textinput
+      name="name"
+      value=""
+      label="Flow Name"
+      help_text="You can replace the name here with your chosen name"
+    />
   </div>
 </temba-dialog>
 <link rel="stylesheet" href="{{ STATIC_URL }}/css/tailwind.css" type="text/css">
@@ -198,41 +207,44 @@
     if (response.status >= 200 && response.status <= 299) return response.json();
     throw Error(response.statusText);
   }
+
+  function handleConfirmation(selectedBox, confirmationBox, inputBox) {
+    const uuid = selectedBox.getAttribute('data-uuid');
+    const POST_URL = `/flowtemplate/create_flow/${uuid}/`;
+    const formData = new FormData();
+    formData.append('name', inputBox.value);
+    formData.append('uuid', uuid)
+    const options = getHTTPOptions();
+    const payload = new URLSearchParams(formData);
+    fetch(POST_URL, { ...options, body: payload, method: 'POST' })
+      .then(handleResponse)
+      .then(function(body) {
+        let redirectUrl = '{% url "flows.flow_list" %}';
+        if (body.flow_url) redirectUrl = body.flow_url;
+        window.location.href = redirectUrl;
+      })
+      .catch(function() {
+        confirmationBox.classList.add('hide');
+        confirmationBox.open = false;
+      });
+  }
+
   function onLinkClicked() {
     const selectedBox = this;
+    const name = selectedBox.getAttribute('data-name');
     const { modaxBody } = getModalResources();
     const confirmationBox = modaxBody.querySelector('#select-to-create-flow');
+    const inputBox = confirmationBox.querySelector('temba-textinput');
+    const dialogButtons = confirmationBox.shadowRoot.querySelectorAll('temba-button');
+
+    inputBox.value = name;
     confirmationBox.classList.remove('hide');
     confirmationBox.open = true;
-    addEventListener("temba-button-clicked", function(event) {
-      const name = selectedBox.getAttribute('data-name');
-      const uuid = selectedBox.getAttribute('data-uuid');
-      const POST_URL = `/flowtemplate/create_flow/${uuid}/`;
 
-      const formData = new FormData();
-      formData.append('name', name);
-      formData.append('uuid', uuid)
-      const options = getHTTPOptions();
-      const payload = new URLSearchParams(formData);
-      fetch(POST_URL, { ...options, body: payload, method: 'POST' })
-        .then(handleResponse)
-        .then(function(body) {
-          let redirectUrl = '{% url "flows.flow_list" %}';
-          if (body.flow_url) redirectUrl = body.flow_url;
-          window.location.href = redirectUrl;
-        })
-        .catch(function() {
-          confirmationBox.classList.add('hide');
-          confirmationBox.open = false;
-        });
+    dialogButtons.forEach((button) => {
+      const isConfirmButton = button.shadowRoot.querySelector('.button-name').innerHTML.indexOf('Confirm') > 0;
+      if (isConfirmButton) button.onclick = handleConfirmation.bind(button, selectedBox, confirmationBox, inputBox);
     });
   }
 </script>
-{% endblock %}
-{% block modal-extra-style %}
-<style>
-.modax-body {
-    /*padding: 0 20px!important;*/
-}
-</style>
 {% endblock %}
