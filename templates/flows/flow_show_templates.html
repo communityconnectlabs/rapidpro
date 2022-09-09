@@ -5,21 +5,21 @@
         Templates
       </div>
       <div class="search-box">
-        <temba-textinput value=""></temba-textinput>
+        <temba-textinput onkeyup="debouncedFilterRequest.bind(this)(event)"></temba-textinput>
       </div>
       <div>
         <div class="lp-nav upper">
-          <div class="font-normal lp-nav-item">
-            <div onclick="goto(event)" href="/msg/inbox/" class="name">All Templates </div>
-            <div onclick="goto(event)" href="/msg/inbox/" class="count">
-              <span class="badge">37</span>
+          <div class="font-normal lp-nav-item" onclick="filterRequest('')">
+            <div class="name">All Templates </div>
+            <div class="count">
+              <span class="badge">{{total}}</span>
             </div>
           </div>
-          {% for category in categories %}
+          {% for group in groups %}
             <div class=" lp-nav-item">
-              <div onclick="goto(event)" href="/msg/flow/" class="name">{{category.title}} </div>
-              <div onclick="goto(event)" href="/msg/flow/" class="count">
-                <span class="badge">{{category.count}}</span>
+              <div onclick="filterRequest('{{group.group__uuid}}')" class="name">{{group.group__name}} </div>
+              <div onclick="filterRequest('{{group.group__uuid}}')" class="count">
+                <span class="badge">{{group.total}}</span>
               </div>
             </div>
           {% endfor %}
@@ -39,9 +39,14 @@
         </div>
         <div class="template-list">
           {% for template in templates %}
-            <div class="template-link">
+          <div
+            class="template-link"
+            onclick="onLinkClicked.bind(this)()"
+            data-uuid="{{template.uuid}}"
+            data-name="{{template.name}}"
+          >
             <div class="template-link-icon"></div>
-            <div class="template-link-title">{{template.title}}</div>
+            <div class="template-link-title">{{template.name}}</div>
             <div class="template-link-description">
               {{template.description}}
             </div>
@@ -52,8 +57,33 @@
     </div>
   </div>
 </div>
+<temba-dialog
+  header="Create Template Confirmation"
+  primaryButtonName="Confirm"
+  class="hide"
+  id="select-to-create-flow"
+  destructive="true"
+>
+  <div class="p-6">
+    <div class="dialog-message mb-10">
+      You are about to create a flow from the selected template.<br>
+      Kindly confirm to continue.
+    </div>
+
+    <temba-textinput
+      name="name"
+      value=""
+      label="Flow Name"
+      help_text="You can replace the name here with your chosen name"
+    />
+  </div>
+</temba-dialog>
 <link rel="stylesheet" href="{{ STATIC_URL }}/css/tailwind.css" type="text/css">
 <style type="text/css">
+    .flow-template-container {
+        margin-top: 10px;
+        margin-bottom: -20px;
+    }
     .flow-template-container .count {
         margin-left: 0 !important;
     }
@@ -146,6 +176,7 @@
         height: 157px;
         border: 1px solid #C7D8D7;
         border-radius: 8px;
+        cursor: pointer;
     }
     .template-link-icon {
         height: 85px;
@@ -170,3 +201,50 @@
         padding: 5px 10px 10px;
     }
 </style>
+{% block modal-script %}
+<script>
+  function handleResponse(response) {
+    if (response.status >= 200 && response.status <= 299) return response.json();
+    throw Error(response.statusText);
+  }
+
+  function handleConfirmation(selectedBox, confirmationBox, inputBox) {
+    const uuid = selectedBox.getAttribute('data-uuid');
+    const POST_URL = `/flowtemplate/create_flow/${uuid}/`;
+    const formData = new FormData();
+    formData.append('name', inputBox.value);
+    formData.append('uuid', uuid)
+    const options = getHTTPOptions();
+    const payload = new URLSearchParams(formData);
+    fetch(POST_URL, { ...options, body: payload, method: 'POST' })
+      .then(handleResponse)
+      .then(function(body) {
+        let redirectUrl = '{% url "flows.flow_list" %}';
+        if (body.flow_url) redirectUrl = body.flow_url;
+        window.location.href = redirectUrl;
+      })
+      .catch(function() {
+        confirmationBox.classList.add('hide');
+        confirmationBox.open = false;
+      });
+  }
+
+  function onLinkClicked() {
+    const selectedBox = this;
+    const name = selectedBox.getAttribute('data-name');
+    const { modaxBody } = getModalResources();
+    const confirmationBox = modaxBody.querySelector('#select-to-create-flow');
+    const inputBox = confirmationBox.querySelector('temba-textinput');
+    const dialogButtons = confirmationBox.shadowRoot.querySelectorAll('temba-button');
+
+    inputBox.value = name;
+    confirmationBox.classList.remove('hide');
+    confirmationBox.open = true;
+
+    dialogButtons.forEach((button) => {
+      const isConfirmButton = button.shadowRoot.querySelector('.button-name').innerHTML.indexOf('Confirm') > 0;
+      if (isConfirmButton) button.onclick = handleConfirmation.bind(button, selectedBox, confirmationBox, inputBox);
+    });
+  }
+</script>
+{% endblock %}
