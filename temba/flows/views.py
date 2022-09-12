@@ -3448,7 +3448,7 @@ class FlowStartCRUDL(SmartCRUDL):
 class FlowTemplateForm(forms.ModelForm):
     tags = forms.CharField(required=False)
     orgs = forms.ModelMultipleChoiceField(
-        Org.objects.all(),
+        Org.objects.filter(is_active=True, is_suspended=False),
         required=False,
         widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Org"}),
         help_text="Select organizations that can use this template",
