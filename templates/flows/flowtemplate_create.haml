@@ -13,6 +13,13 @@
     -render_field 'global_view'
   .template-group
     -render_field 'group_text'
+    .help-block
+      .help-text{style:"font-size: 12px; line-height: inherit; color: rgb(120, 120, 120); margin-left: 4px; margin-top: -10px; margin-bottom: 10px;"}
+        -trans "Go to"
+        %a(href="{% url 'flows.flowtemplate_list' %}" target="_new" style="color: inherit;")
+          -trans "flow templates"
+        -trans "to create new ones."
+
   .template-tags
     -render_field 'tags_text'
 

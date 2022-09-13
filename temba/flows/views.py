@@ -3477,12 +3477,11 @@ class FlowTemplateForm(forms.ModelForm):
     group_text = forms.ChoiceField(
         required=True,
         label=_("Template Group"),
-        help_text=_("Select a group name or type one if not in the dropdown list"),
         widget=SelectWidget(
             attrs={
                 "widget_only": False,
-                "searchable": True,
-                "placeholder": _("Enter the group the template belongs to"),
+                "searchable": False,
+                "placeholder": _("Select a group from the list"),
             }
         ),
     )
@@ -3492,7 +3491,9 @@ class FlowTemplateForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["group_text"].choices = list(FlowTemplateGroup.objects.values_list("uuid", "name"))
+        self.fields["group_text"].choices = list(
+            FlowTemplateGroup.objects.values_list("uuid", "name").order_by("name")
+        )
 
     class Meta:
         model = FlowTemplate
@@ -3515,8 +3516,6 @@ class FlowTemplateForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        if self.ignore_choices_error(cleaned, self.errors):
-            del self._errors["group_text"]
 
         uploaded = cleaned.get("file")
         json_data = self.read_uploaded_file(uploaded)
