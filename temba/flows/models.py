@@ -3206,7 +3206,15 @@ class FlowTemplate(models.Model, FlowTemplateMixin):
 
     @classmethod
     def get_base_queryset(cls, org):
-        return cls.objects.filter(Q(orgs=org) | Q(global_view=True))
+        # TODO Improve this query later
+
+        results = set()
+        for item in cls.objects.filter(orgs=org).only("id"):
+            results.add(item.pk)
+        for item in cls.objects.filter(global_view=True).only("id"):
+            results.add(item.pk)
+
+        return cls.objects.filter(pk__in=list(results))
 
     @classmethod
     def get_flow_dict(cls, flow_id, request):
