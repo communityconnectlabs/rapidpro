@@ -240,6 +240,14 @@ class LinkContacts(SmartModel):
         on_delete=models.CASCADE,
     )
 
+    flow = models.ForeignKey(
+        "flows.Flow",
+        null=True,
+        related_name="flow_links",
+        help_text=_("The flow related to this link's click"),
+        on_delete=models.CASCADE,
+    )
+
     def __str__(self):
         return f"{self.contact.get_display()}"
 
