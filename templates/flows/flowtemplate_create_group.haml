@@ -1,0 +1,65 @@
+-extends 'includes/modax.haml'
+-load smartmin i18n
+
+-block modal-script
+  :javascript
+    {{ block.super }}
+    function getRootModalResources() {
+      const { modalView, modaxBody } = getModalResources('create-template-modal');
+      if (modalView.open) { modalView, modaxBody };
+      return getModalResources('edit-template-modal');
+    }
+    function getResources() {
+      const { modalView, modaxBody } = getRootModalResources();
+      const addGroupModalView = modaxBody.querySelector(`temba-modax#add-group-modal`);
+      const addGroupDialog = addGroupModalView.shadowRoot.querySelector('temba-dialog');
+      const addGroupDialogFooter = addGroupDialog.shadowRoot.querySelector('.dialog-footer');
+      return { addGroupModalView, addGroupDialog, addGroupDialogFooter, modalView }
+    }
+
+    function onFormClose(addGroupModalView) {
+      addGroupModalView.open = false;
+      addGroupMode = false;
+    }
+
+    function processForm(e) {
+      const { addGroupDialog, addGroupModalView, modalView } = getResources();
+      const form = addGroupDialog.querySelector('form');
+      const formData = new FormData(form);
+      const options = getHTTPOptions();
+      const POST_URL = '{% url "flows.flowtemplate_create_group" %}';
+      removeErrorAlert(form);
+      fetch(POST_URL, { ...options, method: 'POST', body: formData })
+        .then(function(response) {
+          if (response.redirected) {
+            onFormClose(addGroupModalView);
+            // reload the main form to show the new group by toggling its open state
+            modalView.open = false;
+            modalView.open = true;
+          }
+          return response.text();
+        })
+        .then(function(responseText) {
+          if (addGroupMode) {
+            const responseForm = $($.parseHTML(responseText));
+            const textInput = responseForm.find('temba-textinput')[0];
+            addErrorAlert(form, textInput.errors[0]);
+          }
+        });
+    }
+
+    if (typeof addGroupMode !== 'undefined' && addGroupMode) {
+      setTimeout(function () {
+        const { addGroupModalView, addGroupDialog, addGroupDialogFooter } = getResources();
+        const prevButtons = addGroupDialogFooter.querySelectorAll('temba-button');
+        const createGroupButton = createButton({ onclick: processForm, name: 'Create', primary: true });
+        const cancelButton = createButton({
+         onclick: onFormClose.bind(null, addGroupModalView),
+         name: 'Cancel'
+        });
+
+        prevButtons.forEach((button) => addGroupDialogFooter.removeChild(button));
+        addGroupDialogFooter.appendChild(createGroupButton);
+        addGroupDialogFooter.appendChild(cancelButton);
+      }, 80);
+    }

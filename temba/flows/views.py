@@ -1218,8 +1218,9 @@ class FlowCRUDL(SmartCRUDL):
                 links.append(
                     dict(
                         title=_("Create Template"),
-                        id="flow-template-create",
+                        id="create-template-modal",
                         href=reverse("flows.flowtemplate_create"),
+                        modax=_(f"Create Template"),
                     )
                 )
 
@@ -1567,7 +1568,7 @@ class FlowCRUDL(SmartCRUDL):
                 links.append(dict(divider=True)),
                 links.append(
                     dict(
-                        id="create-template-flow",
+                        id="create-template-modal",
                         title=_("Copy as template"),
                         href=f"{reverse('flows.flowtemplate_create_from_flow', args=[self.object.pk])}",
                         modax=_(f'Copy "{self.object.name}" as template'),
@@ -3477,7 +3478,7 @@ class FlowTemplateForm(forms.ModelForm):
     group_text = forms.ChoiceField(
         required=True,
         label=_("Template Group"),
-        help_text=_("Select a group name or type one if not in the dropdown list"),
+        help_text=_("Select a group name dropdown list or click on add group if not in the list"),
         widget=SelectWidget(
             attrs={
                 "widget_only": False,
@@ -3660,6 +3661,11 @@ class FlowTemplateCRUDL(SmartCRUDL):
             group = self.get_group()
 
             return [
+                dict(
+                    id="template-list",
+                    title=_("Back"),
+                    href=reverse("flows.flowtemplate_list"),
+                ),
                 dict(
                     id="update-group",
                     title=_("Edit Group"),
