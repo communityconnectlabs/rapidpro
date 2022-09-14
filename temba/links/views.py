@@ -392,4 +392,4 @@ class LinkHandler(RedirectView):
 
             return destination_full_url or link.destination
         else:
-            return None
+            return destination_full_url
