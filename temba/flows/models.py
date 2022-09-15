@@ -1,3 +1,4 @@
+import itertools
 import os
 import logging
 import time
@@ -26,7 +27,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.core.cache import cache
 from django.core.files.temp import NamedTemporaryFile
 from django.db import connection as db_connection, models, transaction
-from django.db.models import Max, Q, Sum
+from django.db.models import Max, Q, Sum, Count
 from django.db.models.functions import TruncDate
 from django.dispatch import receiver
 from django.urls import reverse
@@ -56,7 +57,7 @@ from temba.utils.models import (
     TembaModel,
     generate_uuid,
 )
-from temba.utils.uuid import uuid4
+from temba.utils.uuid import uuid4, is_valid_uuid
 
 from . import legacy
 
@@ -3132,3 +3133,101 @@ class StudioFlowStart(models.Model):
 
     def __str__(self):  # pragma: no cover
         return f"StudioFlowStart[id={self.id}, flow={self.flow_sid}]"
+
+
+class FlowTemplateMixin(object):
+    @classmethod
+    def get_unique_name(cls, base_name):
+        """
+        Generates a unique name based on the given base name
+        """
+        name = base_name[:64].strip()
+
+        count = 2
+        while True:
+            instances = cls.objects.filter(name=name)
+
+            if not instances.exists():
+                break
+
+            name = "%s %d" % (base_name[:59].strip(), count)
+            count += 1
+
+        return name
+
+
+class FlowTemplateGroup(models.Model, FlowTemplateMixin):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    name = models.CharField(max_length=64, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_or_create_obj(cls, value):
+        obj = None
+        valid_uuid = is_valid_uuid(value)
+        if valid_uuid:
+            obj = cls.objects.filter(uuid=value).first()
+        if not obj and not valid_uuid:
+            obj = cls.objects.create(name=value)
+        return obj
+
+    @classmethod
+    def get_group_count(cls):
+        groups = cls.objects.annotate(total=Count("group"))
+        return groups.values("name", "total", "uuid")
+
+    def has_templates(self):
+        return self.group.count() > 0
+
+
+class FlowTemplate(models.Model, FlowTemplateMixin):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    name = models.CharField(max_length=64, unique=True)
+    document = JSONAsTextField(help_text=_("imported flow file"), default=dict)
+    tags = ArrayField(models.CharField(max_length=10, null=True), default=list, null=True)
+    description = models.TextField(null=True)
+    group = models.ForeignKey(FlowTemplateGroup, on_delete=models.PROTECT, related_name="group")
+
+    # The org that can view this template
+    orgs = models.ManyToManyField(Org, related_name="flow_template")
+
+    # Override above and will show template to all org
+    global_view = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="flow_template"
+    )
+    created_on = models.DateTimeField(default=timezone.now, editable=False)
+    modified_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    def __str__(self):
+        return f"{self.name}({self.group.name})"
+
+    @classmethod
+    def get_base_queryset(cls, org):
+        # TODO Improve this query later
+
+        results = set()
+        for item in cls.objects.filter(orgs=org).only("id"):
+            results.add(item.pk)
+        for item in cls.objects.filter(global_view=True).only("id"):
+            results.add(item.pk)
+
+        return cls.objects.filter(pk__in=list(results))
+
+    @classmethod
+    def get_flow_dict(cls, flow_id, request):
+        org = request.user.get_org()
+        # org_obj = Org.objects.get(pk=org.id)
+        branding_link = request.branding.get("link")
+        flow = Flow.objects.get(pk=flow_id)
+        campaigns = []
+        links = []
+
+        components = set(itertools.chain([flow], campaigns, links))
+
+        # add triggers for the selected flow
+        components.update(flow.triggers.filter(is_active=True, is_archived=False))
+
+        return org.export_definitions(branding_link, components)

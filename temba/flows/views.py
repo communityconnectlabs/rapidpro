@@ -27,6 +27,7 @@ from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError, PermissionDenied
+from django.core.validators import FileExtensionValidator
 from django.db.models import Count, Max, Min, Sum
 from django.db.models.functions import Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse, Http404
@@ -47,7 +48,17 @@ from temba.contacts.models import URN, ContactField, ContactGroup
 from temba.contacts.search import SearchException, parse_query
 from temba.contacts.search.elastic import query_contact_ids
 from temba.contacts.search.omnibox import omnibox_deserialize
-from temba.flows.models import Flow, FlowRevision, FlowRun, FlowRunCount, FlowSession, FlowStart, StudioFlowStart
+from temba.flows.models import (
+    Flow,
+    FlowRevision,
+    FlowRun,
+    FlowRunCount,
+    FlowSession,
+    FlowStart,
+    StudioFlowStart,
+    FlowTemplate,
+    FlowTemplateGroup,
+)
 from temba.flows.tasks import export_flow_results_task, download_flow_images_task
 from temba.ivr.models import IVRCall
 from temba.links.models import Link, LinkContacts
@@ -66,6 +77,7 @@ from temba.utils.fields import (
     OmniboxChoice,
     SelectMultipleWidget,
     SelectWidget,
+    CompletionTextarea,
 )
 from temba.utils.s3 import private_file_storage
 from temba.utils.text import slugify_with
@@ -92,9 +104,7 @@ from .models import (
     MergeFlowsTask,
 )
 
-
 logger = logging.getLogger(__name__)
-
 
 EXPIRES_CHOICES = (
     (5, _("After 5 minutes")),
@@ -475,6 +485,7 @@ class FlowCRUDL(SmartCRUDL):
         "merging_flows_table",
         "launch_studio_flow",
         "dialogflow_api",
+        "show_templates",
     )
 
     model = Flow
@@ -694,6 +705,35 @@ class FlowCRUDL(SmartCRUDL):
                 detail = None
 
             return JsonResponse({"status": "failure", "description": error, "detail": detail}, status=400)
+
+    class ShowTemplates(OrgPermsMixin, SmartTemplateView):
+        def get_queryset(self):
+            org = self.request.user.get_org()
+            return FlowTemplate.get_base_queryset(org)
+
+        def get_groups(self):
+            return (
+                self.get_queryset()
+                .values("group__name", "group__uuid")
+                .annotate(total=Count("group__name"))
+                .order_by("group__name")
+            )
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            query_params = self.request.GET
+            name_filter = query_params.get("q")
+            group_filter = query_params.get("group")
+            queryset = self.get_queryset()
+            if name_filter:
+                queryset = queryset.filter(name__icontains=name_filter)
+            if group_filter:
+                queryset = queryset.filter(group__uuid=group_filter)
+
+            context["groups"] = self.get_groups()
+            context["total"] = queryset.count()
+            context["templates"] = queryset
+            return context
 
     class Create(ModalMixin, OrgPermsMixin, SmartCreateView):
         class FlowCreateForm(BaseFlowForm):
@@ -1174,6 +1214,23 @@ class FlowCRUDL(SmartCRUDL):
             if self.has_org_perm("orgs.org_export"):
                 links.append(dict(title=_("Export"), href=reverse("orgs.org_export")))
 
+            if self.has_org_perm("flows.flowtemplate_create"):
+                links.append(
+                    dict(
+                        title=_("Create Template"),
+                        id="flow-template-create",
+                        href=reverse("flows.flowtemplate_create"),
+                    )
+                )
+
+                links.append(
+                    dict(
+                        title=_("Template List"),
+                        id="flow-template-create",
+                        href=reverse("flows.flowtemplate_list"),
+                    )
+                )
+
             return links
 
     class Archived(BaseList):
@@ -1506,7 +1563,16 @@ class FlowCRUDL(SmartCRUDL):
                         modax=_("Delete Flow"),
                     )
                 )
-
+            if self.has_org_perm("flows.flowtemplate_create_from_flow"):
+                links.append(dict(divider=True)),
+                links.append(
+                    dict(
+                        id="create-template-flow",
+                        title=_("Copy as template"),
+                        href=f"{reverse('flows.flowtemplate_create_from_flow', args=[self.object.pk])}",
+                        modax=_(f'Copy "{self.object.name}" as template'),
+                    )
+                )
             links.append(dict(divider=True)),
 
             if self.has_org_perm("orgs.org_export"):
@@ -3377,3 +3443,345 @@ class FlowStartCRUDL(SmartCRUDL):
             FlowStartCount.bulk_annotate(context["object_list"])
 
             return context
+
+
+class FlowTemplateForm(forms.ModelForm):
+    tags = forms.CharField(required=False)
+    orgs = forms.ModelMultipleChoiceField(
+        Org.objects.filter(is_active=True, is_suspended=False),
+        required=False,
+        widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Org"}),
+        help_text="Select organizations that can use this template",
+    )
+    tags_text = forms.CharField(
+        required=False,
+        label=_("Tags"),
+        help_text=_("Keywords to make it easy to locate related items that have the same tag"),
+        widget=SelectWidget(
+            attrs={
+                "widget_only": False,
+                "multi": True,
+                "searchable": True,
+                "tags": True,
+                "space_select": False,
+                "placeholder": _("Select keywords classify the template"),
+            }
+        ),
+    )
+    description = forms.CharField(
+        max_length=200,
+        label=_("Description"),
+        required=False,
+        widget=CompletionTextarea(attrs={"placeholder": _("Enter description here")}),
+    )
+    group_text = forms.ChoiceField(
+        required=True,
+        label=_("Template Group"),
+        widget=SelectWidget(
+            attrs={
+                "widget_only": False,
+                "searchable": False,
+                "placeholder": _("Select a group from the list"),
+            }
+        ),
+    )
+    file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=("json",))])
+
+    global_view = forms.BooleanField(required=False, initial=False, widget=CheckboxWidget(attrs={"widget_only": True}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["group_text"].choices = list(
+            FlowTemplateGroup.objects.values_list("uuid", "name").order_by("name")
+        )
+
+    class Meta:
+        model = FlowTemplate
+        fields = ("name", "tags", "orgs", "global_view", "file", "description", "group_text")
+        widgets = {"name": InputWidget()}
+
+    @classmethod
+    def read_uploaded_file(cls, uploaded_file):
+        if uploaded_file:
+            return json.loads(uploaded_file.read())
+        return dict()
+
+    @classmethod
+    def ignore_choices_error(cls, cleaned_data, errors):
+        ignore = False
+        error = errors.get("group_text")
+        if error and "Select a valid choice" in error[0]:
+            ignore = True
+        return ignore
+
+    def clean(self):
+        cleaned = super().clean()
+
+        uploaded = cleaned.get("file")
+        json_data = self.read_uploaded_file(uploaded)
+        flows = json_data.get("flows", [])
+
+        if uploaded and len(flows) != 1:
+            error_instance = forms.ValidationError(_(f"json file should contain only one file, {len(flows)} found"))
+            self.add_error("file", error_instance)
+
+        # only continue if base validation passed
+        if not self.is_valid():
+            return cleaned
+
+        cleaned["document"] = json_data
+        cleaned["group_text"] = self.data.get("group_text")
+        return cleaned
+
+
+class FlowTemplateGroupBaseForm(forms.ModelForm):
+    class Meta:
+        model = FlowTemplateGroup
+        fields = ("name",)
+        widgets = {"name": InputWidget()}
+
+
+class FlowTemplateCRUDL(SmartCRUDL):
+    model = FlowTemplate
+    actions = (
+        "list",
+        "create",
+        "update",
+        "delete",
+        "filter",
+        "create_flow",
+        "create_group",
+        "update_group",
+        "delete_group",
+        "create_from_flow",
+    )
+
+    class Create(ModalMixin, OrgPermsMixin, SmartCreateView):
+        form_class = FlowTemplateForm
+        success_url = "@flows.flowtemplate_list"
+        success_message = ""
+
+        def save(self, obj):
+            user = self.request.user
+            group_text = self.form.cleaned_data["group_text"]
+            name = self.form.cleaned_data["name"]
+            orgs = self.form.cleaned_data["orgs"]
+            global_view = self.form.cleaned_data["global_view"]
+            tags = self.form.cleaned_data["tags_text"].strip("[]").replace("'", "").replace(" ", "").split(",")
+            document = self.form.cleaned_data["document"]
+            description = self.form.cleaned_data["description"]
+            group = FlowTemplateGroup.get_or_create_obj(group_text)
+            if obj.document:
+                document = obj.document
+
+            name = FlowTemplate.get_unique_name(name)
+            self.object = FlowTemplate.objects.create(
+                name=name,
+                group=group,
+                global_view=global_view,
+                document=document,
+                tags=tags,
+                description=description,
+                created_by=user,
+            )
+
+            self.object.orgs.add(*orgs)
+
+    class Update(ModalMixin, OrgObjPermsMixin, SmartUpdateView):
+        class UpdateForm(FlowTemplateForm):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.fields["tags_text"].initial = self.instance.tags
+                self.fields["group_text"].initial = self.instance.group.uuid
+
+        form_class = UpdateForm
+        template_name = "flows/flowtemplate_create.haml"
+        exclude = ("file", "document")
+        success_message = ""
+
+        def get_object_org(self):
+            return self.get_user().get_org()
+
+        def pre_save(self, obj):
+            group_text = self.form.cleaned_data["group_text"]
+            obj.tags = self.form.cleaned_data["tags_text"].strip("[]").replace("'", "").replace(" ", "").split(",")
+            obj.group = FlowTemplateGroup.get_or_create_obj(group_text)
+            return obj
+
+    class List(OrgFilterMixin, OrgPermsMixin, SmartListView):
+        title = _("Flow Templates")
+        ordering = ("-created_on",)
+        select_related = ("group", "created_by")
+        fields = ["name", "tags", "description", "group", "created_on", "created_by"]
+        paginate_by = 25
+
+        def derive_queryset(self, *args, **kwargs):
+            queryset = super(SmartListView, self).get_queryset(**kwargs)
+            search_query = self.request.GET.get("search")
+
+            if search_query:
+                queryset = queryset.filter(name__icontains=search_query)
+            return queryset
+
+        def get_groups(self, **kwargs):
+            return FlowTemplateGroup.get_group_count()
+
+        def get_context_data(self, *args, **kwargs):
+            context = super().get_context_data(*args, **kwargs)
+            context["groups"] = self.get_groups()
+            return context
+
+    class Filter(List):
+        def get_context_data(self, *args, **kwargs):
+            context = super().get_context_data(*args, **kwargs)
+            context["gear_links"] = self.get_gear_links()
+            return context
+
+        @classmethod
+        def derive_url_pattern(cls, path, action):
+            return r"^%s/%s/(?P<group>[^/]+)/$" % (path, action)
+
+        def derive_queryset(self, *args, **kwargs):
+            queryset = super().derive_queryset(**kwargs)
+            filter_value = self.kwargs.get("group")
+
+            if filter_value:
+                queryset = queryset.filter(group__uuid=filter_value)
+            return queryset
+
+        def get_group(self):
+            return FlowTemplateGroup.objects.get(uuid=self.kwargs.get("group"))
+
+        def derive_title(self, *args, **kwargs):
+            return self.get_group().name
+
+        def get_gear_links(self):
+            group = self.get_group()
+
+            return [
+                dict(
+                    id="update-group",
+                    title=_("Edit Group"),
+                    href=reverse("flows.flowtemplate_update_group", args=[group.pk]),
+                    modax=_("Edit Group"),
+                ),
+                dict(
+                    id="delete-group",
+                    title=_("Delete Group"),
+                    href=reverse("flows.flowtemplate_delete_group", args=[group.pk]),
+                    modax=_("Delete Group"),
+                    cancel_name="Cancel",
+                ),
+            ]
+
+    class Delete(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+        fields = ("id",)
+        cancel_url = "@flows.flowtemplate_list"
+        success_url = "@flows.flowtemplate_list"
+        success_message = ""
+        submit_button_name = _("Delete")
+
+        def get_object_org(self):
+            return self.get_user().get_org()
+
+        def post(self, request, *args, **kwargs):
+            instance = FlowTemplate.objects.get(pk=kwargs.get("pk"))
+            instance.delete()
+            response = HttpResponse()
+            response["Temba-Success"] = self.get_success_url()
+            return response
+
+    class CreateFromFlow(Create):
+        exclude = ("file",)
+
+        @classmethod
+        def derive_url_pattern(cls, path, action):
+            return r"^%s/%s/(?P<flow>[^/]+)/$" % (path, action)
+
+        def get_context_data(self, *args, **kwargs):
+            context = super().get_context_data(*args, **kwargs)
+            context["ignore_upload"] = True
+            return context
+
+        def derive_initial(self):
+            flow = Flow.objects.get(pk=self.kwargs["flow"])
+            return {"name": flow.name}
+
+        def pre_save(self, obj):
+            obj.document = FlowTemplate.get_flow_dict(self.kwargs.get("flow"), self.request)
+            return obj
+
+    class CreateFlow(OrgPermsMixin, SmartUpdateView):
+        slug_url_kwarg = "uuid"
+
+        def post(self, request, *args, **kwargs):
+            user = request.user
+            org = user.get_org()
+            template_name = self.request.POST.get("name")
+            template_uuid = kwargs.get("uuid")
+            response_info = dict()
+            status = 200
+
+            if template_name:
+                try:
+                    data = FlowTemplate.objects.get(uuid=template_uuid)
+                    document = data.document
+                    exported_flow = document["flows"][0]
+                    flow_template_name = template_name
+                    flow_template_name = Flow.get_unique_name(org, flow_template_name)
+                    exported_flow["name"] = flow_template_name
+                    document["flows"] = [exported_flow]
+
+                    org.import_app(document, user)
+                    created_flow = Flow.objects.filter(name=flow_template_name, org=org, is_active=True).first()
+                    response_info["name"] = flow_template_name
+                    if created_flow:
+                        response_info["flow_url"] = reverse("flows.flow_editor", args=[created_flow.uuid])
+                except Exception as e:
+                    response_info["error"] = str(e)
+                    status = 500
+            else:
+                response_info["error"] = "Kindly provide a template name"
+                status = 400
+
+            return JsonResponse(response_info, status=status)
+
+    class CreateGroup(ModalMixin, OrgPermsMixin, SmartCreateView):
+        form_class = FlowTemplateGroupBaseForm
+        success_url = "@flows.flowtemplate_list"
+        success_message = ""
+
+        def save(self, obj):
+            name = FlowTemplateGroup.get_unique_name(obj.name)
+            FlowTemplateGroup.objects.create(name=name)
+
+    class UpdateGroup(ModalMixin, OrgPermsMixin, SmartUpdateView):
+        def get_object(self, *args, **kwargs):
+            return FlowTemplateGroup.objects.get(pk=self.kwargs.get("pk"))
+
+        form_class = FlowTemplateGroupBaseForm
+        success_url = "uuid@flows.flowtemplate_filter"
+        success_message = ""
+
+    class DeleteGroup(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+        fields = ("name",)
+        cancel_url = "uuid@flows.flowtemplate_filter"
+        success_url = "@flows.flowtemplate_list"
+        success_message = ""
+        submit_button_name = _("Delete")
+        template_name = "flows/flowtemplate_delete.haml"
+
+        def get_object_org(self):
+            return self.get_user().get_org()
+
+        def get_object(self, *args, **kwargs):
+            return FlowTemplateGroup.objects.get(pk=self.kwargs.get("pk"))
+
+        def post(self, request, *args, **kwargs):
+            pk = self.kwargs.get("pk")
+
+            instance = FlowTemplateGroup.objects.get(pk=pk)
+            instance.delete()
+            response = HttpResponse()
+            response["Temba-Success"] = self.get_success_url()
+            return response

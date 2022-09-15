@@ -1,0 +1,157 @@
+-extends "smartmin/form.html"
+
+-load smartmin
+-load i18n humanize
+
+
+-block fields
+  .template-name
+    -render_field 'name'
+  .template-orgs
+    -render_field 'orgs'
+  .template-global_view
+    -render_field 'global_view'
+  .template-group
+    -render_field 'group_text'
+    .help-block
+      .help-text{style:"font-size: 12px; line-height: inherit; color: rgb(120, 120, 120); margin-left: 4px; margin-top: -10px; margin-bottom: 10px;"}
+        -trans "Go to"
+        %a(href="{% url 'flows.flowtemplate_list' %}" target="_new" style="color: inherit;")
+          -trans "flow templates"
+        -trans "to create new ones."
+
+  .template-tags
+    -render_field 'tags_text'
+
+  .template-description
+    -render_field 'description'
+
+  -if not ignore_upload
+    #file-upload
+      %input(type="file" name="file" id="import-file" onchange='onFileChange()')
+      #real-button.flex.mb-4
+        %input(type="text" id="file-field")
+        .button-light.ml-4(style="margin-top:-1px")
+          -trans "Choose File"
+      -if form.file.errors
+        %div.alert-error
+          {{ form.file.errors }}
+
+-block form-buttons
+  .form-actions.mt-10
+    %input(type="button" class="button-light mr-5" value="Cancel" onclick="backToList()")
+    %input(type="submit" class="button-primary" value="{{ submit_button_name }}")
+
+
+-block extra-script
+  {{block.super}}
+  :javascript
+    function backToList() {
+      window.location.href = '{% url "flows.flowtemplate_list" %}'
+    }
+
+    function onFileChange() {
+      var file = $('#import-file').val();
+      while (file.indexOf('\\') >= 0) {
+        file = file.substring(file.indexOf('\\') + 1, file.length);
+      }
+      $('#file-field').val(file);
+    }
+
+    function getUniqueName(node) {
+      return `${node.getAttribute('name')}-${node.getAttribute('value')}`;
+    }
+
+    function buildOptionList (nodes) {
+      const list = [];
+      nodes.forEach((node) => list.push(getUniqueName(node)));
+      return list;
+    }
+    setTimeout(function () {
+      const groupSelect = document.querySelector('temba-select[name=group_text]');
+      const groupSelectField = groupSelect.shadowRoot.querySelector('temba-field[name=group_text]');
+      const originalList = groupSelect.querySelectorAll('temba-option');
+      const optionUniqueNames = buildOptionList(originalList);
+      const groupSearchBox = groupSelectField.querySelector('input[class=searchbox]');
+      const formControlBox = document.querySelector('.field_group_text .controls');
+
+      groupSearchBox.addEventListener('blur', function (e) {
+        const { value } = e.target;
+        const currentList = groupSelect.querySelectorAll('temba-option');
+        let exist = false;
+        currentList.forEach((node) => {
+          const uniqueName = getUniqueName(node);
+          if (!optionUniqueNames.includes(uniqueName)) {
+            groupSelect.removeChild(node);
+          }
+
+          if (value === node.getAttribute('name')) exist = true;
+        });
+
+        if (!exist) {
+          let hiddenField = formControlBox.querySelector('input[name=group_text]');
+          if (!hiddenField) {
+            const inputField = document.createElement('input');
+            inputField.setAttribute('type', 'hidden');
+            inputField.setAttribute('name', 'group_text');
+            hiddenField = inputField;
+            formControlBox.appendChild(inputField);
+          }
+          const optionName = groupSelectField.querySelector('.option-name span');
+          const newOptionNode = document.createElement('temba-option');
+          newOptionNode.setAttribute('name', value);
+          newOptionNode.setAttribute('value', value);
+          groupSelect.appendChild(newOptionNode);
+          if (optionName) optionName.innerHTML = value;
+          hiddenField.setAttribute('value', value);
+        }
+      });
+    }, 500);
+
+
+-block extra-style
+  {{block.super}}
+  :css
+    input {
+      padding: 9px;
+      cursor: pointer;
+      box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 3px 20px 0px, rgba(0, 0, 0, 0.02) 0px 1px 2px 0px;
+    }
+
+    #file-upload {
+      position: relative;
+    }
+
+    #real-button {
+      position: relative;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    #file-field {
+      width: 300px;
+      height: 35px;
+      font-size: 16px;
+      margin-bottom: 0px;
+      border-radius: 5px;
+    }
+
+    #import-file {
+      position: absolute;
+      width: 450px;
+      height: 35px;
+      top: 0;
+      left: 0;
+      text-align: right;
+      -moz-opacity:0 ;
+      filter: alpha(opacity: 0);
+      opacity: 0;
+      z-index: 2;
+    }
+    form.smartmin-form ul.errorlist {
+       font-size: 14px;
+    }
+    form.smartmin-form ul.errorlist li {
+       color: rgb(255 99 71);
+    }
