@@ -1547,5 +1547,7 @@ class MessageExportAssetStore(BaseExportAssetStore):
 class MessageExternalIDMap(models.Model):
     message = models.ForeignKey(Msg, on_delete=models.CASCADE, related_name="external_ids")
     channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
-    carrier_id = models.CharField(max_length=64, blank=True, null=True)
-    gateway_id = models.CharField(max_length=64, blank=True, null=True)
+    carrier_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    gateway_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
+    modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
