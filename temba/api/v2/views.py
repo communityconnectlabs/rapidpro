@@ -2506,7 +2506,7 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
      * **sent_on** - for outgoing messages, when the channel sent the message (null if not yet sent or an incoming message) (datetime).
      * **modified_on** - when the message was last modified (datetime)
 
-    You can also filter by `folder` where folder is one of `inbox`, `flows`, `archived`, `outbox`, `incoming`, `failed` or `sent`.
+    You can also filter by `uuid`, and `folder` where folder is one of `inbox`, `flows`, `archived`, `outbox`, `incoming`, `failed` or `sent`.
     Note that you cannot filter by more than one of `contact`, `folder`, `label` or `broadcast` at the same time.
 
     Without any parameters this endpoint will return all incoming and outgoing messages ordered by creation date.
@@ -2597,6 +2597,11 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
         msg_id = self.get_int_param("id")
         if msg_id:
             queryset = queryset.filter(id=msg_id)
+
+        # filter by uuid (optional)
+        msg_uuid = self.get_uuid_param("uuid")
+        if msg_uuid:
+            queryset = queryset.filter(uuid=msg_uuid)
 
         # filter by broadcast (optional)
         broadcast_id = params.get("broadcast")
