@@ -880,8 +880,8 @@ class ChannelTest(TembaTest):
         self.assertEqual(response.context["channel_types"]["PHONE"][0].code, "AC")
         self.assertEqual(response.context["channel_types"]["PHONE"][1].code, "T")
         self.assertEqual(response.context["channel_types"]["PHONE"][2].code, "TMS")
-        self.assertEqual(response.context["channel_types"]["PHONE"][-2].code, "YO")
-        self.assertEqual(response.context["channel_types"]["PHONE"][-1].code, "ZVS")
+        self.assertEqual(response.context["channel_types"]["PHONE"][-2].code, "ZVS")
+        self.assertEqual(response.context["channel_types"]["PHONE"][-1].code, "MGA")
 
         self.assertEqual(response.context["channel_types"]["SOCIAL_MEDIA"][0].code, "D3")
         self.assertEqual(response.context["channel_types"]["SOCIAL_MEDIA"][1].code, "ZVW")
@@ -899,8 +899,8 @@ class ChannelTest(TembaTest):
         self.assertEqual(response.context["channel_types"]["PHONE"][0].code, "AC")
         self.assertEqual(response.context["channel_types"]["PHONE"][1].code, "T")
         self.assertEqual(response.context["channel_types"]["PHONE"][2].code, "TMS")
-        self.assertEqual(response.context["channel_types"]["PHONE"][-2].code, "YO")
-        self.assertEqual(response.context["channel_types"]["PHONE"][-1].code, "ZVS")
+        self.assertEqual(response.context["channel_types"]["PHONE"][-2].code, "ZVS")
+        self.assertEqual(response.context["channel_types"]["PHONE"][-1].code, "MGA")
 
         self.assertEqual(response.context["channel_types"]["SOCIAL_MEDIA"][0].code, "WA")
         self.assertEqual(response.context["channel_types"]["SOCIAL_MEDIA"][1].code, "D3")
