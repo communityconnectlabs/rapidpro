@@ -2,6 +2,7 @@ import logging
 
 from celery.task import task
 
+from temba.flows.models import Flow
 from .models import Link, LinkContacts, ExportLinksTask
 
 logger = logging.getLogger(__name__)
@@ -16,9 +17,14 @@ def export_link_task(id):
 
 
 @task(track_started=True, name="handle_link_task")
-def handle_link_task(link_id, contact_id):
+def handle_link_task(link_id, contact_id, related_flow_uuid=None):
     link = Link.objects.filter(pk=link_id).only("created_by", "modified_by").first()
+    related_flow = Flow.objects.filter(uuid=related_flow_uuid).first() if related_flow_uuid else None
     if link and contact_id:
         LinkContacts.objects.create(
-            link_id=link.id, contact_id=contact_id, created_by=link.created_by, modified_by=link.modified_by
+            link_id=link.id,
+            contact_id=contact_id,
+            created_by=link.created_by,
+            modified_by=link.modified_by,
+            flow=related_flow,
         )

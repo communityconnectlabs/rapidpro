@@ -20,10 +20,14 @@
           {{item.time|gmail_time}}
         %span.long.hide
           {{item.time}}
+      %span.flow-icon
+        -if item.obj.flow
+          %a{href:'{% url "flows.flow_editor" item.obj.flow.uuid %}', title:'{{ item.obj.flow.name }}', target:'_new'}
+            .icon-flow
 
 -if has_older and not recent_only
-  %tr{ ic-append-from:"/link/history/{{link.uuid}}/?after={{after}}&before={{before}}", 
-        ic-trigger-on:"scrolled-into-view", 
-        ic-target:"table.activity tbody.previous", 
+  %tr{ ic-append-from:"/link/history/{{link.uuid}}/?after={{after}}&before={{before}}",
+        ic-trigger-on:"scrolled-into-view",
+        ic-target:"table.activity tbody.previous",
         ic-indicator:"#indicator" }
 
