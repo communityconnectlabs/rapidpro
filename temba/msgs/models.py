@@ -38,6 +38,7 @@ INITIALIZING = "I"
 PENDING = "P"
 QUEUED = "Q"
 WIRED = "W"
+ENROUTE = "U"
 SENT = "S"
 DELIVERED = "D"
 HANDLED = "H"
@@ -61,6 +62,7 @@ STATUS_CONFIG = (
     # valid only for outgoing messages
     (QUEUED, _("Queued"), "queued"),
     (WIRED, _("Wired"), "wired"),  # message was handed off to the provider and credits were deducted for it
+    (ENROUTE, _("En Route"), "enroute"),
     (SENT, _("Sent"), "sent"),  # we have confirmation that a message was sent
     (DELIVERED, _("Delivered"), "delivered"),
     # valid only for incoming messages
@@ -1540,3 +1542,12 @@ class MessageExportAssetStore(BaseExportAssetStore):
     directory = "message_exports"
     permission = "msgs.msg_export"
     extensions = ("xlsx",)
+
+
+class MessageExternalIDMap(models.Model):
+    message = models.ForeignKey(Msg, on_delete=models.CASCADE, related_name="external_ids")
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
+    carrier_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    gateway_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
+    modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
