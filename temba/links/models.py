@@ -173,7 +173,11 @@ class Link(TembaModel):
                 continue
 
             for link in links:
-                if jaro_distance(action["url"], link.destination) >= 0.9 and action["url"] != link.destination:
+                if (
+                    jaro_distance(action["url"], link.destination) >= 0.9
+                    and action["url"] != link.destination
+                    and not (str(action["url"]).split("?")[0] == link.destination and "?" in action["url"])
+                ):
                     issues.append(
                         {
                             "type": "invalid_link",
@@ -237,6 +241,14 @@ class LinkContacts(SmartModel):
         Contact,
         related_name="contact_links",
         help_text=_("The users which clicked on this link"),
+        on_delete=models.CASCADE,
+    )
+
+    flow = models.ForeignKey(
+        "flows.Flow",
+        null=True,
+        related_name="flow_links",
+        help_text=_("The flow related to this link's click"),
         on_delete=models.CASCADE,
     )
 
