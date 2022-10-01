@@ -543,7 +543,7 @@ PERMISSIONS = {
     "templates.template": ("api",),
     "tickets.ticket": ("api", "assign", "assignee", "note"),
     "tickets.ticketer": ("api", "connect", "configure"),
-    "triggers.trigger": ("archived", "type"),
+    "triggers.trigger": ("archived", "type", "create_large_send", "large_send_schedule_summary"),
 }
 
 
@@ -598,6 +598,7 @@ GROUP_PERMISSIONS = {
         "request_logs.httplog_read",
         "request_logs.httplog_classifier",
         "request_logs.httplog_ticketer",
+        "triggers.largesend.*",
     ),
     "Administrators": (
         "airtime.airtimetransfer_list",
