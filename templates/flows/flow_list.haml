@@ -259,7 +259,8 @@
       const formData = new FormData(form);
       const oReq = new XMLHttpRequest();
 
-      removeErrorAlert(form);
+      const formElement = form.querySelector('temba-textinput');
+      removeErrorAlert(formElement);
       oReq.open('POST', POST_URL, true);
       oReq.send(formData);
       oReq.onload = (oEvent) => {
@@ -267,7 +268,7 @@
         if (responseURL.indexOf(POST_URL) > -1) {
           const responseForm = $($.parseHTML(oReq.responseText));
           const textInput = responseForm.find('temba-textinput')[0];
-          if (textInput && textInput.errors.length > 0) addErrorAlert(form, textInput.errors[0]);
+          if (textInput && textInput.errors.length > 0) addErrorAlert(formElement, textInput.errors[0]);
         } else window.location.href = responseURL;
       };
     }
