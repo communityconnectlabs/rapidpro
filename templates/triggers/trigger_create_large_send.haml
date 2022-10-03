@@ -156,6 +156,11 @@
       confirmationDialog.open = true;
     }
 
+    function removeAlertsFromForm(form, selectors) {
+      const nodeList = form.querySelectorAll(selectors);
+      nodeList.forEach((node) => removeErrorAlert(node));
+    }
+
     function submitForm(event) {
       event.preventDefault();
       const { form, confirmationDialog } = getFormElements();
@@ -165,9 +170,12 @@
       fetch('{% url "triggers.trigger_create_large_send" %}', options)
         .then((response) => response.text())
         .then((response) => {
+          const formSelectors = 'temba-select, temba-textinput';
+          // remove previous error messages
+          removeAlertsFromForm(form, formSelectors);
           let responseForm = new DOMParser().parseFromString(response, "text/html");
           responseForm = responseForm.firstChild.querySelector('form');
-          const formElem = responseForm.querySelectorAll('temba-select, temba-textinput');
+          const formElem = responseForm.querySelectorAll(formSelectors);
           let hasError = false;
           formElem.forEach((elem) => {
             let errorMsg = elem.getAttribute('errors');
