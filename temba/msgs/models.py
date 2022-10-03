@@ -28,7 +28,7 @@ from temba.orgs.models import DependencyMixin, Org, TopUp
 from temba.schedules.models import Schedule
 from temba.utils import chunk_list, extract_constants, on_transaction_commit
 from temba.utils.export import BaseExportAssetStore, BaseExportTask
-from temba.utils.models import JSONAsTextField, SquashableModel, TembaModel, TranslatableField
+from temba.utils.models import JSONAsTextField, SquashableModel, TembaModel, TranslatableField, JSONField
 from temba.utils.text import clean_string
 from temba.utils.uuid import uuid4
 
@@ -1545,9 +1545,10 @@ class MessageExportAssetStore(BaseExportAssetStore):
 
 
 class MessageExternalIDMap(models.Model):
-    message = models.ForeignKey(Msg, on_delete=models.CASCADE, related_name="external_ids")
-    channel = models.ForeignKey(Channel, on_delete=models.CASCADE)
+    message = models.ForeignKey(Msg, on_delete=models.CASCADE, related_name="external_ids", null=True)
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, null=True)
     carrier_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
     gateway_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
     created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
     modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
+    request_logs = JSONField(blank=True, null=True)
