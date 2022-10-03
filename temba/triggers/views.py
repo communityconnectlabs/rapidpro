@@ -378,7 +378,7 @@ class BaseLargeSendForm(forms.ModelForm):
         ),
     )
     start_time = forms.DateTimeField(
-        required=False,
+        required=True,
         label=_("Start Time for send"),
         widget=InputWidget(attrs={"datetimepicker": True, "placeholder": _("Select a date and time")}),
     )
