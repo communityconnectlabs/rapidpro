@@ -405,6 +405,9 @@ class BaseLargeSendForm(forms.ModelForm):
 
 
 class LargeSendMixin:
+    NINE_AM = 9
+    FIVE_PM = 17
+
     @classmethod
     def get_new_time(cls, input_time, hour, add_to_day=0):
         input_time = datetime.datetime(
@@ -414,14 +417,14 @@ class LargeSendMixin:
 
     def derive_start_time(self, start_time, limit_time):
         # get 9am local time and compare with current time if work hour constraint is set
-        opening_time = self.get_new_time(start_time, 9)
-        closing_time = self.get_new_time(start_time, 17)
+        opening_time = self.get_new_time(start_time, self.NINE_AM)
+        closing_time = self.get_new_time(start_time, self.FIVE_PM)
 
         if limit_time and start_time < opening_time:
             start_time = opening_time
 
         if limit_time and start_time > closing_time:
-            start_time = self.get_new_time(start_time, 9, add_to_day=1)
+            start_time = self.get_new_time(start_time, self.NINE_AM, add_to_day=1)
         return start_time
 
     def calculate_schedule_time(self, start_datetime, limit_time, batch_interval, chunk_size):
@@ -432,9 +435,9 @@ class LargeSendMixin:
             if count > 0:
                 start_time = start_time + timedelta(minutes=int(batch_interval))
             # get 5pm local time and compare with current time if work hour constraint is set
-            closing_time = self.get_new_time(start_time, 17)
+            closing_time = self.get_new_time(start_time, self.FIVE_PM)
             if limit_time and start_time > closing_time:
-                start_time = self.get_new_time(start_time, 9, add_to_day=1)
+                start_time = self.get_new_time(start_time, self.NINE_AM, add_to_day=1)
             schedule_time_list.append(start_time)
 
         return schedule_time_list
