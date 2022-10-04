@@ -374,7 +374,7 @@ class BaseLargeSendForm(forms.ModelForm):
         help_text=_("Only includes contacts in these groups."),
         required=True,
         widget=SelectMultipleWidget(
-            attrs={"icons": True, "placeholder": _("Optional: Select contact groups"), "searchable": True}
+            attrs={"icons": True, "placeholder": _("Select contact groups"), "searchable": True}
         ),
     )
     start_time = forms.DateTimeField(
@@ -388,7 +388,7 @@ class BaseLargeSendForm(forms.ModelForm):
         widget=InputWidget(attrs={"type": "number", "placeholder": _("Enter chunk size")}),
     )
 
-    limit_time = forms.BooleanField(required=False, label=_("Limit to business hours"), help_text=_("9a.m. to 5p.m."))
+    limit_time = forms.BooleanField(required=False, label=_("Limit to business hours"), help_text=_("9 AM to 5 PM"))
 
     def __init__(self, user, *args, **kwargs):
         super().__init__(*args, **kwargs)
