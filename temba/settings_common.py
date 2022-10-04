@@ -598,7 +598,6 @@ GROUP_PERMISSIONS = {
         "request_logs.httplog_read",
         "request_logs.httplog_classifier",
         "request_logs.httplog_ticketer",
-        "triggers.largesend.*",
     ),
     "Administrators": (
         "airtime.airtimetransfer_list",
