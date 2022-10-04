@@ -936,11 +936,15 @@ class FlowRunReadSerializer(ReadSerializer):
         return [convert_step(s) for s in obj.path]
 
     def get_messages(self, obj):
-        results = [
-            {"uuid": event.get("msg", {}).get("uuid"), "text": event.get("msg", {}).get("text")}
-            for event in obj.events
-            if event.get("type") in ["msg_created", "msg_received"]
-        ]
+        results = (
+            [
+                {"uuid": event.get("msg", {}).get("uuid"), "text": event.get("msg", {}).get("text")}
+                for event in obj.events
+                if event.get("type") in ["msg_created", "msg_received"]
+            ]
+            if obj.events
+            else []
+        )
         return results
 
     def get_values(self, obj):
