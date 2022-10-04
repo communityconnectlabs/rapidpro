@@ -1,0 +1,251 @@
+-extends 'includes/modax.haml'
+-load smartmin i18n
+
+-block fields
+  .grid.grid-cols-2.gap-4
+    .flow
+      -render_field 'flow'
+    .groups
+      -render_field 'groups'
+
+  .grid.grid-cols-2.gap-4
+    .chunk_size
+      -render_field 'chunk_size'
+    .batch_interval
+      -render_field 'batch_interval'
+
+  .grid.grid-cols-2.gap-4
+    .start_time
+      -render_field 'start_time'
+    .limit_time.pt-5
+      -render_field 'limit_time'
+
+  %h5.embedded-data-large-send.hidden
+    -trans "Flow Parameters"
+  #embedded-data-large-send.hidden
+    #embed-container-large-send
+
+  .schedule-list-preview.hidden
+
+  %temba-dialog#large-send-confirmation(header='{{ _("Confirm Send")|escapejs }}' primaryButtonName='{{ _("Confirm")|escapejs }}' destructive='true')
+    .p-6
+      Please confirm you want to send on the following schedule:
+
+-block modal-script
+  {{block.super}}
+
+  <script id="ccl-script" src="{{ STATIC_URL }}js/ccl-utils.js"></script>
+  <script src="{{ STATIC_URL }}js/flow-parameters.js"></script>
+  :javascript
+    function initCalFields(form) {
+      [
+        'temba-textinput[name=start_time]',
+        'temba-select[name=groups]',
+        'temba-select[name=batch_interval]',
+        'temba-checkbox[name=limit_time]',
+        'temba-textinput[name=chunk_size]'
+      ].forEach((selector) => {
+          const element = form.querySelector(selector);
+          element.onchange = onValueChange;
+        });
+    }
+
+    function getFormElements() {
+      const { modaxBody, dialogFooter } = getModalResources('create-large-send');
+      const form = modaxBody.querySelector('form');
+      const startTimeTextInput = form.querySelector('temba-textinput[name=start_time]');
+      const flow = form.querySelector('temba-select[name=flow]');
+      const groups = form.querySelector('temba-select[name=groups]');
+      const batchInterval = form.querySelector('temba-select[name=batch_interval]');
+      const limitTime = form.querySelector('temba-checkbox[name=limit_time]');
+      const chunkSize = form.querySelector('temba-textinput[name=chunk_size]');
+
+      const confirmationDialog = form.querySelector('#large-send-confirmation');
+      const confirmationFooter =  confirmationDialog.shadowRoot.querySelector('.dialog-footer');
+
+      return {
+        form,
+        flow,
+        groups,
+        modaxBody,
+        chunkSize,
+        limitTime,
+        dialogFooter,
+        batchInterval,
+        startTimeTextInput,
+        confirmationDialog,
+        confirmationFooter
+      };
+    }
+
+    function onValueChange() {
+      setTimeout(function () {
+        const { startTimeTextInput, groups, batchInterval, limitTime, form, chunkSize } = getFormElements();
+        const limitTimeValue = limitTime.value === 1;
+        const startTime = startTimeTextInput.value;
+        const chunkSizeValue = chunkSize && chunkSize.value ? chunkSize.value : null;
+        const intervalValue = batchInterval && batchInterval.value ? batchInterval.value.value : null;
+
+        const groupFields = form.querySelector('.field_groups').querySelectorAll('input[name=groups]');
+        const groupList = [];
+        groupFields.forEach(elem => groupList.push(Number(elem.value)));
+
+        if (startTime && groupList.length > 0 && intervalValue && chunkSizeValue) {
+          const formData = new FormData();
+          formData.append('groups', groupList);
+          formData.append('start_time', startTime);
+          formData.append('limit_time', limitTimeValue);
+          formData.append('batch_interval', intervalValue);
+          formData.append('chunk_size', chunkSizeValue)
+          const formOption = {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRFToken': getCookie('csrftoken')
+            }
+          }
+          fetch('{% url "triggers.trigger_large_send_schedule_summary" %}', formOption)
+            .then((response) => response.json())
+            .then((response) => {
+              toggleScheduleList(response);
+            });
+        }
+      }, 100);
+    }
+
+    function chunkBy(number, n) {
+      return new Array(Math.floor(number / n)).fill(n).concat(number % n)
+    }
+
+    function toggleScheduleList(response) {
+      const { modaxBody } = getFormElements();
+      const scheduleListPreview = modaxBody.querySelector('.schedule-list-preview');
+      const totalContacts = response.total_contacts;
+      const maxContactsPerGroup = response.max_contacts_per_group;
+      const totalGroup = response.schedule_time_list.length;
+
+      const chunkList = chunkBy(totalContacts, maxContactsPerGroup);
+      let html = `<div class="shadow rounded-lg p-1">`
+      html += `<p class="px-4 py-2">Total Contacts in all groups = ${response.total_contacts}<br> `;
+      html += `Each batch will have a maximum of ${response.max_contacts_per_group} contacts and `
+      html += `a total of ${chunkList.length} groups will be sent to the selected flow.<br> `;
+      html += `Schedule for sends: </p>`;
+      html += '<div id="schedule-list" class="mt-5">'
+      html += response.schedule_time_list
+        .map((scheduleTime, index) => {
+          const bgColor = index % 2 === 0 ? 'bg-gray-100' : '';
+          const count = index + 1;
+          let currentChunk = chunkList[index];
+          if (!currentChunk) return null;
+          const formatted = moment(new Date(scheduleTime)).format('MMMM Do YYYY, h:mm a');
+          const message = `Chunk ${count} -> ${currentChunk} contact ${formatted}`;
+          return `<div class="px-4 py-2 ${bgColor}">${message}</div>`;
+        }).join('');
+      html += '</div></div>';
+      scheduleListPreview.innerHTML = html;
+      scheduleListPreview.classList.remove('hidden');
+    }
+
+    function showConfirmation(event) {
+      const { confirmationDialog, modaxBody } = getFormElements();
+      event.preventDefault();
+      const scheduleList = modaxBody.querySelector('#schedule-list');
+      const confirmationContent = confirmationDialog.querySelector('.p-6');
+      if (scheduleList) confirmationContent.appendChild(scheduleList);
+      confirmationDialog.open = true;
+    }
+
+    function removeAlertsFromForm(form, selectors) {
+      const nodeList = form.querySelectorAll(selectors);
+      nodeList.forEach((node) => removeErrorAlert(node));
+    }
+
+    function submitForm(event) {
+      event.preventDefault();
+      const { form, confirmationDialog } = getFormElements();
+      const formData = new FormData(form);
+      event.target.disabled = true;
+      const options = { ...getHTTPOptions(), method: 'POST', body: formData };
+      fetch('{% url "triggers.trigger_create_large_send" %}', options)
+        .then((response) => response.text())
+        .then((response) => {
+          const formSelectors = 'temba-select, temba-textinput';
+          // remove previous error messages
+          removeAlertsFromForm(form, formSelectors);
+          let responseForm = new DOMParser().parseFromString(response, "text/html");
+          responseForm = responseForm.firstChild.querySelector('form');
+          const formElem = responseForm.querySelectorAll(formSelectors);
+          let hasError = false;
+          formElem.forEach((elem) => {
+            let errorMsg = elem.getAttribute('errors');
+            errorMsg = errorMsg ? JSON.parse(errorMsg) : [];
+            if (errorMsg.length > 0) {
+              const formElement = form.querySelector(`${elem.tagName.toLowerCase()}#${elem.getAttribute('id')}`);
+              addErrorAlert(formElement, errorMsg[0]);
+              hasError = true;
+            }
+          });
+          event.target.disabled = false;
+          if (hasError) confirmationDialog.open = false;
+          else window.location.href = '{% url "triggers.trigger_list" %}';
+        });
+    }
+
+    function setupModal() {
+      const {
+        form,
+        flow,
+        modaxBody,
+        dialogFooter,
+        startTimeTextInput,
+        confirmationDialog,
+        confirmationFooter
+      } = getFormElements();
+
+      const confirmSubmitButton = confirmationDialog.shadowRoot.querySelector('temba-button[destructive]');
+      const confirmationCancelButton = confirmationFooter.querySelector('temba-button[secondary]');
+      const startTime = startTimeTextInput.shadowRoot.querySelector('temba-field');
+      const datePickerElem = startTimeTextInput.shadowRoot
+        .querySelector('temba-field')
+        .querySelector('lit-flatpickr');
+
+      datePickerElem.setAttribute('minDate', new Date().toJSON().substring(0, 10));
+      confirmSubmitButton.onclick = submitForm;
+      confirmationFooter.removeChild(confirmationCancelButton);
+
+      const cancelButton = createButton({
+        secondary: true,
+        onclick: () => { confirmationDialog.open = false },
+        name: 'Cancel'
+      });
+      confirmationFooter.appendChild(cancelButton);
+
+      initCalFields(form);
+      onValueChange();
+      const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
+      const submitButton = createButton({ name: 'Create', onclick: showConfirmation, primary: true });
+      try {
+        if (currentSubmit) {
+          dialogFooter.removeChild(currentSubmit);
+          dialogFooter.prepend(submitButton);
+        }
+      } catch (e) {}
+
+      flow.addEventListener('change', function(event) {
+        let selectedValue = event.target.values[0].value;
+        let flowId = (selectedValue !== '' ? parseInt(selectedValue) : null);
+        if (flowId) {
+          var api_url = "{% url 'flows.flow_flow_parameters' %}?flow_id=" + flowId;
+          $.getJSON(api_url).done(function(data) {
+            buildTriggerFlowParams(data.results, [], 'large-send', modaxBody);
+          });
+        } else {
+          buildTriggerFlowParams([], [], 'large-send', modaxBody);
+        }
+      });
+    }
+
+    $(document).ready(function () {
+      setTimeout(setupModal, 200);
+    });

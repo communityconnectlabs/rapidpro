@@ -543,7 +543,7 @@ PERMISSIONS = {
     "templates.template": ("api",),
     "tickets.ticket": ("api", "assign", "assignee", "note"),
     "tickets.ticketer": ("api", "connect", "configure"),
-    "triggers.trigger": ("archived", "type"),
+    "triggers.trigger": ("archived", "type", "create_large_send", "large_send_schedule_summary"),
 }
 
 

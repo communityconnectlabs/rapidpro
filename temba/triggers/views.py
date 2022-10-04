@@ -1,3 +1,5 @@
+import datetime
+import math
 from datetime import timedelta
 
 from smartmin.views import SmartCreateView, SmartCRUDL, SmartListView, SmartTemplateView, SmartUpdateView
@@ -7,6 +9,7 @@ from django.db.models import Min
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.translation import ngettext_lazy, ugettext_lazy as _
+from django.utils import timezone
 
 from temba.channels.models import Channel
 from temba.contacts.models import ContactGroup, ContactURN
@@ -24,10 +27,11 @@ from temba.utils.fields import (
     TembaMultipleChoiceField,
 )
 from temba.utils.views import BulkActionMixin, ComponentFormMixin
-from temba.utils import build_flow_parameters, analytics, flow_params_context
+from temba.utils import build_flow_parameters, analytics, flow_params_context, chunk_list
 from temba.utils.fields import CompletionTextarea, JSONField, OmniboxChoice
 
 from .models import Trigger
+from ..utils.json import JsonResponse
 
 
 class FlowParamsMixin:
@@ -339,6 +343,106 @@ class NewConversationTriggerForm(BaseTriggerForm):
         fields = ("channel", "flow")
 
 
+class BaseLargeSendForm(forms.ModelForm):
+    BATCH_INTERVAL = (
+        (5, _("5 minutes")),
+        (10, _("10 minutes")),
+        (15, _("15 minutes")),
+        (20, _("20 minutes")),
+        (25, _("25 minutes")),
+        (30, _("30 minutes")),
+        (45, _("45 minutes")),
+        (60, _("1 hour")),
+    )
+
+    batch_interval = forms.ChoiceField(
+        choices=BATCH_INTERVAL,
+        label=_("Batch Interval"),
+        help_text=_("I want to stagger each chunk by this much"),
+        required=True,
+        widget=SelectWidget(),
+    )
+    flow = TembaChoiceField(
+        Flow.objects.none(),
+        label=_("Flow"),
+        required=True,
+        widget=SelectWidget(attrs={"placeholder": _("Select a flow"), "searchable": True}),
+    )
+    groups = TembaMultipleChoiceField(
+        queryset=ContactGroup.user_groups.none(),
+        label=_("Groups"),
+        help_text=_("Only includes contacts in these groups."),
+        required=True,
+        widget=SelectMultipleWidget(
+            attrs={"icons": True, "placeholder": _("Select contact groups"), "searchable": True}
+        ),
+    )
+    start_time = forms.DateTimeField(
+        required=True,
+        label=_("Start Time for Send"),
+        widget=InputWidget(attrs={"datetimepicker": True, "placeholder": _("Select a date and time")}),
+    )
+    chunk_size = forms.IntegerField(
+        label=_("Chunks"),
+        help_text=_("I want to split the message to this many pieces"),
+        widget=InputWidget(attrs={"type": "number", "placeholder": _("Enter chunk size")}),
+    )
+
+    limit_time = forms.BooleanField(required=False, label=_("Limit to business hours"), help_text=_("9 AM to 5 PM"))
+
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.org = user.get_org()
+        flow_types = (Flow.TYPE_MESSAGE, Flow.TYPE_VOICE)
+        flows = self.org.flows.filter(flow_type__in=flow_types, is_active=True, is_archived=False, is_system=False)
+
+        self.fields["flow"].queryset = flows.order_by("name")
+        self.fields["groups"].queryset = ContactGroup.get_user_groups(self.org, ready_only=False)
+
+    class Meta:
+        model = Trigger
+        fields = ("flow", "groups", "start_time", "batch_interval", "chunk_size", "limit_time")
+
+
+class LargeSendMixin:
+    NINE_AM = 9
+    FIVE_PM = 17
+
+    @classmethod
+    def get_new_time(cls, input_time, hour, add_to_day=0):
+        input_time = datetime.datetime(
+            year=input_time.year, month=input_time.month, day=input_time.day + add_to_day, hour=hour
+        )
+        return timezone.make_aware(input_time)
+
+    def derive_start_time(self, start_time, limit_time):
+        # get 9am local time and compare with current time if work hour constraint is set
+        opening_time = self.get_new_time(start_time, self.NINE_AM)
+        closing_time = self.get_new_time(start_time, self.FIVE_PM)
+
+        if limit_time and start_time < opening_time:
+            start_time = opening_time
+
+        if limit_time and start_time > closing_time:
+            start_time = self.get_new_time(start_time, self.NINE_AM, add_to_day=1)
+        return start_time
+
+    def calculate_schedule_time(self, start_datetime, limit_time, batch_interval, chunk_size):
+        start_time = self.derive_start_time(start_datetime, limit_time)
+        schedule_time_list = []
+
+        for count in range(chunk_size):
+            if count > 0:
+                start_time = start_time + timedelta(minutes=int(batch_interval))
+            # get 5pm local time and compare with current time if work hour constraint is set
+            closing_time = self.get_new_time(start_time, self.FIVE_PM)
+            if limit_time and start_time > closing_time:
+                start_time = self.get_new_time(start_time, self.NINE_AM, add_to_day=1)
+            schedule_time_list.append(start_time)
+
+        return schedule_time_list
+
+
 class TriggerCRUDL(SmartCRUDL):
     model = Trigger
     actions = (
@@ -357,6 +461,8 @@ class TriggerCRUDL(SmartCRUDL):
         "list",
         "archived",
         "type",
+        "create_large_send",
+        "large_send_schedule_summary",
     )
 
     class Create(FormaxMixin, OrgFilterMixin, OrgPermsMixin, SmartTemplateView):
@@ -713,3 +819,120 @@ class TriggerCRUDL(SmartCRUDL):
 
         def get_queryset(self, *args, **kwargs):
             return super().get_queryset(*args, **kwargs).filter(is_archived=False, trigger_type=self.trigger_type.code)
+
+    class CreateLargeSend(OrgPermsMixin, ComponentFormMixin, FlowParamsMixin, LargeSendMixin, SmartCreateView):
+        form_class = BaseLargeSendForm
+        success_url = "@triggers.trigger_list"
+        success_message = ""
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["user"] = self.request.user
+            return kwargs
+
+        def create_trigger(self, start_time, org):
+            user = self.request.user
+            schedule = Schedule.create_schedule(
+                org,
+                user,
+                start_time,
+                Schedule.REPEAT_NEVER,
+            )
+
+            return Trigger.objects.create(
+                flow=self.form.cleaned_data["flow"],
+                org=org,
+                schedule=schedule,
+                trigger_type=Trigger.TYPE_SCHEDULE,
+                created_by=user,
+                modified_by=user,
+                extra=self.flow_params,
+            )
+
+        @classmethod
+        def merge_groups_contacts(cls, groups):
+            contact_list = []
+            for group in groups:
+                contact_list.append(set(group.contacts.values_list("id", flat=True)))
+
+            return list(set().union(*contact_list))
+
+        @classmethod
+        def group_contacts(cls, cleaned_data, contacts, user):
+            org = user.get_org()
+
+            start_time = cleaned_data["start_time"]
+            chunk_size = cleaned_data["chunk_size"]
+
+            created_groups = []
+            group_name = f"Large Send - {start_time.strftime('%Y-%m-%d')}"
+
+            max_in_group = math.ceil(len(contacts) / chunk_size)
+            chunk_count = 1
+            for contacts_chunk in chunk_list(contacts, max_in_group):
+                chunk_group_name = f"{group_name} - {chunk_count}"
+                chunk_group_name = ContactGroup.get_unique_name(org, chunk_group_name)
+                group = ContactGroup.get_or_create(org, user, chunk_group_name)
+                group.contacts.add(*contacts_chunk)
+                created_groups.append(group)
+                chunk_count += 1
+
+            return created_groups
+
+        def form_valid(self, form):
+            cleaned_data = form.cleaned_data
+            user = self.request.user
+            org = user.get_org()
+            start_time = cleaned_data["start_time"]
+            groups = cleaned_data["groups"]
+            batch_interval = cleaned_data["batch_interval"]
+            chunk_size = cleaned_data["chunk_size"]
+            limit_time = cleaned_data["limit_time"]
+
+            contacts = self.merge_groups_contacts(groups)
+            created_groups = self.group_contacts(cleaned_data, contacts, user)
+            schedule_time_list = self.calculate_schedule_time(start_time, limit_time, batch_interval, chunk_size)
+
+            triggers = []
+            count = 0
+
+            for group in created_groups:
+                schedule_time = schedule_time_list[count]
+                group_trigger = self.create_trigger(schedule_time, org)
+                group_trigger.groups.add(group)
+                triggers.append(group_trigger)
+                count += 1
+
+            self.post_save(triggers)
+
+            response = self.render_to_response(self.get_context_data(form=form))
+            response["REDIRECT"] = self.get_success_url()
+            return response
+
+    class LargeSendScheduleSummary(OrgPermsMixin, LargeSendMixin, SmartListView):
+        def post(self, request, *args, **kwargs):
+            response_info = dict(schedule_time_list=[])
+            batch_interval = self.request.POST.get("batch_interval")
+            start_time = self.request.POST.get("start_time")
+            limit_time = self.request.POST.get("limit_time", "false")
+            groups = self.request.POST.get("groups", "").split(",")
+            chunk_size = int(self.request.POST.get("chunk_size"))
+            contacts = []
+
+            for group_id in groups:
+                group = ContactGroup.user_groups.filter(id=group_id, org=self.org).first()
+                contacts.append(set(group.contacts.values_list("id", flat=True)))
+
+            contacts = list(set().union(*contacts))
+            total_contacts = len(contacts)
+            start_time = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M")
+            start_time = timezone.make_aware(start_time)
+            limit_time = limit_time == "true"
+            response_info["total_contacts"] = total_contacts
+            response_info["max_contacts_per_group"] = math.ceil(total_contacts / chunk_size)
+            response_info["chunk_size"] = chunk_size
+            response_info["schedule_time_list"] = self.calculate_schedule_time(
+                start_time, limit_time, batch_interval, chunk_size
+            )
+
+            return JsonResponse(response_info)
