@@ -1,0 +1,15 @@
+name: OWASP ZAP Scanning
+on:
+  pull_request:
+    branches:
+      - main
+      - 'dev/5.0'
+jobs:
+  zap_scan:
+    name: Scan the WEB Application
+    runs-on: ubuntu-latest
+    steps:
+      - name: ZAP Scan
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+        target: 'https://www.zaproxy.org/'
