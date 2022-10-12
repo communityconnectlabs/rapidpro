@@ -1,9 +1,10 @@
 name: OWASP ZAP Scanning
 on:
-  pull_request:
+  push:
     branches:
       - main
       - 'dev/5.0'
+      - 'feature/owasp-scanning'
 jobs:
   zap_scan:
     name: Scan the WEB Application
@@ -12,4 +13,4 @@ jobs:
       - name: ZAP Scan
         uses: zaproxy/action-full-scan@v0.4.0
         with:
-        target: 'https://www.zaproxy.org/'
+          target: 'https://www.zaproxy.org/'
