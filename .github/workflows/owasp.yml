@@ -2,19 +2,19 @@ name: OWASP ZAP Scanning
 on:
   push:
     branches:
-      - main
-      - 'dev/5.0'
       - 'feature/owasp-scanning'
+  pull_request:
+    branches:
+      - 'dev/*'
+      - 'release/*'
 jobs:
   zap_scan:
     name: Scan the WEB Application
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        pg_version: [ '11', '12' ]
     env:
       python_version: '3.9.x'
       postgis_version: '3.1'
+      pg_version: '12'
       redis_version: '5'
       node_version: '10'
       elastic_version: '7.10.1'
@@ -28,7 +28,7 @@ jobs:
     - name: Install PostgreSQL and PostGIS
       uses: nyaruka/postgis-action@v2.1.0
       with:
-        postgresql version: ${{ matrix.pg_version }}
+        postgresql version: ${{ env.pg_version }}
         postgis version: ${{ env.postgis_version }}
         postgresql db: temba
         postgresql user: temba
@@ -93,11 +93,3 @@ jobs:
         rules_file_name: '.zap/rules.tsv'
         cmd_options: '-a'
         allow_issue_writing: false
-        fail_action: true
-
-    - name: Upload scan report
-      uses: actions/upload-artifact@v2
-      with:
-        name: zap_report.zip
-        path: report_html.html
-      if: ${{ always() }}
