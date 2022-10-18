@@ -3049,6 +3049,7 @@ class RunsEndpoint(ListAPIMixin, BaseAPIView):
      * **modified_on** - when this run was last modified (datetime), filterable as `before` and `after`.
      * **exited_on** - the datetime when this run exited or null if it is still active (datetime).
      * **exit_type** - how the run ended (one of "interrupted", "completed", "expired").
+     * **messages** - messages that the run contains in a dictionary format with UUID and text
 
     Note that you cannot filter by `flow` and `contact` at the same time.
 
@@ -3098,7 +3099,17 @@ class RunsEndpoint(ListAPIMixin, BaseAPIView):
                 "created_on": "2015-11-11T13:05:57.457742Z",
                 "modified_on": "2015-11-11T13:05:57.576056Z",
                 "exited_on": "2015-11-11T13:05:57.576056Z",
-                "exit_type": "completed"
+                "exit_type": "completed",
+                "messages": [
+                    {
+                      "uuid": "a07913a3-e037-4e3f-80fa-64e3ec5f5f8c",
+                      "text": "Hello, world!"
+                    },
+                    {
+                      "uuid": "63129a06-4704-4319-92d4-4e673c275f97",
+                      "text": "How are you?"
+                    }
+                ]
             },
             ...
         }
