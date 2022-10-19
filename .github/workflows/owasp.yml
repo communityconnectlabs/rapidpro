@@ -21,6 +21,7 @@ jobs:
       rpindexer_version: '6.4.0'
       mailroom_version: '6.5.36'
       DJANGO_SETTINGS_MODULE: temba.settings_ci
+      email_url: ${{secrets.MAIL_SERVER_ADDRESS}}
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
@@ -93,3 +94,18 @@ jobs:
         rules_file_name: '.zap/rules.tsv'
         cmd_options: '-a'
         allow_issue_writing: false
+
+    - name: Send mail
+      if: ${{ env.email_url }}
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: ${{secrets.MAIL_SERVER_ADDRESS}}
+        server_port: ${{secrets.MAIL_SERVER_PORT}}
+        username: ${{secrets.MAIL_USERNAME}}
+        password: ${{secrets.MAIL_PASSWORD}}
+        secure: true
+        subject: Github OWASP Scanning Action job result
+        from: ${{secrets.MAIL_DEFAULT_FROM}}
+        to:  ${{secrets.MAIL_SEND_OWASP_RESULT_TO}}
+        body: Scanning job of ${{github.repository}} completed successfully!
+        attachments: zap_scan.zip
