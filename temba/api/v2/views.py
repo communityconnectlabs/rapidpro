@@ -2651,6 +2651,11 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
             "slug": "msg-list",
             "params": [
                 {"name": "id", "required": False, "help": "A message ID to filter by, ex: 123456"},
+                {
+                    "name": "uuid",
+                    "required": False,
+                    "help": "A message UUID to filter by, ex: c969a530-f36c-42d0-869d-d45503dd46ac",
+                },
                 {"name": "broadcast", "required": False, "help": "A broadcast ID to filter by, ex: 12345"},
                 {
                     "name": "contact",
