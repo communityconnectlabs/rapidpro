@@ -105,9 +105,8 @@ jobs:
         server_port: ${{secrets.MAIL_SERVER_PORT}}
         username: ${{secrets.MAIL_USERNAME}}
         password: ${{secrets.MAIL_PASSWORD}}
-        secure: true
         subject: Github OWASP Scanning Action job result
         from: ${{secrets.MAIL_DEFAULT_FROM}}
         to:  ${{secrets.MAIL_SEND_OWASP_RESULT_TO}}
         body: Scanning job of ${{github.repository}} completed successfully!
-        attachments: zap_scan.zip
+        attachments: report_html.html
