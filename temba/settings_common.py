@@ -1287,7 +1287,7 @@ CHANNEL_TYPES = [
     "temba.channels.types.discord.DiscordType",
     "temba.channels.types.webchat.WebChatType",
     "temba.channels.types.rocketchat.RocketChatType",
-    "temba.channels.types.mgage.MGageType",
+    # "temba.channels.types.mgage.MGageType",
 ]
 
 # set of ISO-639-3 codes of languages to allow in addition to all ISO-639-1 languages
