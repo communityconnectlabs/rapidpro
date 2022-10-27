@@ -1,14 +1,15 @@
 from unittest.mock import patch
 
-from django.conf import settings
 from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from temba.orgs.models import Org
-from temba.tests import CRUDLTestMixin, MigrationTest, TembaTest, matchers, mock_mailroom
+from temba.contacts.models import Contact
+from temba.tests import CRUDLTestMixin, TembaTest, matchers, mock_mailroom
+from temba.utils.dates import datetime_to_timestamp
 
-from .models import Ticket, Ticketer, TicketEvent
+from .models import Ticket, TicketCount, Ticketer, TicketEvent, Topic
+from .tasks import squash_ticketcounts
 from .types import reload_ticketer_types
 from .types.internal import InternalType
 from .types.mailgun import MailgunType
@@ -18,19 +19,19 @@ from .types.zendesk import ZendeskType
 class TicketTest(TembaTest):
     def test_model(self):
         ticketer = Ticketer.create(self.org, self.user, MailgunType.slug, "Email (bob@acme.com)", {})
-
+        topic = Topic.get_or_create(self.org, self.admin, "Sales")
         contact = self.create_contact("Bob", urns=["twitter:bobby"])
 
         ticket = Ticket.objects.create(
             org=self.org,
             ticketer=ticketer,
             contact=contact,
-            subject="Need help",
+            topic=self.org.default_ticket_topic,
             body="Where are my cookies?",
             status="O",
         )
 
-        self.assertEqual(f"Ticket[uuid={ticket.uuid}, subject=Need help]", str(ticket))
+        self.assertEqual(f"Ticket[uuid={ticket.uuid}, topic=General]", str(ticket))
 
         # test bulk assignment
         with patch("temba.mailroom.client.MailroomClient.ticket_assign") as mock_assign:
@@ -47,16 +48,22 @@ class TicketTest(TembaTest):
         mock_assign.reset_mock()
 
         # test bulk adding a note
-        with patch("temba.mailroom.client.MailroomClient.ticket_note") as mock_note:
-            Ticket.bulk_note(self.org, self.admin, [ticket], "please handle")
+        with patch("temba.mailroom.client.MailroomClient.ticket_add_note") as mock_add_note:
+            Ticket.bulk_add_note(self.org, self.admin, [ticket], "please handle")
 
-        mock_note.assert_called_once_with(self.org.id, self.admin.id, [ticket.id], "please handle")
+        mock_add_note.assert_called_once_with(self.org.id, self.admin.id, [ticket.id], "please handle")
+
+        # test bulk changing topic
+        with patch("temba.mailroom.client.MailroomClient.ticket_change_topic") as mock_change_topic:
+            Ticket.bulk_change_topic(self.org, self.admin, [ticket], topic)
+
+        mock_change_topic.assert_called_once_with(self.org.id, self.admin.id, [ticket.id], topic.id)
 
         # test bulk closing
         with patch("temba.mailroom.client.MailroomClient.ticket_close") as mock_close:
-            Ticket.bulk_close(self.org, self.admin, [ticket])
+            Ticket.bulk_close(self.org, self.admin, [ticket], force=True)
 
-        mock_close.assert_called_once_with(self.org.id, self.admin.id, [ticket.id])
+        mock_close.assert_called_once_with(self.org.id, self.admin.id, [ticket.id], force=True)
 
         # test bulk re-opening
         with patch("temba.mailroom.client.MailroomClient.ticket_reopen") as mock_reopen:
@@ -67,6 +74,117 @@ class TicketTest(TembaTest):
     def test_allowed_assignees(self):
         self.assertEqual({self.admin, self.editor, self.agent}, set(Ticket.get_allowed_assignees(self.org)))
         self.assertEqual({self.admin2}, set(Ticket.get_allowed_assignees(self.org2)))
+
+    @mock_mailroom
+    def test_counts(self, mr_mocks):
+        ticketer = Ticketer.create(self.org, self.admin, MailgunType.slug, "bob@acme.com", {})
+        contact1 = self.create_contact("Bob", urns=["twitter:bobby"])
+        contact2 = self.create_contact("Jim", urns=["twitter:jimmy"])
+        org2_ticketer = Ticketer.create(self.org2, self.admin2, MailgunType.slug, "jim@acme.com", {})
+        org2_contact = self.create_contact("Bob", urns=["twitter:bobby"], org=self.org2)
+
+        t1 = self.create_ticket(ticketer, contact1, "Test 1")
+        t2 = self.create_ticket(ticketer, contact2, "Test 2")
+        t3 = self.create_ticket(ticketer, contact1, "Test 3")
+        t4 = self.create_ticket(ticketer, contact2, "Test 4")
+        t5 = self.create_ticket(ticketer, contact1, "Test 5")
+        t6 = self.create_ticket(org2_ticketer, org2_contact, "Test 6")
+
+        def assert_counts(org, *, open: dict, closed: dict, contacts: dict):
+            assignees = [None] + list(Ticket.get_allowed_assignees(org))
+
+            self.assertEqual(open, TicketCount.get_by_assignees(org, assignees, Ticket.STATUS_OPEN))
+            self.assertEqual(closed, TicketCount.get_by_assignees(org, assignees, Ticket.STATUS_CLOSED))
+
+            self.assertEqual(sum(open.values()), TicketCount.get_all(org, Ticket.STATUS_OPEN))
+            self.assertEqual(sum(closed.values()), TicketCount.get_all(org, Ticket.STATUS_CLOSED))
+
+            self.assertEqual(contacts, {c: Contact.objects.get(id=c.id).ticket_count for c in contacts})
+
+        # t1:O/None t2:O/None t3:O/None t4:O/None t5:O/None t6:O/None
+        assert_counts(
+            self.org,
+            open={None: 5, self.agent: 0, self.editor: 0, self.admin: 0},
+            closed={None: 0, self.agent: 0, self.editor: 0, self.admin: 0},
+            contacts={contact1: 3, contact2: 2},
+        )
+        assert_counts(
+            self.org2, open={None: 1, self.admin2: 0}, closed={None: 0, self.admin2: 0}, contacts={org2_contact: 1}
+        )
+
+        Ticket.bulk_assign(self.org, self.admin, [t1, t2], assignee=self.agent)
+        Ticket.bulk_assign(self.org, self.admin, [t3], assignee=self.editor)
+        Ticket.bulk_assign(self.org2, self.admin2, [t6], assignee=self.admin2)
+
+        # t1:O/Agent t2:O/Agent t3:O/Editor t4:O/None t5:O/None t6:O/Admin2
+        assert_counts(
+            self.org,
+            open={None: 2, self.agent: 2, self.editor: 1, self.admin: 0},
+            closed={None: 0, self.agent: 0, self.editor: 0, self.admin: 0},
+            contacts={contact1: 3, contact2: 2},
+        )
+        assert_counts(
+            self.org2, open={None: 0, self.admin2: 1}, closed={None: 0, self.admin2: 0}, contacts={org2_contact: 1}
+        )
+
+        Ticket.bulk_close(self.org, self.admin, [t1, t4])
+        Ticket.bulk_close(self.org2, self.admin2, [t6])
+
+        # t1:C/Agent t2:O/Agent t3:O/Editor t4:C/None t5:O/None t6:C/Admin2
+        assert_counts(
+            self.org,
+            open={None: 1, self.agent: 1, self.editor: 1, self.admin: 0},
+            closed={None: 1, self.agent: 1, self.editor: 0, self.admin: 0},
+            contacts={contact1: 2, contact2: 1},
+        )
+        assert_counts(
+            self.org2, open={None: 0, self.admin2: 0}, closed={None: 0, self.admin2: 1}, contacts={org2_contact: 0}
+        )
+
+        Ticket.bulk_assign(self.org, self.admin, [t1, t5], assignee=self.admin)
+
+        # t1:C/Admin t2:O/Agent t3:O/Editor t4:C/None t5:O/Admin t6:C/Admin2
+        assert_counts(
+            self.org,
+            open={None: 0, self.agent: 1, self.editor: 1, self.admin: 1},
+            closed={None: 1, self.agent: 0, self.editor: 0, self.admin: 1},
+            contacts={contact1: 2, contact2: 1},
+        )
+
+        Ticket.bulk_reopen(self.org, self.admin, [t4])
+
+        # t1:C/Admin t2:O/Agent t3:O/Editor t4:O/None t5:O/Admin t6:C/Admin2
+        assert_counts(
+            self.org,
+            open={None: 1, self.agent: 1, self.editor: 1, self.admin: 1},
+            closed={None: 0, self.agent: 0, self.editor: 0, self.admin: 1},
+            contacts={contact1: 2, contact2: 2},
+        )
+
+        squash_ticketcounts()  # shouldn't change counts
+
+        assert_counts(
+            self.org,
+            open={None: 1, self.agent: 1, self.editor: 1, self.admin: 1},
+            closed={None: 0, self.agent: 0, self.editor: 0, self.admin: 1},
+            contacts={contact1: 2, contact2: 2},
+        )
+
+        TicketEvent.objects.all().delete()
+        t1.delete()
+        t2.delete()
+        t6.delete()
+
+        # t3:O/Editor t4:O/None t5:O/Admin
+        assert_counts(
+            self.org,
+            open={None: 1, self.agent: 0, self.editor: 1, self.admin: 1},
+            closed={None: 0, self.agent: 0, self.editor: 0, self.admin: 0},
+            contacts={contact1: 2, contact2: 1},
+        )
+        assert_counts(
+            self.org2, open={None: 0, self.admin2: 0}, closed={None: 0, self.admin2: 0}, contacts={org2_contact: 0}
+        )
 
 
 class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
@@ -81,9 +199,64 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
 
     def test_list(self):
         list_url = reverse("tickets.ticket_list")
+        ticket = self.create_ticket(self.internal, self.contact, "Test 1", assignee=self.admin)
 
         # just a placeholder view for frontend components
         self.assertListFetch(list_url, allow_viewers=False, allow_editors=True, allow_agents=True, context_objects=[])
+
+        # can hit this page with a uuid
+        # TODO: work out reverse for deep link
+        # deep_link = reverse(
+        #    "tickets.ticket_list", kwargs={"folder": "all", "status": "open", "uuid": str(ticket.uuid)}
+        # )
+
+        deep_link = f"{list_url}all/open/{str(ticket.uuid)}/"
+        response = self.assertListFetch(
+            deep_link, allow_viewers=False, allow_editors=True, allow_agents=True, context_objects=[]
+        )
+
+        # our ticket exists on the first page, so it'll get flagged to be focused
+        self.assertEqual(str(ticket.uuid), response.context["nextUUID"])
+
+        # deep link into a page that doesn't have our ticket
+        deep_link = f"{list_url}all/closed/{str(ticket.uuid)}/"
+        self.login(self.admin)
+        response = self.client.get(deep_link)
+
+        # now our ticket is listed as the uuid and we were redirected to all/open
+        self.assertEqual("all", response.context["folder"])
+        self.assertEqual("open", response.context["status"])
+        self.assertEqual(str(ticket.uuid), response.context["uuid"])
+
+        # fetch with spa flag
+        response = self.client.get(
+            list_url,
+            content_type="application/json",
+            HTTP_TEMBA_SPA="1",
+            HTTP_TEMBA_REFERER_PATH=f"/tickets/mine/open/{ticket.uuid}",
+        )
+        self.assertEqual("spa.html", response.context["base_template"])
+        self.assertEqual(("tickets", "mine", "open", str(ticket.uuid)), response.context["temba_referer"])
+
+    def test_menu(self):
+        menu_url = reverse("tickets.ticket_menu")
+
+        self.create_ticket(self.internal, self.contact, "Test 1", assignee=self.admin)
+        self.create_ticket(self.internal, self.contact, "Test 2", assignee=self.admin)
+        self.create_ticket(self.internal, self.contact, "Test 3", assignee=None)
+        self.create_ticket(self.internal, self.contact, "Test 4", closed_on=timezone.now())
+
+        response = self.assertListFetch(menu_url, allow_viewers=False, allow_editors=True, allow_agents=True)
+
+        menu = response.json()["results"]
+        self.assertEqual(
+            [
+                {"id": "mine", "name": "My Tickets", "icon": "coffee", "count": 2},
+                {"id": "unassigned", "name": "Unassigned", "icon": "mail", "count": 1},
+                {"id": "all", "name": "All", "icon": "archive", "count": 3},
+            ],
+            menu,
+        )
 
     @mock_mailroom
     def test_folder(self, mr_mocks):
@@ -95,10 +268,10 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
         self.create_contact("Mary No tickets", phone="126", last_seen_on=timezone.now())
         self.create_contact("Mr Other Org", phone="126", last_seen_on=timezone.now(), org=self.org2)
 
-        open_url = reverse("tickets.ticket_folder", kwargs={"folder": "open"})
-        closed_url = reverse("tickets.ticket_folder", kwargs={"folder": "closed"})
-        mine_url = reverse("tickets.ticket_folder", kwargs={"folder": "mine"})
-        unassigned_url = reverse("tickets.ticket_folder", kwargs={"folder": "unassigned"})
+        open_url = reverse("tickets.ticket_folder", kwargs={"folder": "all", "status": "open"})
+        closed_url = reverse("tickets.ticket_folder", kwargs={"folder": "all", "status": "closed"})
+        mine_url = reverse("tickets.ticket_folder", kwargs={"folder": "mine", "status": "open"})
+        unassigned_url = reverse("tickets.ticket_folder", kwargs={"folder": "unassigned", "status": "open"})
 
         def assert_tickets(resp, tickets: list):
             actual_tickets = [t["ticket"]["uuid"] for t in resp.json()["results"]]
@@ -147,11 +320,14 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
                         "type": "I",
                         "created_on": matchers.ISODate(),
                         "sender": None,
+                        "attachments": [],
                     },
                     "ticket": {
                         "uuid": str(contact2.tickets.filter(status="O").first().uuid),
                         "assignee": None,
-                        "subject": "Question 3",
+                        "topic": {"uuid": matchers.UUID4String(), "name": "General"},
+                        "body": "Question 3",
+                        "last_activity_on": matchers.ISODate(),
                         "closed_on": None,
                     },
                 },
@@ -165,11 +341,14 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
                         "type": "I",
                         "created_on": matchers.ISODate(),
                         "sender": {"id": self.admin.id, "email": "Administrator@nyaruka.com"},
+                        "attachments": [],
                     },
                     "ticket": {
                         "uuid": str(joes_open_tickets[0].uuid),
                         "assignee": None,
-                        "subject": "Question 2",
+                        "topic": {"uuid": matchers.UUID4String(), "name": "General"},
+                        "body": "Question 2",
+                        "last_activity_on": matchers.ISODate(),
                         "closed_on": None,
                     },
                 },
@@ -183,6 +362,7 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
                         "type": "I",
                         "created_on": matchers.ISODate(),
                         "sender": {"id": self.admin.id, "email": "Administrator@nyaruka.com"},
+                        "attachments": [],
                     },
                     "ticket": {
                         "uuid": str(joes_open_tickets[1].uuid),
@@ -192,13 +372,22 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
                             "last_name": "",
                             "email": "Administrator@nyaruka.com",
                         },
-                        "subject": "Question 1",
+                        "topic": {"uuid": matchers.UUID4String(), "name": "General"},
+                        "body": "Question 1",
+                        "last_activity_on": matchers.ISODate(),
                         "closed_on": None,
                     },
                 },
             ]
         }
         self.assertEqual(expected_json, response.json())
+
+        # test before and after windowing
+        response = self.client.get(f"{open_url}?before={datetime_to_timestamp(c2_t1.last_activity_on)}")
+        self.assertEqual(2, len(response.json()["results"]))
+
+        response = self.client.get(f"{open_url}?after={datetime_to_timestamp(c1_t2.last_activity_on)}")
+        self.assertEqual(1, len(response.json()["results"]))
 
         # the two unassigned tickets
         response = self.client.get(unassigned_url)
@@ -211,6 +400,10 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
         # fetching closed folder returns all closed tickets
         response = self.client.get(closed_url)
         assert_tickets(response, [c3_t2, c3_t1, c2_t2])
+
+        # deep linking to a single ticket returns just that ticket
+        response = self.client.get(f"{open_url}{str(c1_t1.uuid)}")
+        assert_tickets(response, [c1_t1])
 
         # make sure when paging we get a next url
         with patch("temba.tickets.views.TicketCRUDL.Folder.paginate_by", 1):
@@ -233,7 +426,7 @@ class TicketCRUDLTest(TembaTest, CRUDLTestMixin):
 
         self.assertUpdateSubmit(update_url, {"note": "I have a bad feeling about this."}, success_status=200)
 
-        self.assertEqual(1, ticket.events.filter(event_type=TicketEvent.TYPE_NOTE).count())
+        self.assertEqual(1, ticket.events.filter(event_type=TicketEvent.TYPE_NOTE_ADDED).count())
 
     @mock_mailroom
     def test_assign(self, mr_mocks):
@@ -298,7 +491,7 @@ class TicketerTest(TembaTest):
 
         contact = self.create_contact("Bob", urns=["twitter:bobby"])
 
-        ticket = self.create_ticket(ticketer, contact, "Need help", body="Where are my cookies?")
+        ticket = self.create_ticket(ticketer, contact, "Where are my cookies?")
 
         # release it
         ticketer.release(self.user)
@@ -307,7 +500,7 @@ class TicketerTest(TembaTest):
         self.assertEqual(self.user, ticketer.modified_by)
 
         # will have asked mailroom to close the ticket
-        mock_ticket_close.assert_called_once_with(self.org.id, self.user.id, [ticket.id])
+        mock_ticket_close.assert_called_once_with(self.org.id, self.user.id, [ticket.id], force=True)
 
         # reactivate
         ticketer.is_active = True
@@ -332,13 +525,15 @@ class TicketerTest(TembaTest):
 
 class TicketerCRUDLTest(TembaTest, CRUDLTestMixin):
     def test_org_home(self):
-        Ticketer.create(self.org, self.user, MailgunType.slug, "Email (bob@acme.com)", {})
+        ticketer = Ticketer.create(self.org, self.user, MailgunType.slug, "Email (bob@acme.com)", {})
 
         self.login(self.admin)
         response = self.client.get(reverse("orgs.org_home"))
 
         self.assertContains(response, "Email (bob@acme.com)")
         self.assertContains(response, "ticketer/delete/")
+        self.assertContains(response, "HTTP Log")
+        self.assertContains(response, reverse("request_logs.httplog_ticketer", args=[ticketer.uuid]))
 
     def test_connect(self):
         connect_url = reverse("tickets.ticketer_connect")
@@ -381,12 +576,13 @@ class TicketerCRUDLTest(TembaTest, CRUDLTestMixin):
         ticketer.save()
 
         # add a dependency and try again
-        flow = self.create_flow()
+        flow = self.create_flow("Color Flow")
         flow.ticketer_dependencies.add(ticketer)
         self.assertFalse(flow.has_issues)
 
         response = self.assertDeleteFetch(delete_url)
-        self.assertContains(response, "is used by the following flows which may not work as expected")
+        self.assertContains(response, "is used by the following items but can still be deleted:")
+        self.assertContains(response, "Color Flow")
 
         self.assertDeleteSubmit(delete_url, object_deactivated=ticketer, success_status=200)
 
@@ -395,31 +591,21 @@ class TicketerCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertNotIn(ticketer, flow.ticketer_dependencies.all())
 
 
-class CreateInternalTicketersTest(MigrationTest):
-    app = "tickets"
-    migrate_from = "0011_auto_20210701_1719"
-    migrate_to = "0012_create_internal_ticketers"
+class TopicTest(TembaTest):
+    def test_is_valid_name(self):
+        self.assertTrue(Topic.is_valid_name("Sales"))
+        self.assertTrue(Topic.is_valid_name("Support"))
+        self.assertFalse(Topic.is_valid_name(""))
+        self.assertFalse(Topic.is_valid_name("   "))
+        self.assertFalse(Topic.is_valid_name("  x  "))
+        self.assertFalse(Topic.is_valid_name("!Sales"))
+        self.assertFalse(Topic.is_valid_name("x" * 65))  # too long
 
-    def setUpBeforeMigration(self, apps):
-        Ticketer.objects.all().delete()
-        Org.objects.all().update(is_active=False)
+    def test_model(self):
+        topic1 = Topic.get_or_create(self.org, self.admin, "Sales")
+        topic2 = Topic.get_or_create(self.org, self.admin, "Support")
 
-        # create org with no internal ticketer
-        self.org3 = Org.objects.create(name="Org 3", created_by=self.superuser, modified_by=self.superuser)
+        self.assertEqual(topic1, Topic.get_or_create(self.org, self.admin, "Sales"))
+        self.assertEqual(topic2, Topic.get_or_create(self.org, self.admin, "SUPPORT"))
 
-        # create org with old internal ticketer (wrong name) and other external ticketer
-        self.org4 = Org.objects.create(name="Org 4", created_by=self.superuser, modified_by=self.superuser)
-        Ticketer.create(self.org4, self.admin, "internal", "Internal", {})
-        Ticketer.create(self.org4, self.admin, "mailgun", "jim@nyaruka.com", {})
-
-        # create org with new internal ticketer
-        self.org5 = Org.objects.create(name="Org 5", created_by=self.superuser, modified_by=self.superuser)
-        Ticketer.create_internal_ticketer(self.org5, settings.BRANDING[settings.DEFAULT_BRAND])
-
-    def test_migration(self):
-        self.assertEqual(4, Ticketer.objects.count())
-
-        self.assertEqual("jim@nyaruka.com", Ticketer.objects.get(ticketer_type="mailgun").name)  # unchanged
-
-        for ticketer in Ticketer.objects.filter(ticketer_type="internal"):
-            self.assertEqual("RapidPro Tickets", ticketer.name)
+        self.assertEqual(f"Topic[uuid={topic1.uuid}, topic=Sales]", str(topic1))

@@ -7,15 +7,16 @@ from smartmin.views import (
     SmartFormView,
     SmartListView,
     SmartReadView,
+    SmartTemplateView,
     SmartUpdateView,
 )
 
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.core.exceptions import ValidationError
 from django.forms import Form
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect, Http404
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, Http404
+from django.http.response import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import is_safe_url, urlquote_plus
@@ -26,7 +27,8 @@ from temba.channels.models import Channel
 from temba.contacts.models import ContactGroup
 from temba.contacts.search.omnibox import omnibox_deserialize, omnibox_query, omnibox_results_to_dict
 from temba.formax import FormaxMixin
-from temba.orgs.views import DependencyDeleteModal, ModalMixin, OrgObjPermsMixin, OrgPermsMixin
+from temba.orgs.models import Org
+from temba.orgs.views import DependencyDeleteModal, DependencyUsagesModal, ModalMixin, OrgObjPermsMixin, OrgPermsMixin
 from temba.utils import analytics, json, on_transaction_commit
 from temba.utils.fields import (
     CheckboxWidget,
@@ -34,20 +36,21 @@ from temba.utils.fields import (
     InputWidget,
     JSONField,
     OmniboxChoice,
+    OmniboxField,
     SelectMultipleWidget,
     SelectWidget,
     TembaChoiceField,
 )
 from temba.utils.models import patch_queryset_count
-from temba.utils.views import BulkActionMixin, ComponentFormMixin
+from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
-from .models import INITIALIZING, QUEUED, Broadcast, ExportMessagesTask, Label, Msg, Schedule, SystemLabel
+from .models import Broadcast, ExportMessagesTask, Label, Msg, Schedule, SystemLabel
 from .tasks import export_messages_task
 
 
 class SendMessageForm(Form):
 
-    omnibox = JSONField(
+    omnibox = OmniboxField(
         label=_("Recipients"),
         required=False,
         help_text=_("The contacts to send the message to"),
@@ -76,36 +79,26 @@ class SendMessageForm(Form):
     )
     step_node = forms.CharField(widget=forms.HiddenInput, max_length=36, required=False)
 
-    def __init__(self, user, *args, **kwargs):
+    def __init__(self, org, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.user = user
 
-    def is_valid(self):
-        valid = super().is_valid()
-        if valid:
-            if ("step_node" not in self.data or not self.data["step_node"]) and (
-                "omnibox" not in self.data or len(self.data["omnibox"].strip()) == 0
-            ):
-                self.errors["__all__"] = self.error_class([str(_("At least one recipient is required"))])
-                return False
-        return valid
+        self.org = org
+        self.fields["omnibox"].default_country = org.default_country_code
 
     def clean(self):
         cleaned = super().clean()
-        org = self.user.get_org()
 
-        if org.is_suspended:
-            raise ValidationError(
-                _("Sorry, your workspace is currently suspended. To enable sending messages, please contact support.")
-            )
-        if org.is_flagged:
-            raise ValidationError(
-                _("Sorry, your workspace is currently flagged. To enable sending messages, please contact support.")
-            )
+        if self.is_valid():
+            omnibox = cleaned.get("omnibox")
+            step_node = cleaned.get("step_node")
+
+            if not step_node and not omnibox:
+                self.add_error("omnibox", _("At least one recipient is required."))
+
         return cleaned
 
 
-class InboxView(OrgPermsMixin, BulkActionMixin, SmartListView):
+class InboxView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
     """
     Base class for inbox views with message folders and labels listed by the side
     """
@@ -199,7 +192,6 @@ class InboxView(OrgPermsMixin, BulkActionMixin, SmartListView):
         context["has_messages"] = (
             any(counts.values()) or Archive.objects.filter(org=org, archive_type=Archive.TYPE_MSG).exists()
         )
-        context["send_form"] = SendMessageForm(self.request.user)
         context["current_label"] = label
         context["export_url"] = self.derive_export_url()
         context["show_channel_logs"] = self.show_channel_logs
@@ -265,7 +257,7 @@ class BroadcastCRUDL(SmartCRUDL):
     actions = ("send", "update", "schedule_read", "schedule_list")
     model = Broadcast
 
-    class ScheduleRead(FormaxMixin, OrgObjPermsMixin, SmartReadView):
+    class ScheduleRead(SpaMixin, FormaxMixin, OrgObjPermsMixin, SmartReadView):
         title = _("Schedule Message")
 
         def derive_title(self):
@@ -325,19 +317,24 @@ class BroadcastCRUDL(SmartCRUDL):
         fields = ("contacts", "msgs", "sent", "status")
         search_fields = ("text__icontains", "contacts__urns__path__icontains")
         template_name = "msgs/broadcast_schedule_list.haml"
-        default_order = ("schedule__status", "schedule__next_fire", "-created_on")
         system_label = SystemLabel.TYPE_SCHEDULED
 
         def get_queryset(self, **kwargs):
-            qs = super().get_queryset(**kwargs)
-            return qs.select_related("org", "schedule").order_by("-created_on")
+            return super().get_queryset(**kwargs).select_related("org", "schedule")
 
     class Send(OrgPermsMixin, ModalMixin, SmartFormView):
         title = _("Send Message")
         form_class = SendMessageForm
         fields = ("omnibox", "text", "schedule", "step_node")
         success_url = "@msgs.msg_inbox"
-        submit_button_name = _("Send Message")
+        submit_button_name = _("Send")
+
+        blockers = {
+            "no_send_channel": _(
+                'To get started you need to <a href="%(link)s">add a channel</a> to your workspace which will allow '
+                "you to send messages to your contacts."
+            ),
+        }
 
         def derive_initial(self):
             initial = super().derive_initial()
@@ -368,27 +365,35 @@ class BroadcastCRUDL(SmartCRUDL):
             else:
                 return super().derive_fields()
 
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
+            context["blockers"] = self.get_blockers(self.request.org)
             context["recipient_count"] = int(self.request.GET.get("count", 0))
             return context
 
-        def pre_process(self, *args, **kwargs):
-            if self.request.method == "POST":
-                response = super().pre_process(*args, **kwargs)
-                org = self.request.user.get_org()
-                # can this org send to any URN schemes?
-                if not org.get_schemes(Channel.ROLE_SEND):
-                    return HttpResponseBadRequest(_("You must add a phone number before sending messages"))
-                return response
+        def get_blockers(self, org) -> list:
+            blockers = []
+
+            if org.is_suspended:
+                blockers.append(Org.BLOCKER_SUSPENDED)
+            elif org.is_flagged:
+                blockers.append(Org.BLOCKER_FLAGGED)
+            if not org.get_send_channel():
+                blockers.append(self.blockers["no_send_channel"] % {"link": reverse("channels.channel_claim")})
+
+            return blockers
 
         def form_valid(self, form):
-            self.form = form
             user = self.request.user
             org = user.get_org()
 
-            step_uuid = self.form.cleaned_data.get("step_node", None)
-            text = self.form.cleaned_data["text"]
+            step_uuid = form.cleaned_data.get("step_node", None)
+            text = form.cleaned_data["text"]
             has_schedule = False
 
             if step_uuid:
@@ -399,8 +404,8 @@ class BroadcastCRUDL(SmartCRUDL):
                 send_to_flow_node.delay(org.pk, user.pk, text, **get_params)
             else:
 
-                omnibox = omnibox_deserialize(org, self.form.cleaned_data["omnibox"])
-                has_schedule = self.form.cleaned_data["schedule"]
+                omnibox = omnibox_deserialize(org, form.cleaned_data["omnibox"])
+                has_schedule = form.cleaned_data["schedule"]
 
                 groups = list(omnibox["groups"])
                 contacts = list(omnibox["contacts"])
@@ -415,7 +420,7 @@ class BroadcastCRUDL(SmartCRUDL):
                     contacts=contacts,
                     urns=urns,
                     schedule=schedule,
-                    status=QUEUED,
+                    status=Msg.STATUS_QUEUED,
                     template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
                 )
 
@@ -432,7 +437,7 @@ class BroadcastCRUDL(SmartCRUDL):
             if "HTTP_X_PJAX" in self.request.META:
                 success_url = "hide"
                 if has_schedule:
-                    success_url = reverse("msgs.broadcast_schedule_read", args=[broadcast.pk])
+                    success_url = reverse("msgs.broadcast_schedule_read", args=[broadcast.id])
 
                 response = self.render_to_response(self.get_context_data(success_url=success_url))
                 response["Temba-Success"] = success_url
@@ -443,11 +448,6 @@ class BroadcastCRUDL(SmartCRUDL):
         def post_save(self, obj):
             on_transaction_commit(lambda: obj.send_async())
             return obj
-
-        def get_form_kwargs(self):
-            kwargs = super().get_form_kwargs()
-            kwargs["user"] = self.request.user
-            return kwargs
 
 
 class TestMessageForm(forms.Form):
@@ -520,7 +520,52 @@ class ExportForm(Form):
 
 class MsgCRUDL(SmartCRUDL):
     model = Msg
-    actions = ("inbox", "flow", "archived", "outbox", "sent", "failed", "filter", "export", "flow_voice", "sent_voice")
+    actions = ("inbox", "flow", "archived", "menu", "outbox", "sent", "failed", "filter", "export", "flow_voice", "sent_voice")
+
+    class Menu(OrgPermsMixin, SmartTemplateView):  # pragma: no cover
+        def render_to_response(self, context, **response_kwargs):
+            org = self.request.user.get_org()
+            counts = SystemLabel.get_counts(org)
+
+            menu = [
+                dict(
+                    id="inbox", count=counts[SystemLabel.TYPE_INBOX], name=_("Inbox"), href=reverse("msgs.msg_inbox")
+                ),
+                dict(id="flow", count=counts[SystemLabel.TYPE_FLOWS], name=_("Flows"), href=reverse("msgs.msg_flow")),
+                dict(
+                    id="archived",
+                    count=counts[SystemLabel.TYPE_ARCHIVED],
+                    name=_("Archived"),
+                    href=reverse("msgs.msg_archived"),
+                ),
+                dict(
+                    id="outbox",
+                    count=counts[SystemLabel.TYPE_OUTBOX],
+                    name=_("Outbox"),
+                    href=reverse("msgs.msg_outbox"),
+                ),
+                dict(id="sent", count=counts[SystemLabel.TYPE_SENT], name=_("Sent"), href=reverse("msgs.msg_sent")),
+                dict(
+                    id="calls",
+                    count=counts[SystemLabel.TYPE_CALLS],
+                    name=_("Calls"),
+                    href=reverse("channels.channelevent_calls"),
+                ),
+                dict(
+                    id="schedules",
+                    count=counts[SystemLabel.TYPE_SCHEDULED],
+                    name=_("Schedules"),
+                    href=reverse("msgs.broadcast_schedule_list"),
+                ),
+                dict(
+                    id="failed",
+                    count=counts[SystemLabel.TYPE_FAILED],
+                    name=_("Failed"),
+                    href=reverse("msgs.msg_failed"),
+                ),
+            ]
+
+            return JsonResponse({"results": menu})
 
     class Export(ModalMixin, OrgPermsMixin, SmartFormView):
 
@@ -587,7 +632,7 @@ class MsgCRUDL(SmartCRUDL):
 
                 on_transaction_commit(lambda: export_messages_task.delay(export.id))
 
-                if not getattr(settings, "CELERY_ALWAYS_EAGER", False):  # pragma: needs cover
+                if not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):  # pragma: needs cover
                     messages.info(
                         self.request,
                         _("We are preparing your export. We will e-mail you at %s when " "it is ready.")
@@ -675,7 +720,9 @@ class MsgCRUDL(SmartCRUDL):
             # stuff in any pending broadcasts
             context["pending_broadcasts"] = (
                 Broadcast.objects.filter(
-                    org=self.request.user.get_org(), status__in=[QUEUED, INITIALIZING], schedule=None
+                    org=self.request.user.get_org(),
+                    status__in=[Msg.STATUS_QUEUED, Msg.STATUS_INITIALIZING],
+                    schedule=None,
                 )
                 .select_related("org")
                 .prefetch_related("groups", "contacts", "urns")
@@ -780,6 +827,15 @@ class MsgCRUDL(SmartCRUDL):
                     )
                 )
 
+            links.append(
+                dict(
+                    id="label-usages",
+                    title=_("Usages"),
+                    modax=_("Usages"),
+                    href=reverse("msgs.label_usages", args=[label.uuid]),
+                )
+            )
+
             if label.is_folder():
                 if self.has_org_perm("msgs.label_delete_folder"):
                     links.append(
@@ -835,13 +891,12 @@ class BaseLabelForm(forms.ModelForm):
         if Label.all_objects.filter(org=self.org, name__iexact=name, is_active=True).exclude(pk=existing_id).exists():
             raise forms.ValidationError(_("Name must be unique"))
 
-        labels_count = Label.all_objects.filter(org=self.org, is_active=True).count()
-        if labels_count >= Label.MAX_ORG_LABELS:
+        count = Label.label_objects.filter(org=self.org, is_active=True).count()
+        if count >= self.org.get_limit(Org.LIMIT_LABELS):
             raise forms.ValidationError(
                 _(
-                    "This org has %(count)d labels and the limit is %(limit)d. "
-                    "You must delete existing ones before you can "
-                    "create new ones." % dict(count=labels_count, limit=Label.MAX_ORG_LABELS)
+                    "This workspace has %d labels and the limit is %s. You must delete existing ones before you can "
+                    "create new ones." % (count, self.org.get_limit(Org.LIMIT_LABELS))
                 )
             )
 
@@ -888,7 +943,7 @@ class FolderForm(BaseLabelForm):
 
 class LabelCRUDL(SmartCRUDL):
     model = Label
-    actions = ("create", "create_folder", "update", "delete", "delete_folder", "list")
+    actions = ("create", "create_folder", "update", "usages", "delete", "delete_folder", "list")
 
     class List(OrgPermsMixin, SmartListView):
         paginate_by = None
@@ -961,6 +1016,9 @@ class LabelCRUDL(SmartCRUDL):
 
         def derive_fields(self):
             return ("name",) if self.get_object().is_folder() else ("name", "folder")
+
+    class Usages(DependencyUsagesModal):
+        permission = "msgs.label_read"
 
     class Delete(DependencyDeleteModal):
         cancel_url = "@msgs.msg_inbox"

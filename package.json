@@ -13,6 +13,7 @@
     "@greatnonprofits-nfp/temba-analytics": "1.1.1",
     "@greatnonprofits-nfp/temba-components": "0.13.8",
     "@tailwindcss/ui": "0.2.2",
+    "colorette": "1.2.2",
     "fa-icons": "0.2.0",
     "is-core-module": "2.4.0",
     "less": "2.7.1",

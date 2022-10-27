@@ -22,14 +22,14 @@ from temba.api.models import Resthook
 from temba.archives.models import Archive
 from temba.campaigns.models import Campaign, CampaignEvent
 from temba.classifiers.models import Classifier
-from temba.contacts.models import URN, ContactField, ContactGroup
+from temba.contacts.models import URN, Contact, ContactField, ContactGroup
 from temba.globals.models import Global
 from temba.mailroom import FlowValidationException
 from temba.orgs.integrations.dtone import DTOneType
 from temba.templates.models import Template, TemplateTranslation
-from temba.tests import AnonymousOrg, CRUDLTestMixin, MigrationTest, MockResponse, TembaTest, matchers, mock_mailroom
+from temba.tests import AnonymousOrg, CRUDLTestMixin, MockResponse, TembaTest, matchers, mock_mailroom
 from temba.tests.engine import MockSessionWriter
-from temba.tests.s3 import MockS3Client
+from temba.tests.s3 import MockS3Client, jsonlgz_encode
 from temba.tickets.models import Ticketer
 from temba.triggers.models import Trigger
 from temba.utils import json
@@ -360,38 +360,42 @@ class FlowTest(TembaTest):
         self.assertNotContains(response, reverse("flows.flow_simulate", args=[flow.id]))
 
     def test_editor_feature_filters(self):
-        flow = self.get_flow("color")
+        flow = self.create_flow()
 
         self.login(self.admin)
 
-        def assert_features(features: list):
+        def assert_features(features: set):
             response = self.client.get(reverse("flows.flow_editor", args=[flow.uuid]))
-            self.assertEqual(features, json.loads(response.context["feature_filters"]))
+            self.assertEqual(features, set(json.loads(response.context["feature_filters"])))
 
-        # empty feature set
-        assert_features(["ticketer"])
+        # every org has a ticketer now...
+        assert_features({"ticketer"})
 
         # add a resthook
         Resthook.objects.create(org=flow.org, created_by=self.admin, modified_by=self.admin)
-        assert_features(["ticketer", "resthook"])
+        assert_features({"ticketer", "resthook"})
 
         # add an NLP classifier
         Classifier.objects.create(org=flow.org, config="", created_by=self.admin, modified_by=self.admin)
-        assert_features(["classifier", "ticketer", "resthook"])
+        assert_features({"classifier", "ticketer", "resthook"})
 
         # add a DT One integration
         DTOneType().connect(flow.org, self.admin, "login", "token")
-        assert_features(["airtime", "classifier", "ticketer", "resthook"])
+        assert_features({"airtime", "classifier", "ticketer", "resthook"})
 
         # change our channel to use a whatsapp scheme
         self.channel.schemes = [URN.WHATSAPP_SCHEME]
         self.channel.save()
-        assert_features(["whatsapp", "airtime", "classifier", "ticketer", "resthook"])
+        assert_features({"whatsapp", "airtime", "classifier", "ticketer", "resthook"})
 
         # change our channel to use a facebook scheme
         self.channel.schemes = [URN.FACEBOOK_SCHEME]
         self.channel.save()
-        assert_features(["facebook", "airtime", "classifier", "ticketer", "resthook"])
+        assert_features({"facebook", "airtime", "classifier", "ticketer", "resthook"})
+
+        self.setUpLocations()
+
+        assert_features({"facebook", "airtime", "classifier", "ticketer", "resthook", "locations"})
 
     def test_save_revision(self):
         self.login(self.admin)
@@ -1511,6 +1515,9 @@ class FlowTest(TembaTest):
         # global should have been created with blank value
         self.assertTrue(self.org.globals.filter(name="Org Name", key="org_name", value="").exists())
 
+        # topic should have been created too
+        self.assertTrue(self.org.topics.filter(name="Support").exists())
+
         # fields created with type if exists in export
         self.assertTrue(self.org.contactfields.filter(key="cat_breed", label="Cat Breed", value_type="T").exists())
         self.assertTrue(self.org.contactfields.filter(key="french_age", value_type="N").exists())
@@ -2524,6 +2531,7 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
     def test_broadcast(self, mr_mocks):
         contact = self.create_contact("Bob", phone="+593979099111")
         flow = self.create_flow()
+        ivr_flow = self.create_flow(flow_type=Flow.TYPE_VOICE)
 
         broadcast_url = reverse("flows.flow_broadcast", args=[flow.id])
 
@@ -2568,7 +2576,7 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertUpdateSubmit(
             broadcast_url,
             {"mode": "query", "query": "", "exclude_in_other": False, "exclude_reruns": False},
-            form_errors={"__all__": "Contact query is required."},
+            form_errors={"query": "This field is required."},
             object_unchanged=flow,
         )
 
@@ -2616,21 +2624,29 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertEqual(3, len(mr_mocks.queued_batch_tasks))
 
         # trying to start again should fail because there is already a pending start for this flow
-        self.assertUpdateSubmit(
-            broadcast_url,
-            {"mode": "select", "omnibox": selection},
-            form_errors={
-                "__all__": "This flow is already being started, please wait until that "
-                "process is complete before starting more contacts."
-            },
-            object_unchanged=flow,
+        response = self.requestView(broadcast_url, self.admin)
+        self.assertContains(response, "This flow is already being started - please wait")
+        self.assertNotContains(response, "Start Flow")
+
+        # clear that start and try to start the IVR flow
+        FlowStart.objects.all().delete()
+        ivr_bcast_url = reverse("flows.flow_broadcast", args=[ivr_flow.id])
+
+        # shouldn't be able to since we don't have a call channel
+        response = self.requestView(ivr_bcast_url, self.admin)
+        self.assertContains(
+            response, 'To get started you need to <a href="/channels/channel/claim/">add a voice channel</a>'
         )
+        self.assertNotContains(response, "Start Flow")
 
-        # shouldn't have a new flow start as validation failed
-        self.assertFalse(FlowStart.objects.filter(flow=flow).exclude(id__lte=start.id))
+        # if we release our send channel we also can't start a regular messaging flow
+        self.channel.release(self.admin)
 
-        # nothing queued
-        self.assertEqual(3, len(mr_mocks.queued_batch_tasks))
+        response = self.requestView(broadcast_url, self.admin)
+        self.assertContains(
+            response, 'To get started you need to <a href="/channels/channel/claim/">add a channel</a>'
+        )
+        self.assertNotContains(response, "Start Flow")
 
     @mock_mailroom
     def test_broadcast_background_flow(self, mr_mocks):
@@ -3075,14 +3091,6 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
         response = self.client.get(reverse("flows.flow_category_counts", args=[flow.uuid]))
 
         self.assertEqual(404, response.status_code)
-
-    def test_editor_next_redirection(self):
-        flow = self.get_flow("favorites_v13")
-
-        self.login(self.admin)
-
-        response = self.client.get(reverse("flows.flow_editor_next", args=[flow.uuid]))
-        self.assertRedirect(response, reverse("flows.flow_editor", args=[flow.uuid]))
 
     def test_write_protection(self):
         flow = self.get_flow("favorites_v13")
@@ -3770,7 +3778,14 @@ class ExportFlowResultsTest(TembaTest):
         self.contact3 = self.create_contact("Norbert", phone="+250788123456")
 
     def _export(
-        self, flow, responded_only=False, include_msgs=True, contact_fields=None, extra_urns=(), group_memberships=None
+        self,
+        flow,
+        responded_only=False,
+        include_msgs=True,
+        contact_fields=None,
+        extra_urns=(),
+        group_memberships=None,
+        has_results=True,
     ):
         """
         Exports results for the given flow and returns the generated workbook
@@ -3789,7 +3804,13 @@ class ExportFlowResultsTest(TembaTest):
         if group_memberships:
             form["group_memberships"] = [g.id for g in group_memberships]
 
-        response = self.client.post(reverse("flows.flow_export_results"), form)
+        readonly_models = {FlowRun, ContactGroup, ContactField}
+        if has_results:
+            readonly_models.add(Contact)
+
+        with self.mockReadOnly(assert_models=readonly_models):
+            response = self.client.post(reverse("flows.flow_export_results"), form)
+
         self.assertEqual(response.status_code, 302)
 
         task = ExportFlowResultsTask.objects.order_by("-id").first()
@@ -3938,6 +3959,12 @@ class ExportFlowResultsTest(TembaTest):
                 self.assertTrue("fetching runs from archives to export" in captured_logger.output[0])
                 self.assertTrue("found 5 runs in database to export" in captured_logger.output[1])
                 self.assertTrue("exported 5 in" in captured_logger.output[2])
+
+        # check that notifications were created
+        export = ExportFlowResultsTask.objects.order_by("id").last()
+        self.assertEqual(
+            1, self.admin.notifications.filter(notification_type="export:finished", results_export=export).count()
+        )
 
         tz = self.org.timezone
 
@@ -4755,8 +4782,8 @@ class ExportFlowResultsTest(TembaTest):
         )
 
         # test without msgs or unresponded
-        with self.assertNumQueries(38):
-            workbook = self._export(flow, include_msgs=False, responded_only=True)
+        with self.assertNumQueries(39):
+            workbook = self._export(flow, include_msgs=False, responded_only=True, has_results=False)
 
         tz = self.org.timezone
         sheet_runs = workbook.worksheets[0]
@@ -5275,11 +5302,10 @@ class ExportFlowResultsTest(TembaTest):
         old_archive_format["values"] = [old_archive_format["values"]]
 
         mock_s3 = MockS3Client()
-        mock_s3.put_jsonl(
-            "test-bucket",
-            "archive1.jsonl.gz",
-            [contact1_run.as_archive_json(), old_archive_format, contact2_other_flow.as_archive_json()],
+        body, md5, size = jsonlgz_encode(
+            [contact1_run.as_archive_json(), old_archive_format, contact2_other_flow.as_archive_json()]
         )
+        mock_s3.put_object("test-bucket", "archive1.jsonl.gz", body)
 
         contact1_run.release()
         contact2_run.release()
@@ -5296,9 +5322,10 @@ class ExportFlowResultsTest(TembaTest):
             period="D",
             build_time=5678,
         )
-        mock_s3.put_jsonl("test-bucket", "archive2.jsonl.gz", [contact2_run.as_archive_json()])
+        body, md5, size = jsonlgz_encode([contact2_run.as_archive_json()])
+        mock_s3.put_object("test-bucket", "archive2.jsonl.gz", body)
 
-        with patch("temba.archives.models.Archive.s3_client", return_value=mock_s3):
+        with patch("temba.utils.s3.client", return_value=mock_s3):
             workbook = self._export(flow)
 
         tz = self.org.timezone
@@ -5471,7 +5498,7 @@ class ExportFlowResultsTest(TembaTest):
 
         self.assertEqual(flow.get_run_stats()["total"], 0)
 
-        workbook = self._export(flow)
+        workbook = self._export(flow, has_results=False)
 
         self.assertEqual(len(workbook.worksheets), 1)
 
@@ -5758,6 +5785,23 @@ class FlowSessionCRUDLTest(TembaTest):
 
         response_json = json.loads(response.content)
         self.assertEqual("Temba", response_json["_metadata"]["org"])
+        self.assertEqual(session.uuid, response_json["uuid"])
+
+        # now try with an s3 session
+        mock_s3 = MockS3Client()
+        mock_s3.objects[("temba-sessions", "c/session.json")] = io.StringIO(json.dumps(session.output))
+
+        FlowSession.objects.filter(id=session.id).update(
+            output_url="https://temba-sessions.s3.aws.amazon.com/c/session.json",
+            output=None,
+        )
+
+        # fetch our contact history
+        with patch("temba.utils.s3.s3.client", return_value=mock_s3):
+            response = self.client.get(url)
+            self.assertEqual(200, response.status_code)
+            self.assertEqual("Temba", response_json["_metadata"]["org"])
+            self.assertEqual(session.uuid, response_json["uuid"])
 
 
 class FlowStartCRUDLTest(TembaTest, CRUDLTestMixin):
@@ -5917,42 +5961,3 @@ class FlowRevisionTest(TembaTest):
         trim_flow_revisions()
         self.assertEqual(2, FlowRevision.objects.filter(flow=clinic).count())
         self.assertEqual(31, FlowRevision.objects.filter(flow=color).count())
-
-
-class CleanupDependenciesTest(MigrationTest):
-    app = "flows"
-    migrate_from = "0252_auto_20210512_1757"
-    migrate_to = "0253_cleanup_dependencies"
-
-    def setUpBeforeMigration(self, apps):
-        def create_flow(name, is_active):
-            flow = self.create_flow(name)
-            flow.is_active = is_active
-            flow.save(update_fields=("is_active",))
-            return flow
-
-        # inactive flow with field dependency
-        field = self.create_field("age", "Age")
-        self.flow1 = create_flow("Flow 1", is_active=False)
-        self.flow1.field_dependencies.add(field)
-
-        # inactive flow with group dependency
-        group = self.create_group("Testers", contacts=[])
-        self.flow2 = create_flow("Flow 2", is_active=False)
-        self.flow2.group_dependencies.add(group)
-
-        # active flow with field and group dependencies
-        self.flow3 = create_flow("Flow 3", is_active=True)
-        self.flow3.field_dependencies.add(field)
-        self.flow3.group_dependencies.add(group)
-
-    def test_migration(self):
-        self.flow1.refresh_from_db()
-        self.assertFalse(self.flow1.field_dependencies.exists())
-
-        self.flow2.refresh_from_db()
-        self.assertFalse(self.flow2.group_dependencies.exists())
-
-        self.flow3.refresh_from_db()
-        self.assertEqual(1, self.flow3.field_dependencies.count())
-        self.assertEqual(1, self.flow3.group_dependencies.count())

@@ -10,7 +10,7 @@ from django.template.defaultfilters import slugify
 from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 
-from celery.task import task
+from celery import shared_task
 from django_redis import get_redis_connection
 from parse_rest.connection import register
 from parse_rest.datatypes import Object
@@ -29,36 +29,36 @@ from temba.utils.email import send_template_email
 from .models import CreditAlert, Invitation, Org, OrgActivity, TopUpCredits
 
 
-@task(track_started=True, name="send_invitation_email_task")
+@shared_task(track_started=True, name="send_invitation_email_task")
 def send_invitation_email_task(invitation_id):
     invitation = Invitation.objects.get(pk=invitation_id)
     invitation.send_email()
 
 
-@task(track_started=True, name="send_alert_email_task")
+@shared_task(track_started=True, name="send_alert_email_task")
 def send_alert_email_task(alert_id):
     alert = CreditAlert.objects.get(pk=alert_id)
     alert.send_email()
 
 
-@task(track_started=True, name="check_credits_task")
+@shared_task(track_started=True, name="check_credits_task")
 def check_credits_task():  # pragma: needs cover
     CreditAlert.check_org_credits()
 
 
-@task(track_started=True, name="check_topup_expiration_task")
+@shared_task(track_started=True, name="check_topup_expiration_task")
 def check_topup_expiration_task():
     CreditAlert.check_topup_expiration()
 
 
-@task(track_started=True, name="apply_topups_task")
+@shared_task(track_started=True, name="apply_topups_task")
 def apply_topups_task(org_id):
     org = Org.objects.get(id=org_id)
     org.apply_topups()
     org.trigger_send()
 
 
-@task(track_started=True, name="normalize_contact_tels_task")
+@shared_task(track_started=True, name="normalize_contact_tels_task")
 def normalize_contact_tels_task(org_id):
     org = Org.objects.get(id=org_id)
 
@@ -98,7 +98,7 @@ def resume_failed_tasks():
         export_messages_task.delay(msg_export.pk)
 
 
-@task(track_started=True, name="import_data_to_parse")
+@shared_task(track_started=True, name="import_data_to_parse")
 def import_data_to_parse(
     branding,
     user_email,
@@ -278,7 +278,7 @@ def delete_orgs_task():
             logging.exception(f"exception while deleting {org.name}")
 
 
-@task(track_started=True, name="cache_twilio_stats_task")
+@shared_task(track_started=True, name="cache_twilio_stats_task")
 def cache_twilio_stats_task():
     r = get_redis_connection()
     for org in Org.objects.filter(is_active=True):

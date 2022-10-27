@@ -18,17 +18,18 @@ from django.utils import timezone
 
 from temba.archives.models import Archive
 from temba.channels.models import Channel, ChannelEvent, ChannelLog
-from temba.contacts.models import URN, Contact, ContactField, ContactGroup, ContactImport, ContactURN
+from temba.contacts.models import URN, ContactField, ContactGroup, ContactImport, ContactURN
 from temba.flows.models import Flow, FlowRun, FlowSession, clear_flow_users
 from temba.ivr.models import IVRCall
 from temba.locations.models import AdminBoundary, BoundaryAlias
-from temba.msgs.models import HANDLED, INBOX, INCOMING, OUTGOING, PENDING, SENT, Broadcast, Label, Msg
+from temba.msgs.models import Broadcast, Label, Msg
 from temba.orgs.models import Org, OrgRole
 from temba.tickets.models import Ticket, TicketEvent
 from temba.utils import json
 from temba.utils.uuid import UUID, uuid4
 
 from .mailroom import create_contact_locally, decrement_credit, update_field_locally
+from .s3 import jsonlgz_encode
 
 
 def add_testing_flag_to_context(*args):
@@ -36,7 +37,7 @@ def add_testing_flag_to_context(*args):
 
 
 class TembaTestMixin:
-    databases = ("default", "direct", "read_only_db")
+    databases = ("default", "readonly", "read_only_db")
 
     @override_settings(CREDITS_EXPIRATION=True)
     def setUpOrgs(self):
@@ -140,6 +141,9 @@ class TembaTestMixin:
 
         self.org.country = self.country
         self.org.save(update_fields=("country",))
+
+    def make_beta(self, user):
+        user.groups.add(Group.objects.get(name="Beta"))
 
     def clear_cache(self):
         """
@@ -245,21 +249,21 @@ class TembaTestMixin:
         channel=None,
         msg_type=None,
         attachments=(),
-        status=HANDLED,
+        status=Msg.STATUS_HANDLED,
         visibility=Msg.VISIBILITY_VISIBLE,
         created_on=None,
         external_id=None,
         surveyor=False,
     ):
-        assert not msg_type or status != PENDING, "pending messages don't have a msg type"
+        assert not msg_type or status != Msg.STATUS_PENDING, "pending messages don't have a msg type"
 
-        if status == HANDLED and not msg_type:
-            msg_type = INBOX
+        if status == Msg.STATUS_HANDLED and not msg_type:
+            msg_type = Msg.TYPE_INBOX
 
         return self._create_msg(
             contact,
             text,
-            INCOMING,
+            Msg.DIRECTION_IN,
             channel,
             msg_type,
             attachments,
@@ -279,10 +283,10 @@ class TembaTestMixin:
         contact,
         text,
         channel=None,
-        msg_type=INBOX,
+        msg_type=Msg.TYPE_INBOX,
         attachments=(),
         quick_replies=(),
-        status=SENT,
+        status=Msg.STATUS_SENT,
         created_on=None,
         sent_on=None,
         high_priority=False,
@@ -290,7 +294,7 @@ class TembaTestMixin:
         surveyor=False,
         next_attempt=None,
     ):
-        if status == SENT and not sent_on:
+        if status in (Msg.STATUS_WIRED, Msg.STATUS_SENT, Msg.STATUS_DELIVERED) and not sent_on:
             sent_on = timezone.now()
 
         if not attachments:
@@ -303,7 +307,7 @@ class TembaTestMixin:
         return self._create_msg(
             contact,
             text,
-            OUTGOING,
+            Msg.DIRECTION_OUT,
             channel,
             msg_type,
             attachments,
@@ -379,27 +383,47 @@ class TembaTestMixin:
             next_attempt=next_attempt,
         )
 
-    def create_broadcast(self, user, text, contacts=(), groups=(), response_to=None, msg_status=SENT, parent=None):
-        bcast = Broadcast.create(self.org, user, text, contacts=contacts, groups=groups, status=SENT, parent=parent)
+    def create_broadcast(
+        self,
+        user,
+        text,
+        contacts=(),
+        groups=(),
+        response_to=None,
+        msg_status=Msg.STATUS_SENT,
+        parent=None,
+        schedule=None,
+    ):
+        bcast = Broadcast.create(
+            self.org,
+            user,
+            text,
+            contacts=contacts,
+            groups=groups,
+            status=Msg.STATUS_SENT,
+            parent=parent,
+            schedule=schedule,
+        )
 
         contacts = set(bcast.contacts.all())
         for group in bcast.groups.all():
             contacts.update(group.contacts.all())
 
-        for contact in contacts:
-            self._create_msg(
-                contact,
-                text,
-                OUTGOING,
-                channel=None,
-                msg_type=INBOX,
-                attachments=(),
-                status=msg_status,
-                created_on=timezone.now(),
-                sent_on=timezone.now(),
-                response_to=response_to,
-                broadcast=bcast,
-            )
+        if not schedule:
+            for contact in contacts:
+                self._create_msg(
+                    contact,
+                    text,
+                    Msg.DIRECTION_OUT,
+                    channel=None,
+                    msg_type=Msg.TYPE_INBOX,
+                    attachments=(),
+                    status=msg_status,
+                    created_on=timezone.now(),
+                    sent_on=timezone.now(),
+                    response_to=response_to,
+                    broadcast=bcast,
+                )
 
         return bcast
 
@@ -435,14 +459,14 @@ class TembaTestMixin:
 
         return flow
 
-    def create_incoming_call(self, flow, contact, status=IVRCall.COMPLETED):
+    def create_incoming_call(self, flow, contact, status=IVRCall.STATUS_COMPLETED):
         """
         Create something that looks like an incoming IVR call handled by mailroom
         """
         call = IVRCall.objects.create(
             org=self.org,
             channel=self.channel,
-            direction=IVRCall.INCOMING,
+            direction=IVRCall.DIRECTION_IN,
             contact=contact,
             contact_urn=contact.get_urn(),
             status=status,
@@ -459,16 +483,17 @@ class TembaTestMixin:
             contact_urn=contact.get_urn(),
             text="Hello",
             status="S",
+            sent_on=timezone.now(),
             created_on=timezone.now(),
         )
         ChannelLog.objects.create(
             channel=self.channel,
             connection=call,
             request='{"say": "Hello"}',
-            response='{"status": "%s"}' % ("error" if status == IVRCall.FAILED else "OK"),
+            response='{"status": "%s"}' % ("error" if status == IVRCall.STATUS_FAILED else "OK"),
             url="https://acme-calls.com/reply",
             method="POST",
-            is_error=status == IVRCall.FAILED,
+            is_error=status == IVRCall.STATUS_FAILED,
             response_status=200,
             description="Looks good",
         )
@@ -477,17 +502,21 @@ class TembaTestMixin:
     def create_archive(
         self, archive_type, period, start_date, records=(), needs_deletion=False, rollup_of=(), s3=None, org=None
     ):
-        archive_hash = uuid4().hex
+        org = org or self.org
+        body, md5, size = jsonlgz_encode(records)
         bucket = "s3-bucket"
-        key = f"things/{archive_hash}.jsonl.gz"
+        type_code = "run" if archive_type == Archive.TYPE_FLOWRUN else "message"
+        date_code = start_date.strftime("%Y%m") if period == "M" else start_date.strftime("%Y%m%d")
+        key = f"{org.id}/{type_code}_{period}{date_code}_{md5}.jsonl.gz"
+
         if s3:
-            s3.put_jsonl(bucket, key, records)
+            s3.put_object(bucket, key, body)
 
         archive = Archive.objects.create(
-            org=org or self.org,
+            org=org,
             archive_type=archive_type,
-            size=10,
-            hash=archive_hash,
+            size=size,
+            hash=md5,
             url=f"http://{bucket}.aws.com/{key}",
             record_count=len(records),
             start_date=start_date,
@@ -560,7 +589,16 @@ class TembaTestMixin:
         )
 
     def create_ticket(
-        self, ticketer, contact, subject, body="", opened_on=None, opened_by=None, closed_on=None, closed_by=None
+        self,
+        ticketer,
+        contact,
+        body: str,
+        topic=None,
+        assignee=None,
+        opened_on=None,
+        opened_by=None,
+        closed_on=None,
+        closed_by=None,
     ):
         if not opened_on:
             opened_on = timezone.now()
@@ -569,15 +607,24 @@ class TembaTestMixin:
             org=ticketer.org,
             ticketer=ticketer,
             contact=contact,
-            subject=subject,
+            topic=topic or ticketer.org.default_ticket_topic,
             body=body,
             status=Ticket.STATUS_CLOSED if closed_on else Ticket.STATUS_OPEN,
+            assignee=assignee,
             opened_on=opened_on,
             closed_on=closed_on,
         )
         TicketEvent.objects.create(
             org=ticket.org, contact=contact, ticket=ticket, event_type=TicketEvent.TYPE_OPENED, created_by=opened_by
         )
+        if assignee:
+            TicketEvent.objects.create(
+                org=ticket.org,
+                contact=contact,
+                ticket=ticket,
+                event_type=TicketEvent.TYPE_ASSIGNED,
+                created_by=opened_by,
+            )
         if closed_on:
             TicketEvent.objects.create(
                 org=ticket.org,
@@ -591,19 +638,6 @@ class TembaTestMixin:
 
     def set_contact_field(self, contact, key, value):
         update_field_locally(self.admin, contact, key, value)
-
-    def bulk_release(self, objs, delete=False, user=None):
-        for obj in objs:
-            if user:
-                obj.release(user)
-            else:
-                obj.release()
-
-            if obj.id and delete:
-                obj.delete()
-
-    def releaseContacts(self, delete=False):
-        self.bulk_release(Contact.objects.all(), delete=delete, user=self.admin)
 
     def assertOutbox(self, outbox_index, from_email, subject, body, recipients):
         self.assertEqual(len(mail.outbox), outbox_index + 1)
@@ -692,7 +726,7 @@ class TembaNonAtomicTest(TembaTestMixin, SmartminTestMixin, TransactionTestCase)
     pass
 
 
-class AnonymousOrg(object):
+class AnonymousOrg:
     """
     Makes the given org temporarily anonymous
     """
