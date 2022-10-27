@@ -3541,6 +3541,7 @@ class APITest(TembaTest):
                 "modified_on": format_datetime(frank_run2.modified_on),
                 "exited_on": None,
                 "exit_type": None,
+                "messages": [],
             },
             resp_json["results"][2],
         )
@@ -3581,6 +3582,7 @@ class APITest(TembaTest):
                 "modified_on": format_datetime(joe_run1.modified_on),
                 "exited_on": format_datetime(joe_run1.exited_on),
                 "exit_type": "completed",
+                "messages": [],
             },
             resp_json["results"][4],
         )
@@ -3624,6 +3626,7 @@ class APITest(TembaTest):
                     "modified_on": format_datetime(frank_run2.modified_on),
                     "exited_on": None,
                     "exit_type": None,
+                    "messages": [],
                 },
                 response.json()["results"][0],
             )

@@ -367,10 +367,12 @@ class LinkHandler(RedirectView):
 
         link = Link.objects.filter(uuid=self.kwargs.get("uuid")).only("id", "destination").first()
         contact = Contact.objects.filter(uuid=self.request.GET.get("contact")).only("id").first()
+        destination_full_url = self.request.GET.get("full_link")
+        related_flow_uuid = self.request.GET.get("flow")
 
         # Whether the contact is from the simulator
         if not contact:
-            return link.destination
+            return destination_full_url or link.destination
 
         elif link and contact:
             x_forwarded_for = self.request.META.get("HTTP_X_FORWARDED_FOR")
@@ -386,8 +388,8 @@ class LinkHandler(RedirectView):
                 is_host_checking = False
 
             if not is_host_checking and not user_agent.is_bot:
-                on_transaction_commit(lambda: handle_link_task.delay(link.id, contact.id))
+                on_transaction_commit(lambda: handle_link_task.delay(link.id, contact.id, related_flow_uuid))
 
-            return link.destination
+            return destination_full_url or link.destination
         else:
-            return None
+            return destination_full_url

@@ -2517,7 +2517,7 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
      * **sent_on** - for outgoing messages, when the channel sent the message (null if not yet sent or an incoming message) (datetime).
      * **modified_on** - when the message was last modified (datetime)
 
-    You can also filter by `folder` where folder is one of `inbox`, `flows`, `archived`, `outbox`, `incoming`, `failed` or `sent`.
+    You can also filter by `uuid`, and `folder` where folder is one of `inbox`, `flows`, `archived`, `outbox`, `incoming`, `failed` or `sent`.
     Note that you cannot filter by more than one of `contact`, `folder`, `label` or `broadcast` at the same time.
 
     Without any parameters this endpoint will return all incoming and outgoing messages ordered by creation date.
@@ -2609,6 +2609,11 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
         if msg_id:
             queryset = queryset.filter(id=msg_id)
 
+        # filter by uuid (optional)
+        msg_uuid = self.get_uuid_param("uuid")
+        if msg_uuid:
+            queryset = queryset.filter(uuid=msg_uuid)
+
         # filter by broadcast (optional)
         broadcast_id = params.get("broadcast")
         if broadcast_id:
@@ -2657,6 +2662,11 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
             "slug": "msg-list",
             "params": [
                 {"name": "id", "required": False, "help": "A message ID to filter by, ex: 123456"},
+                {
+                    "name": "uuid",
+                    "required": False,
+                    "help": "A message UUID to filter by, ex: c969a530-f36c-42d0-869d-d45503dd46ac",
+                },
                 {"name": "broadcast", "required": False, "help": "A broadcast ID to filter by, ex: 12345"},
                 {
                     "name": "contact",
@@ -3055,6 +3065,7 @@ class RunsEndpoint(ListAPIMixin, BaseAPIView):
      * **modified_on** - when this run was last modified (datetime), filterable as `before` and `after`.
      * **exited_on** - the datetime when this run exited or null if it is still active (datetime).
      * **exit_type** - how the run ended (one of "interrupted", "completed", "expired").
+     * **messages** - messages that the run contains in a dictionary format with UUID and text
 
     Note that you cannot filter by `flow` and `contact` at the same time.
 
@@ -3104,7 +3115,17 @@ class RunsEndpoint(ListAPIMixin, BaseAPIView):
                 "created_on": "2015-11-11T13:05:57.457742Z",
                 "modified_on": "2015-11-11T13:05:57.576056Z",
                 "exited_on": "2015-11-11T13:05:57.576056Z",
-                "exit_type": "completed"
+                "exit_type": "completed",
+                "messages": [
+                    {
+                      "uuid": "a07913a3-e037-4e3f-80fa-64e3ec5f5f8c",
+                      "text": "Hello, world!"
+                    },
+                    {
+                      "uuid": "63129a06-4704-4319-92d4-4e673c275f97",
+                      "text": "How are you?"
+                    }
+                ]
             },
             ...
         }

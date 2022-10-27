@@ -924,6 +924,7 @@ class FlowRunReadSerializer(ReadSerializer):
     start = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
     values = serializers.SerializerMethodField()
+    messages = serializers.SerializerMethodField()
     exit_type = serializers.SerializerMethodField()
     created_on = serializers.DateTimeField(default_timezone=pytz.UTC)
     modified_on = serializers.DateTimeField(default_timezone=pytz.UTC)
@@ -938,6 +939,18 @@ class FlowRunReadSerializer(ReadSerializer):
             return {"node": step[FlowRun.PATH_NODE_UUID], "time": format_datetime(arrived_on)}
 
         return [convert_step(s) for s in obj.path]
+
+    def get_messages(self, obj):
+        results = (
+            [
+                {"uuid": event.get("msg", {}).get("uuid"), "text": event.get("msg", {}).get("text")}
+                for event in obj.events
+                if event.get("type") in ["msg_created", "msg_received"]
+            ]
+            if obj.events
+            else []
+        )
+        return results
 
     def get_values(self, obj):
         def convert_result(result):
@@ -972,6 +985,7 @@ class FlowRunReadSerializer(ReadSerializer):
             "modified_on",
             "exited_on",
             "exit_type",
+            "messages",
         )
 
 

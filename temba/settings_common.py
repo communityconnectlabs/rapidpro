@@ -553,7 +553,7 @@ PERMISSIONS = {
     "tickets.ticket": ("api", "assign", "assignee", "menu", "note"),
     "tickets.ticketer": ("api", "connect", "configure"),
     "tickets.topic": ("api",),
-    "triggers.trigger": ("archived", "type"),
+    "triggers.trigger": ("archived", "type", "create_large_send", "large_send_schedule_summary"),
 }
 
 
@@ -1305,6 +1305,7 @@ CHANNEL_TYPES = [
     "temba.channels.types.discord.DiscordType",
     "temba.channels.types.webchat.WebChatType",
     "temba.channels.types.rocketchat.RocketChatType",
+    # "temba.channels.types.mgage.MGageType",
 ]
 
 # set of ISO-639-3 codes of languages to allow in addition to all ISO-639-1 languages

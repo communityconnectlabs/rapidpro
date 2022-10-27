@@ -28,7 +28,7 @@ from temba.orgs.models import DependencyMixin, Org, TopUp
 from temba.schedules.models import Schedule
 from temba.utils import chunk_list, on_transaction_commit
 from temba.utils.export import BaseExportAssetStore, BaseExportTask
-from temba.utils.models import JSONAsTextField, SquashableModel, TembaModel, TranslatableField
+from temba.utils.models import JSONAsTextField, SquashableModel, TembaModel, TranslatableField, JSONField
 from temba.utils.text import clean_string
 from temba.utils.uuid import uuid4
 
@@ -327,6 +327,7 @@ class Msg(models.Model):
     STATUS_INITIALIZING = "I"  # used to hold off sending the message until the flow is ready to receive a response
     STATUS_PENDING = "P"  # initial state for all messages
     STATUS_QUEUED = "Q"
+    STATUS_ENROUTE = "U"
     STATUS_WIRED = "W"  # message was handed off to the provider and credits were deducted for it
     STATUS_SENT = "S"  # we have confirmation that a message was sent
     STATUS_DELIVERED = "D"  # we have confirmation that a message was delivered
@@ -339,6 +340,7 @@ class Msg(models.Model):
         (STATUS_PENDING, _("Pending")),
         (STATUS_QUEUED, _("Queued")),
         (STATUS_WIRED, _("Wired")),
+        (STATUS_ENROUTE, _("En Route")),
         (STATUS_SENT, _("Sent")),
         (STATUS_DELIVERED, _("Delivered")),
         (STATUS_HANDLED, _("Handled")),
@@ -1513,3 +1515,13 @@ class MessageExportAssetStore(BaseExportAssetStore):
     directory = "message_exports"
     permission = "msgs.msg_export"
     extensions = ("xlsx",)
+
+
+class MessageExternalIDMap(models.Model):
+    message = models.ForeignKey(Msg, on_delete=models.CASCADE, related_name="external_ids", null=True)
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, null=True)
+    carrier_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    gateway_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
+    modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
+    request_logs = JSONField(blank=True, null=True)

@@ -61,7 +61,7 @@ requests-toolbelt = "^0.9.1"
 chardet = "^4.0.0"
 openpyxl = "3.0.7"  # https://foss.heptapod.net/openpyxl/openpyxl/-/issues/1740
 django-cors-headers = "^3.7.0"
-parse-rest = {git = "https://github.com/greatnonprofits-nfp/ParsePy.git"}
+parse-rest = {git = "https://github.com/greatnonprofits-nfp/ParsePy.git", rev = "master"}
 jellyfish = "^0.8.2"
 pdfkit = "^0.6.1"
 Pillow = "^8.2.0"
