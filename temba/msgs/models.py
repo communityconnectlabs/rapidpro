@@ -956,7 +956,9 @@ class SystemLabel:
         elif label_type == cls.TYPE_CALLS:
             qs = ChannelEvent.objects.filter(event_type__in=ChannelEvent.CALL_TYPES)
         elif label_type == cls.TYPE_FLOW_VOICE:
-            qs = Msg.objects.filter(direction=Msg.DIRECTION_IN, visibility=Msg.VISIBILITY_VISIBLE, msg_type=Msg.TYPE_IVR)
+            qs = Msg.objects.filter(
+                direction=Msg.DIRECTION_IN, visibility=Msg.VISIBILITY_VISIBLE, msg_type=Msg.TYPE_IVR
+            )
         elif label_type == cls.TYPE_SENT_VOICE:
             qs = Msg.objects.filter(
                 direction=Msg.DIRECTION_OUT,

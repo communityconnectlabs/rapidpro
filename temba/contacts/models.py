@@ -17,6 +17,7 @@ from smartmin.models import SmartModel
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.contrib.postgres.fields import ArrayField
 from django.db import IntegrityError, models, transaction
 from django.db.models import Count, F, Max, Q, Sum, Value
 from django.db.models.functions import Concat
@@ -1990,7 +1991,9 @@ class ExportContactsTask(BaseExportTask):
         scheme_counts = dict()
         if not self.org.is_anon:
             org_urns = self.org.urns.using("readonly")
-            schemes_in_use = sorted(list(self.org.urns.order_by().exclude(scheme="deleted").values_list("scheme", flat=True).distinct()))
+            schemes_in_use = sorted(
+                list(self.org.urns.order_by().exclude(scheme="deleted").values_list("scheme", flat=True).distinct())
+            )
             scheme_contact_max = {}
 
             # for each scheme used by this org, calculate the max number of URNs owned by a single contact

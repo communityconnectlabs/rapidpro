@@ -1641,7 +1641,6 @@ class FlowCRUDL(SmartCRUDL):
             context["dev_mode"] = dev_mode
             context["is_starting"] = flow.is_starting()
 
-            feature_filters = []
             return context
 
     class ChangeLanguage(OrgObjPermsMixin, SmartUpdateView):

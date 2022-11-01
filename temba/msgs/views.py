@@ -15,7 +15,7 @@ from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.forms import Form
-from django.http import HttpResponse, HttpResponseRedirect, HttpResponseBadRequest, Http404
+from django.http import HttpResponse, HttpResponseRedirect, Http404
 from django.http.response import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -520,7 +520,19 @@ class ExportForm(Form):
 
 class MsgCRUDL(SmartCRUDL):
     model = Msg
-    actions = ("inbox", "flow", "archived", "menu", "outbox", "sent", "failed", "filter", "export", "flow_voice", "sent_voice")
+    actions = (
+        "inbox",
+        "flow",
+        "archived",
+        "menu",
+        "outbox",
+        "sent",
+        "failed",
+        "filter",
+        "export",
+        "flow_voice",
+        "sent_voice",
+    )
 
     class Menu(OrgPermsMixin, SmartTemplateView):  # pragma: no cover
         def render_to_response(self, context, **response_kwargs):

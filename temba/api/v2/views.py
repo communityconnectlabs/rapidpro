@@ -48,7 +48,6 @@ from temba.campaigns.models import Campaign, CampaignEvent
 from temba.channels.models import Channel, ChannelEvent
 from temba.classifiers.models import Classifier
 from temba.contacts.models import Contact, ContactField, ContactGroup, ContactGroupCount, ContactURN
-from temba.contacts.tasks import release_group_task
 from temba.contacts.search import SearchException, parse_query
 from temba.contacts.search.elastic import query_contact_ids_from_elasticsearch
 from temba.flows.models import Flow, FlowRun, FlowStart
@@ -5391,7 +5390,9 @@ class MessagesReportEndpoint(BaseAPIView, ReportEndpointMixin):
         results = dict(total_inbound_messages=0, total_outbound_messages=0, total_outbound_message_failures=0)
         for msg_type, count in counter.items():
             results["total_inbound_messages" if msg_type[0] == "I" else "total_outbound_messages"] += count
-            results["total_outbound_message_failures"] += count if msg_type[1] in [Msg.STATUS_FAILED, Msg.STATUS_ERRORED] else 0
+            results["total_outbound_message_failures"] += (
+                count if msg_type[1] in [Msg.STATUS_FAILED, Msg.STATUS_ERRORED] else 0
+            )
 
         return Response({"next": next_page, **self.applied_filters, "results": [results]})
 

@@ -294,7 +294,7 @@ class MsgTest(TembaTest):
         broadcast1 = self.create_broadcast(self.admin, "How is it going?", contacts=[contact])
 
         # put messages back into pending state
-        Msg.objects.filter(broadcast=broadcast1).update(status=PENDING)
+        Msg.objects.filter(broadcast=broadcast1).update(status=Msg.STATUS_PENDING)
 
         (msg1,) = tuple(Msg.objects.filter(broadcast=broadcast1))
 
@@ -308,15 +308,15 @@ class MsgTest(TembaTest):
             self.admin, "kLab is an awesome place", contacts=[self.kevin], groups=[self.joe_and_frank]
         )
 
-        Msg.objects.filter(broadcast=broadcast2).update(status=PENDING)
+        Msg.objects.filter(broadcast=broadcast2).update(status=Msg.STATUS_PENDING)
         msg4, msg3, msg2 = tuple(Msg.objects.filter(broadcast=broadcast2).order_by("-created_on", "-id"))
 
         broadcast3 = Broadcast.create(
-            self.channel.org, self.admin, "Pending broadcast", contacts=[self.kevin], status=QUEUED
+            self.channel.org, self.admin, "Pending broadcast", contacts=[self.kevin], status=Msg.STATUS_QUEUED
         )
 
         broadcast4 = Broadcast.create(
-            self.channel.org, self.admin, "Scheduled broadcast", contacts=[self.kevin], status=QUEUED
+            self.channel.org, self.admin, "Scheduled broadcast", contacts=[self.kevin], status=Msg.STATUS_QUEUED
         )
 
         broadcast4.schedule = Schedule.create_schedule(self.org, self.admin, timezone.now(), Schedule.REPEAT_DAILY)
@@ -364,7 +364,7 @@ class MsgTest(TembaTest):
         msg3 = self.create_incoming_msg(self.joe, "message number 3")
         self.create_incoming_msg(self.joe, "message number 4")
         msg5 = self.create_incoming_msg(self.joe, "message number 5")
-        self.create_incoming_msg(self.joe, "message number 6", status=PENDING)
+        self.create_incoming_msg(self.joe, "message number 6", status=Msg.STATUS_PENDING)
 
         # visit inbox page  as a user not in the organization
         self.login(self.non_org_user)

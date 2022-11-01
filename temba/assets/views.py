@@ -72,7 +72,7 @@ class AssetDownloadView(NotificationTargetMixin, SmartTemplateView):
             download_url = self.asset_store.get_asset_url(asset.id, direct=True)
             if kwargs.pop("type") == "flowimages_download":
                 task = ExportFlowImagesTask.objects.filter(pk=kwargs.pop("pk")).first()
-                task.file_path = location
+                task.file_path = download_url
                 task.file_downloaded = True
                 task.save(update_fields=["file_path", "file_downloaded"])
         except (AssetEntityNotFound, AssetFileNotFound):

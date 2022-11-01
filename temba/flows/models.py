@@ -2177,7 +2177,12 @@ class ExportFlowResultsTask(BaseExportTask):
             yield matching
 
         # secondly get runs from database
-        runs = FlowRun.objects.filter(flow__in=flows).exclude(contact__is_active=False).order_by("modified_on").using("readonly")
+        runs = (
+            FlowRun.objects.filter(flow__in=flows)
+            .exclude(contact__is_active=False)
+            .order_by("modified_on")
+            .using("readonly")
+        )
         if responded_only:
             runs = runs.filter(responded=True)
 
@@ -2425,8 +2430,8 @@ class ExportFlowImagesTask(BaseExportTask):
     files = models.TextField(help_text=_("Array as text of the files ID to download in a zip file"))
 
     file_path = models.CharField(null=True, help_text=_("Path to downloadable file"), max_length=255)
-    file_downloaded = models.NullBooleanField(default=False, help_text=_("If the file was downloaded"))
-    cleaned = models.NullBooleanField(default=False, help_text=_("If the file was removed after downloaded"))
+    file_downloaded = models.BooleanField(default=False, null=True, help_text=_("If the file was downloaded"))
+    cleaned = models.BooleanField(default=False, null=True, help_text=_("If the file was removed after downloaded"))
 
     @classmethod
     def create(cls, org, user, files):

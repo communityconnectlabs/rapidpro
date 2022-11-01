@@ -27,8 +27,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.db.models.functions import Lower, Upper
 from django.forms import Form
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse, Http404
-from django.shortcuts import get_object_or_404
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -1187,7 +1186,6 @@ class ContactCRUDL(SmartCRUDL):
                         href=reverse("contacts.contactgroup_create"),
                     )
                 )
-
 
             links.extend(super().get_gear_links())
             return links

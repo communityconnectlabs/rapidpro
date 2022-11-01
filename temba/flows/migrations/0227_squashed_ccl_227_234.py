@@ -79,7 +79,6 @@ def recheck_origin_uuids_and_update_path_counts(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     replaces = [
         ("flows", "0227_flowimage"),
         ("flows", "0228_exportflowimagestask"),
@@ -233,9 +232,14 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "cleaned",
-                    models.NullBooleanField(default=False, help_text="If the file was removed after downloaded"),
+                    models.BooleanField(
+                        default=False, null=True, help_text="If the file was removed after downloaded"
+                    ),
                 ),
-                ("file_downloaded", models.NullBooleanField(default=False, help_text="If the file was downloaded")),
+                (
+                    "file_downloaded",
+                    models.BooleanField(default=False, null=True, help_text="If the file was downloaded"),
+                ),
                 ("file_path", models.CharField(help_text="Path to downloadable file", max_length=255, null=True)),
             ],
             options={"abstract": False},

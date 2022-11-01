@@ -640,7 +640,7 @@ class GraphDifferenceMap:
                 max_top = position["top"]
             if position.get("left", max_left) > max_left:
                 max_left = position["left"]
-        self.max_distance = math.sqrt(max_top ** 2 + max_left ** 2)
+        self.max_distance = math.sqrt(max_top**2 + max_left**2)
 
     def compare_graphs(self):
         self.calculate_max_distance()

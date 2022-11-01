@@ -32,7 +32,7 @@ from temba.flows.models import Flow, FlowRun
 from temba.orgs.models import Org
 from temba.tests import ESMockWithScroll, TembaTest, matchers
 from temba.utils import json, uuid
-from temba.utils.json import TembaJsonAdapter, JsonResponse
+from temba.utils.json import JsonResponse
 from temba.utils.templatetags.temba import format_datetime
 
 from . import (
@@ -134,12 +134,12 @@ class InitTest(TembaTest):
     def test_sizeof_fmt(self):
         self.assertEqual("512.0 b", sizeof_fmt(512))
         self.assertEqual("1.0 Kb", sizeof_fmt(1024))
-        self.assertEqual("1.0 Mb", sizeof_fmt(1024 ** 2))
-        self.assertEqual("1.0 Gb", sizeof_fmt(1024 ** 3))
-        self.assertEqual("1.0 Tb", sizeof_fmt(1024 ** 4))
-        self.assertEqual("1.0 Pb", sizeof_fmt(1024 ** 5))
-        self.assertEqual("1.0 Eb", sizeof_fmt(1024 ** 6))
-        self.assertEqual("1.0 Zb", sizeof_fmt(1024 ** 7))
+        self.assertEqual("1.0 Mb", sizeof_fmt(1024**2))
+        self.assertEqual("1.0 Gb", sizeof_fmt(1024**3))
+        self.assertEqual("1.0 Tb", sizeof_fmt(1024**4))
+        self.assertEqual("1.0 Pb", sizeof_fmt(1024**5))
+        self.assertEqual("1.0 Eb", sizeof_fmt(1024**6))
+        self.assertEqual("1.0 Zb", sizeof_fmt(1024**7))
 
     def test_str_to_bool(self):
         self.assertFalse(str_to_bool(None))
