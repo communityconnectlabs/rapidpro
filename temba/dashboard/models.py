@@ -7,6 +7,7 @@ from temba.orgs.models import Org
 class Dashboard(models.Model):
     org = models.ForeignKey(Org, verbose_name="Organization", related_name="dashboards", on_delete=models.PROTECT)
     metabase_dashboard_id = models.IntegerField(verbose_name="Metabase Dashboard ID")
+    metabase_dashboard_title = models.CharField(verbose_name="Metabase Dashboard Title", max_length=255)
     is_active = models.BooleanField(
         default=True, help_text="Whether this item is active, use this instead of deleting"
     )

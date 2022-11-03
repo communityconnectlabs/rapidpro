@@ -1094,6 +1094,7 @@ class OrgCRUDL(SmartCRUDL):
         "translations",
         "translate",
         "opt_out_message",
+        "dashboard_setup",
     )
 
     model = Org
@@ -3663,6 +3664,9 @@ class OrgCRUDL(SmartCRUDL):
                 formax.add_section("languages", reverse("orgs.org_languages"), icon="icon-language")
                 formax.add_section("translations", reverse("orgs.org_translations"), icon="icon-language")
 
+            if self.has_org_perm("orgs.org_dashboard_setup") or self.request.user.is_superuser:
+                formax.add_section("dashboard_setup", reverse("orgs.org_dashboard_setup"), icon="icon-stats")
+
             if self.has_org_perm("orgs.org_smtp_server"):
                 formax.add_section("email", reverse("orgs.org_smtp_server"), icon="icon-envelop")
 
@@ -4110,6 +4114,80 @@ class OrgCRUDL(SmartCRUDL):
             org.config = current_config
             org.save(update_fields=["config"])
             return super().form_valid(form)
+
+    class DashboardSetup(InferOrgMixin, OrgPermsMixin, SmartFormView):
+        class DashboardSetupForm(forms.Form):
+            dashboards = forms.MultipleChoiceField(
+                label=_("Metabase dashboards"),
+                help_text=_("The dashboards that will be displayed for this organization."),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Dashboards"}),
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+                self.fields["dashboards"].choices = self.org.dashboards.filter(is_active=True).values_list(
+                    "metabase_dashboard_id", "metabase_dashboard_title"
+                )
+
+        success_message = "Metabase dashboards set up successfully"
+        form_class = DashboardSetupForm
+        fields = ("dashboards",)
+        success_url = "@orgs.org_home"
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["dashboards"] = [item.get("id") for item in (org.config or {}).get("metabase_dashboards", [])]
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+            context["metabase_dashboards"] = ", ".join(
+                [item.get("title") for item in (org.config or {}).get("metabase_dashboards", [])]
+            )
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            selected_dashboards = form.cleaned_data.get("dashboards", [])
+            if selected_dashboards:
+                dashboards = org.dashboards.filter(metabase_dashboard_id__in=selected_dashboards).order_by(
+                    "metabase_dashboard_title"
+                )
+                current_config.update(
+                    dict(
+                        metabase_dashboards=[
+                            dict(
+                                id=item.metabase_dashboard_id,
+                                title=item.metabase_dashboard_title,
+                            )
+                            for item in dashboards
+                        ]
+                    )
+                )
+            else:
+                try:
+                    current_config.pop("metabase_dashboards")
+                except KeyError:
+                    pass
+            org.config = current_config
+            org.save(update_fields=["config"])
+
+            response = self.render_to_response(self.get_context_data(form=form))
+            response["REDIRECT"] = self.get_success_url()
+            return response
 
     class OptOutMessage(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
         class OptOutMessageForm(forms.ModelForm):

@@ -451,6 +451,7 @@ PERMISSIONS = {
         "token",
         "translations",
         "opt_out_message",
+        "dashboard_setup",
     ),
     "channels.channel": (
         "api",
@@ -591,6 +592,7 @@ GROUP_PERMISSIONS = {
         "orgs.topup_create",
         "orgs.topup_manage",
         "orgs.topup_update",
+        "orgs.org_dashboard_setup",
         "policies.policy_create",
         "policies.policy_update",
         "policies.policy_admin",
@@ -805,6 +807,7 @@ GROUP_PERMISSIONS = {
         "orgs.topup_list",
         "orgs.topup_read",
         "orgs.org_opt_out_message",
+        "orgs.org_dashboard",
         "channels.channel_api",
         "channels.channel_bulk_sender_options",
         "channels.channel_claim",
