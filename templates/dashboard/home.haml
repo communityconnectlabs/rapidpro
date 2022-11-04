@@ -1,230 +1,55 @@
-{% extends "frame.html" %}
+-extends "smartmin/list.html"
+-load smartmin sms temba compress
+-load i18n humanize
 
--load smartmin temba compress i18n humanize tz
+-block title-icon
+  .title-icon
+    %span.glyph.icon-stats
 
 -block page-title
   -trans "Dashboard"
 
 -block page-top
 
--block messages
-
 -block content
 
-  %input.range{id:"begin", name:"begin", type:"hidden", value:'{{begin|date:"Y-m-d"}}'}
-  %input.range{id:"end", name:"end", type:"hidden", value:'{{end|date:"Y-m-d"}}'}
-  %input.range{id:"direction", name:"direction", type:"hidden", value:"IO"}
+  .lp-frame
+    .left
 
-  .row-fluid
-    .span6
-      %span.title-icon
-        .glyph.icon-pie
-      .title-text
-        %h2 Dashboard
+      .lp-nav.lower
+        .font-normal.uppercase.text-xs.text-gray-500.pb-1
+          -trans "Dashboards"
+        .inner-scroll
+          -for dashboard in dashboards
+            .lp-nav-item(class="{% if request.get_full_path == dashboard.get_url %}font-normal{% endif %}")
+              .name(onclick="goto(event)" href='{{dashboard.get_url}}')
+                {{dashboard.metabase_dashboard_title}}
 
-  #range-group
-    .row-fluid
-      .span12
-        #range-header
-          #range-from
-          #range-to
+    .right
+      .flex.w-full
+        .flex.w-full.mb-4.items-end.flex-wrap.justify-end.-mt-2(style="min-height:41px")
+          -block action-buttons
+            .flex-grow.ml-1.self-end.items-end
+              .flex.flex-col.pr-12
+                .page-title.leading-tight
+                  {{title}}
+      -if dashboard_url
+        %iframe{
+          id:"metabase-dashboard-iframe",
+          src:"{{dashboard_url}}",
+          frameborder:"0",
+          width:"100%",
+          height:"540",
+          allowtransparency:""
+        }
+      -else
+        -include "dashboard/empty_include.haml"
 
-        #message-chart
-
-    .row-fluid
-      .span12.range-details
-        .range-content{ic-include:".range", ic-get-from:"/dashboard/range_details", ic-trigger-on:"load"}
-          Loading..
+-block extra-style
+  {{ block.super }}
+  :css
 
 -block extra-script
-  {{block.super}}
-  <script src="{{ STATIC_URL }}bower/highcharts/highstock.js?v=3.0"></script>
-  <script src="{{ STATIC_URL }}bower/highcharts/modules/data.js?v=3.0"></script>
+  {{ block.super }}
 
   :javascript
-
-    function setChartOptions(begin, end, direction) {
-      $("#begin").val(Highcharts.dateFormat('%Y-%m-%d', begin));
-      $("#end").val(Highcharts.dateFormat('%Y-%m-%d', end));
-      $("#direction").val(direction);
-      $("#range-from").text(Highcharts.dateFormat('%A, %B %e, %Y', begin))
-      $("#range-to").text(Highcharts.dateFormat('%A, %B %e, %Y', end))
-    }
-
-    Highcharts.setOptions({
-	  lang: {
-	    thousandsSep: ','
-	  }
-    });
-
-    function selectionChanged(chart) {
-      var direction = "";
-      if (chart.series[0].visible) {
-        direction += "I";
-      }
-
-      if (chart.series[1].visible) {
-        direction += "O";
-      }
-
-      var axis = chart.xAxis[0];
-
-      setChartOptions(axis.min, axis.max, direction);
-      Intercooler.refresh($(".range-content"))
-    }
-
-    var redrawMarker = null;
-    function markDirty(chart) {
-      if (redrawMarker != null) {
-        window.clearTimeout(redrawMarker);
-      }
-      redrawMarker = window.setTimeout(selectionChanged.bind(null, chart), 200);
-    }
-
-    $.getJSON('/dashboard/message_history', function (data) {
-
-      // Create the chart
-      Highcharts.stockChart('message-chart', {
-        chart: {
-          zoomType: 'x',
-          events: {
-            // mark dirty out the gate
-            load: function(e) {
-              markDirty(this);
-            },
-            redraw: function(e) {
-              markDirty(this);
-            }
-          }
-        },
-        plotOptions: {
-          series: {
-            showInLegend: true,
-            stacking: 'normal'
-          }
-        },
-        legend: {
-          enabled: true
-        },
-        rangeSelector: {
-          buttons: [
-            {type: 'week', count: 1, text: 'W'},
-            {type: 'month', count: 1, text: 'M'},
-            {type: 'year', count: 1, text: 'Y'},
-            {type: 'all', count: 1, text: 'all'}
-          ],
-          inputEnabled: false,
-          selected: 1
-        },
-        xAxis: {
-          minRange: 3600000 * 24
-        },
-        credits: {
-          enabled: false
-        },
-        navigator: {
-          series: {
-            // we want to stack the navigator, but can't due to a highcharts bug, for now we
-            // use a third non-visible series with the sum of the first two series
-            // https://github.com/highcharts/highcharts/issues/7033
-            // stacking: 'normal',
-            type: 'column'
-          }
-        },
-        series: data
-      });
-    });
-
-  :javascript
-    function showExtra() {
-      $('.expand').show();
-      $('.show-more').hide();
-    }
-
-
--block extra-less
-  -compress css
-    {% lessblock %}
-      :plain
-
-        #range-group {
-          margin-top:30px;
-          // background: rgb(67, 67, 72);
-          background: #eee;
-          padding: 2px;
-
-          #range-header {
-
-            height: 20px;
-            padding: 10px;
-
-            #range-from {
-              float:left;
-            }
-
-            #range-to {
-              float:right;
-            }
-          }
-
-          #message-chart {
-            height: 400px;
-          }
-        }
-
-        .range-details {
-          background: #fff;
-          padding: 10px;
-        }
-
-        .took {
-          font-size:11px;
-        }
-
-        th.center, td.center {
-          text-align: center;
-        }
-
-        .posterize {
-          font-weight: 500;
-        }
-
-        #recents {
-          height: 330px;
-          padding-bottom: 30px;
-        }
-
-        #daily-visits {
-          height: 450px;
-          padding-bottom: 30px;
-        }
-
-        #active-channels {
-          height: 240px;
-          padding-bottom: 30px;
-        }
-
-        #messages {
-          height: 330px;
-          padding-bottom: 30px;
-        }
-
-        #new-rule-action-sets {
-          height: 240px;
-          padding-bottom: 30px;
-        }
-
-        #flowsteps {
-          height: 240px;
-          padding-bottom: 30px;
-        }
-
-        #contacts {
-          height: 330px;
-          padding-bottom: 30px;
-        }
-
-        .small-format {
-          width: 70px;
-        }
-    {% endlessblock %}

@@ -1,4 +1,5 @@
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 from temba.orgs.models import Org
@@ -20,3 +21,6 @@ class Dashboard(models.Model):
 
     def __str__(self):
         return f"{self.metabase_dashboard_id} - {self.org.name}"
+
+    def get_url(self):
+        return reverse("dashboard.dashboard_view", args=[self.pk])

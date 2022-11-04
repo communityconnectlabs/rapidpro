@@ -3665,7 +3665,7 @@ class OrgCRUDL(SmartCRUDL):
                 formax.add_section("translations", reverse("orgs.org_translations"), icon="icon-language")
 
             if self.has_org_perm("orgs.org_dashboard_setup") or self.request.user.is_superuser:
-                formax.add_section("dashboard_setup", reverse("orgs.org_dashboard_setup"), icon="icon-stats")
+                formax.add_section("dashboard_setup", reverse("orgs.org_dashboard_setup"), icon="icon-bars-3")
 
             if self.has_org_perm("orgs.org_smtp_server"):
                 formax.add_section("email", reverse("orgs.org_smtp_server"), icon="icon-envelop")

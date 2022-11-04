@@ -1,13 +1,16 @@
 import time
+import jwt
 from datetime import datetime, timedelta
 
 from smartmin.views import SmartTemplateView
 
+from django.conf import settings
 from django.db.models import Q, Sum
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.utils import timezone
 
 from temba.channels.models import Channel, ChannelCount
+from temba.dashboard.models import Dashboard
 from temba.orgs.models import Org
 from temba.orgs.views import OrgPermsMixin
 
@@ -19,6 +22,45 @@ class Home(OrgPermsMixin, SmartTemplateView):
 
     permission = "orgs.org_dashboard"
     template_name = "dashboard/home.haml"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        org = self.derive_org()
+        org_dashboard_ids = [item.get("id") for item in org.get_metabase_dashboards()]
+        dashboards = Dashboard.objects.filter(is_active=True, metabase_dashboard_id__in=org_dashboard_ids).order_by(
+            "metabase_dashboard_title"
+        )
+
+        context["title"] = "Dashboards"
+        context["dashboards"] = dashboards
+
+        dashboad_selected = kwargs.get("pk")
+        if dashboad_selected:
+            dashboard = Dashboard.objects.filter(is_active=True, pk=dashboad_selected).first()
+            if not dashboard:
+                raise Http404
+
+            org_dashboard_ids = [item.get("id") for item in org.get_metabase_dashboards()]
+            if dashboard.metabase_dashboard_id not in org_dashboard_ids:
+                raise Http404
+        else:
+            dashboard = dashboards.first()
+
+        if dashboard:
+            payload = {
+                "resource": {"dashboard": int(dashboard.metabase_dashboard_id)},
+                "params": {},
+                "exp": round(time.time()) + (60 * 10),  # 10 minute expiration
+            }
+            token = jwt.encode(payload, settings.METABASE_SECRET_KEY, algorithm="HS256")
+            dashboard_url = (
+                f"{settings.METABASE_SITE_URL}/embed/dashboard/{token.decode('utf-8')}#bordered=false&titled=false"
+            )
+            context["dashboard_url"] = dashboard_url
+            context["title"] = dashboard.metabase_dashboard_title
+
+        return context
 
 
 class MessageHistory(OrgPermsMixin, SmartTemplateView):
