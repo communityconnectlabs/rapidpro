@@ -1,6 +1,6 @@
 import logging
 import psycopg2
-from celery.task import task
+from celery import shared_task
 
 from django import db
 from django.db.models import Max, F, Q
@@ -33,7 +33,7 @@ def process_collecting(state_obj, flows):
     return processed, skipped, failed
 
 
-@task(track_started=True, name="analytics__auto_collect_flow_results_data")
+@shared_task(track_started=True, name="analytics__auto_collect_flow_results_data")
 def automatically_collect_flow_results_data():
     for org in Org.objects.filter(analytics_config__isnull=False).only("id"):
         DataCollectionProcess.objects.filter(related_org=org, completed_on__isnull=True).update(completed_on=tz_now())
@@ -63,7 +63,7 @@ def automatically_collect_flow_results_data():
         processing_state.save()
 
 
-@task(track_started=True, name="analytics__collect_flow_results_data")
+@shared_task(track_started=True, name="analytics__collect_flow_results_data")
 def manually_collect_flow_results_data(processing_state_id, flow_ids: list = None):
     try:
         processing_state = DataCollectionProcess.objects.get(id=processing_state_id)
