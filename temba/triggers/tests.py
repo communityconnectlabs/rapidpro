@@ -1396,11 +1396,11 @@ class TriggerCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # test form validation
         required_fields = ["flow", "groups", "chunk_size", "start_time", "batch_interval"]
-        error_msg = ["This field is required."]
+        error_msg = "This field is required."
         form_errors = dict.fromkeys(required_fields, error_msg)
 
         self.assertCreateSubmit(create_url, {}, form_errors=form_errors)
-        form_errors["chunk_size"] = ["Enter a whole number."]
+        form_errors["chunk_size"] = "Enter a whole number."
         self.assertCreateSubmit(create_url, {"chunk_size": "string"}, form_errors=form_errors)
 
         # test created triggers

@@ -1903,13 +1903,6 @@ class FlowCRUDL(SmartCRUDL):
                 widget=CheckboxWidget(),
             )
 
-            extra_queries = OmniboxField(
-                required=False,
-                label=_("Extra Query Parameters"),
-                help_text=_("Configuration to filter runs by contact fields or responses"),
-                widget=forms.HiddenInput(),
-            )
-
             def __init__(self, user, *args, **kwargs):
                 super().__init__(*args, **kwargs)
                 self.user = user

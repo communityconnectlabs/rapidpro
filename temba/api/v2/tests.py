@@ -3545,6 +3545,12 @@ class APITest(TembaTest):
             },
             resp_json["results"][2],
         )
+        self.maxDiff = None
+
+        response_json_4 = resp_json["results"][4]
+        self.assertEqual(len(response_json_4["messages"]), 1)
+        response_json_4["messages"] = []
+
         self.assertEqual(
             {
                 "id": joe_run1.pk,
@@ -3584,7 +3590,7 @@ class APITest(TembaTest):
                 "exit_type": "completed",
                 "messages": [],
             },
-            resp_json["results"][4],
+            response_json_4,
         )
 
         # reversed

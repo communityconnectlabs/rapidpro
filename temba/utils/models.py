@@ -41,7 +41,7 @@ class IDSliceQuerySet(models.query.RawQuerySet):
     """
 
     def __init__(self, model, ids, *, offset, total, only=None, active_only=False, using="default", _raw_query=None):
-        active_filter = "WHERE t.is_active=true" if active_only and hasattr(model, "is_active") else ""
+        active_filter = " WHERE t.is_active=true" if active_only and hasattr(model, "is_active") else ""
         if _raw_query:
             # we're being cloned so can reuse our SQL query
             raw_query = _raw_query
@@ -52,7 +52,7 @@ class IDSliceQuerySet(models.query.RawQuerySet):
             if len(ids) > 0:
                 # build a list of sequence to model id, so we can sort by the sequence in our results
                 pairs = ", ".join(str((seq, model_id)) for seq, model_id in enumerate(ids, start=1))
-                raw_query = f"""SELECT {cols} FROM {table} t JOIN (VALUES {pairs}) tmp_resultset (seq, model_id) ON t.id = tmp_resultset.model_id {active_filter} ORDER BY tmp_resultset.seq"""
+                raw_query = f"""SELECT {cols} FROM {table} t JOIN (VALUES {pairs}) tmp_resultset (seq, model_id) ON t.id = tmp_resultset.model_id{active_filter} ORDER BY tmp_resultset.seq"""
             else:
                 raw_query = f"""SELECT {cols} FROM {table} t WHERE t.id < 0"""
 

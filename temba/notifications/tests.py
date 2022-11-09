@@ -178,6 +178,7 @@ class NotificationTest(TembaTest):
             include_msgs=True,
             extra_urns=(),
             group_memberships=(),
+            extra_queries={},
         )
         export.perform()
 

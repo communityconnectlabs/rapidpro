@@ -654,7 +654,7 @@ class OrgDeleteTest(TembaNonAtomicTest):
             self.parent_org, self.admin, [parent_flow], [parent_field], True, True, (), (), {}
         )
         Notification.export_finished(export)
-        ExportFlowResultsTask.create(self.child_org, self.admin, [child_flow], [child_field], True, True, (), ())
+        ExportFlowResultsTask.create(self.child_org, self.admin, [child_flow], [child_field], True, True, (), (), {})
 
         export = ExportContactsTask.create(self.parent_org, self.admin, group=parent_group)
         Notification.export_finished(export)
@@ -2751,16 +2751,16 @@ class OrgTest(TembaTest):
             self.assertEqual(sub_org_c.plan, settings.TOPUP_PLAN)
 
     def test_org_get_limit(self):
-        self.assertEqual(self.org.get_limit(Org.LIMIT_FIELDS), settings.MAX_ACTIVE_CONTACTFIELDS_PER_ORG)
-        self.assertEqual(self.org.get_limit(Org.LIMIT_GROUPS), settings.MAX_ACTIVE_CONTACTGROUPS_PER_ORG)
-        self.assertEqual(self.org.get_limit(Org.LIMIT_GLOBALS), settings.MAX_ACTIVE_GLOBALS_PER_ORG)
+        self.assertEqual(self.org.get_limit(Org.LIMIT_FIELDS), 255)
+        self.assertEqual(self.org.get_limit(Org.LIMIT_GROUPS), 250)
+        self.assertEqual(self.org.get_limit(Org.LIMIT_GLOBALS), 255)
 
         self.org.limits = dict(fields=500, groups=500)
         self.org.save()
 
         self.assertEqual(self.org.get_limit(Org.LIMIT_FIELDS), 500)
         self.assertEqual(self.org.get_limit(Org.LIMIT_GROUPS), 500)
-        self.assertEqual(self.org.get_limit(Org.LIMIT_GLOBALS), settings.MAX_ACTIVE_GLOBALS_PER_ORG)
+        self.assertEqual(self.org.get_limit(Org.LIMIT_GLOBALS), 255)
 
     def test_sub_orgs_management(self):
         settings.BRANDING[settings.DEFAULT_BRAND]["tiers"] = dict(multi_org=1_000_000)

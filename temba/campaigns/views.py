@@ -103,15 +103,6 @@ class CampaignCRUDL(SmartCRUDL):
                             href=reverse("campaigns.campaign_activate", args=[self.object.id]),
                         )
                     )
-
-                if self.has_org_perm("orgs.org_export"):
-                    links.append(
-                        dict(
-                            title=_("Export"),
-                            href=f"{reverse('orgs.org_export')}?campaign={self.object.id}&archived=1",
-                        )
-                    )
-
             else:
                 if self.has_org_perm("campaigns.campaignevent_create"):
                     links.append(
@@ -321,18 +312,18 @@ class CampaignEventForm(forms.ModelForm):
                         )
             if not data.get("message_start_mode"):
                 self.add_error("message_start_mode", _("This field is required."))
-        elif self.data["event_type"] == CampaignEvent.TYPE_FLOW:
-            # validate flow parameters
-            flow_params_values = [
-                self.data.get(field) for field in self.data.keys() if "flow_parameter_value" in field
-            ]
-            if flow_params_values and not all(flow_params_values):
-                raise ValidationError(_("Flow Parameters are not provided."))
         else:
             if not data.get("flow_to_start"):
                 self.add_error("flow_to_start", _("This field is required."))
             if not data.get("flow_start_mode"):
                 self.add_error("flow_start_mode", _("This field is required."))
+
+            # validate flow parameters
+            flow_params_values = [
+                self.data.get(field) for field in self.data.keys() if "flow_parameter_value" in field
+            ]
+            if flow_params_values and not all(flow_params_values):
+                self.add_error(None, _("Flow Parameters are not provided."))
 
         return data
 
