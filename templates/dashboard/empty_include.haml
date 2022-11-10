@@ -2,5 +2,9 @@
 
 .flex.flex-col.p-12
   .mt-4
-    -blocktrans
-      You don't have any dashboard on this organization, please select them going through the organization home page.
+    -if perms.orgs.org_dashboard_setup
+      -blocktrans
+        You don't have any dashboard on this organization, please select them by going through the organization home page.
+    -else
+      -blocktrans
+        You don't have any dashboard on this organization
