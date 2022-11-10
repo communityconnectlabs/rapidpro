@@ -228,13 +228,13 @@
       .title
         -trans "android"
 
-  %a{href:"{% url 'dashboard.dashboard_home' %}", class:"{% active request 'dashboard(?!/flows)' %}"}
-    .circle
-      .icon-bars-3.icon-1
-    .title
-      -trans "dashboards"
-
   -if not request.user.is_anonymous
+    %a{href:"{% url 'dashboard.dashboard_home' %}", class:"{% active request 'dashboard(?!/flows)' %}"}
+      .circle
+        .icon-bars-3.icon-1
+      .title
+        -trans "dashboards"
+
     .more
       %a.icon-menu-4{href:"#"}
       .submenu-container.hide

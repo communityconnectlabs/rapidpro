@@ -26,6 +26,9 @@
                 {{dashboard.metabase_dashboard_title}}
 
     .right
+      #token-expired-message.alert.alert-error.hidden
+        %b
+          The Metabase token is expired, please refresh the page.
       .flex.w-full
         .flex.w-full.mb-4.items-end.flex-wrap.justify-end.-mt-2(style="min-height:41px")
           -block action-buttons
@@ -48,8 +51,17 @@
 -block extra-style
   {{ block.super }}
   :css
+    #token-expired-message {
+      margin-bottom: 20px;
+    }
 
 -block extra-script
   {{ block.super }}
 
   :javascript
+    function makeTokenExpiredAlert(){
+      const el = document.querySelector('#token-expired-message');
+      el.classList.remove("hidden");
+    }
+
+    setInterval(makeTokenExpiredAlert, 60000);
