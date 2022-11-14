@@ -6,13 +6,30 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('msgs', '0162_merge_20221101_1805'),
+        ("msgs", "0162_merge_20221101_1805"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='msg',
-            name='status',
-            field=models.CharField(choices=[('I', 'Initializing'), ('P', 'Pending'), ('Q', 'Queued'), ('W', 'Wired'), ('U', 'En Route'), ('S', 'Sent'), ('D', 'Delivered'), ('H', 'Handled'), ('E', 'Error'), ('F', 'Failed'), ('R', 'Resent')], db_index=True, default='P', max_length=1),
+            model_name="msg",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("I", "Initializing"),
+                    ("P", "Pending"),
+                    ("Q", "Queued"),
+                    ("W", "Wired"),
+                    ("U", "En Route"),
+                    ("S", "Sent"),
+                    ("D", "Delivered"),
+                    ("H", "Handled"),
+                    ("E", "Error"),
+                    ("F", "Failed"),
+                    ("R", "Resent"),
+                ],
+                db_index=True,
+                default="P",
+                max_length=1,
+            ),
         ),
     ]

@@ -1377,8 +1377,8 @@ FLOW_START_PARAMS_SIZE = 256  # used for params passed to flow start API endpoin
 GLOBAL_VALUE_SIZE = 10_000  # max length of global values
 
 ORG_LIMIT_DEFAULTS = {
-    "fields": 250,
-    "globals": 250,
+    "fields": 255,
+    "globals": 255,
     "groups": 250,
     "labels": 250,
     "topics": 250,
@@ -1417,12 +1417,6 @@ MACHINE_HOSTNAME = socket.gethostname().split(".")[0]
 
 # ElasticSearch configuration (URL RFC-1738)
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
-
-
-# Maximum active objects are org can have
-MAX_ACTIVE_CONTACTFIELDS_PER_ORG = 255
-MAX_ACTIVE_CONTACTGROUPS_PER_ORG = 250
-MAX_ACTIVE_GLOBALS_PER_ORG = 255
 
 COURIER_DEFAULT_TPS = 1000
 
