@@ -48,7 +48,7 @@
       .alert-error.mt-4
         {{form.password.errors}}
 
-    -if not no_recaptcha
+    -if recaptcha_secrete_key and not no_recaptcha
       #recaptcha{style:"margin: 10px 0"}
 
     %div{class:"md\:w-full"}
@@ -75,7 +75,7 @@
       $('[name="authy_code"]').val('');
       $('form#login-form').submit();
     }
-  -if not no_recaptcha
+  -if recaptcha_secrete_key and not no_recaptcha
     %script{src:"https://www.google.com/recaptcha/api.js?render={{ recaptcha_secrete_key }}"}
     %script
       function validateRecaptcha() {
