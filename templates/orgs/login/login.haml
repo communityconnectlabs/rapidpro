@@ -1,14 +1,14 @@
 -extends "orgs/login/login_base.haml"
--load smartmin i18n
+-load smartmin i18n temba
 
 -block login-title
   -trans "Welcome Back"
       
--block login-content        
+-block login-content
   -blocktrans trimmed
     Please sign in with your email address and password.
 
-  %form#login-form(method="POST" action="/users/login/?next={{ request.GET.next }}" onsubmit="return validateRecaptcha();")
+  %form#login-form(method="POST" action="/users/login/?next={{ request.GET.next | xss_safe }}" onsubmit="return validateRecaptcha();")
     -csrf_token
     -for field, errors in form.errors.items
       -if field == '__all__'
