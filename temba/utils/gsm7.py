@@ -381,9 +381,8 @@ def calculate_num_segments(text):
 
 
 def load_gsm7_replacements():
-    handle = open("%s/flow_editor/gsm7-replacements.json" % settings.MEDIA_ROOT, "r+")
-    data = handle.read()
-    handle.close()
+    with open("%s/flow_editor/gsm7-replacements.json" % settings.MEDIA_ROOT, "r+") as handle:
+        data = handle.read()
 
     return json.loads(data)
 
