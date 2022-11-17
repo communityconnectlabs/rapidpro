@@ -394,7 +394,6 @@ GSM_REPLACEMENTS = load_gsm7_replacements()
 def get_char_replacement(char):
     key = format(ord(str(char)), "x").zfill(4).upper()
     replacement = GSM_REPLACEMENTS.get(key, None)
-    print(key, char, replacement)
     return char if replacement is None else replacement["substitute"]
 
 
