@@ -721,7 +721,7 @@ class UpdateChannelForm(forms.ModelForm):
     class Meta:
         model = Channel
         fields = ("name", "alert_email")
-        config_fields = ()
+        config_fields = []
         readonly = ()
         labels = {}
         helps = {}
@@ -873,7 +873,7 @@ class UpdateWebChatForm(UpdateChannelForm):
             forms.FileField(
                 label=_("Logo"), required=False, help_text=_("We recommend to upload an image with 64x64px")
             ),
-            None,
+            default=None,
         )
 
         self.add_config_field(
@@ -882,7 +882,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                 label=_("Logo Style"),
                 help_text=_("This is related to how we will display the widget when it's closed"),
             ),
-            None,
+            default=None,
         )
 
         self.add_config_field(
@@ -892,7 +892,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                 help_text=_("It will appear on the header of the WebChat"),
                 widget=forms.TextInput(attrs={"required": "", "maxlength": 40}),
             ),
-            None,
+            default=None,
         )
 
         self.add_config_field(
@@ -900,7 +900,7 @@ class UpdateWebChatForm(UpdateChannelForm):
             forms.CharField(
                 label=_("Welcome Message"), widget=forms.Textarea(attrs={"style": "height: 110px", "required": ""})
             ),
-            None,
+            default=None,
         )
 
         org = self.object.org
@@ -916,7 +916,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                     required=False,
                     widget=forms.Textarea(attrs={"style": "height: 110px"}),
                 ),
-                "",
+                default="",
             )
 
         self.add_config_field(
@@ -934,7 +934,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                     }
                 ),
             ),
-            None,
+            default=None,
         )
 
         self.add_config_field(
@@ -943,7 +943,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                 label=_("Input Text Placeholder"),
                 widget=forms.Textarea(attrs={"style": "height: 110px", "required": ""}),
             ),
-            None,
+            default=None,
         )
 
         # Unfortunately, duplicated "for" here because of the frontend implementation
@@ -959,7 +959,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                     required=False,
                     widget=forms.Textarea(attrs={"style": "height: 110px"}),
                 ),
-                "",
+                default="",
             )
 
         self.add_config_field(
@@ -969,67 +969,69 @@ class UpdateWebChatForm(UpdateChannelForm):
                 required=False,
                 widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
             ),
-            None,
+            default=None,
         )
 
-        self.add_config_field("theme", forms.ChoiceField(label=_("Theme"), required=False), None)
+        self.add_config_field("theme", forms.ChoiceField(label=_("Theme"), required=False), default=None)
 
         self.add_config_field(
             "widget_bg_color",
             forms.CharField(label=_("Widget Background Color"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "chat_header_bg_color",
             forms.CharField(label=_("Chat Header Background Color"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "chat_header_text_color",
             forms.CharField(label=_("Chat Header Text Color"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "automated_chat_bg",
             forms.CharField(label=_("Automated Chat Background"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "automated_chat_txt",
             forms.CharField(label=_("Automated Chat Text"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "user_chat_bg",
             forms.CharField(label=_("User Chat Background"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "user_chat_txt",
             forms.CharField(label=_("User Chat Text"), widget=forms.TextInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
             "chat_button_height",
             forms.CharField(label=_("Chat Button Height (in pixels)"), widget=forms.NumberInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
-            "side_padding", forms.CharField(label=_("Side Padding (# of Pixels)"), widget=forms.NumberInput()), None
+            "side_padding",
+            forms.CharField(label=_("Side Padding (# of Pixels)"), widget=forms.NumberInput()),
+            default=None,
         )
 
         self.add_config_field(
             "bottom_padding",
             forms.CharField(label=_("Bottom Padding (# of Pixels)"), widget=forms.NumberInput()),
-            None,
+            default=None,
         )
 
         self.add_config_field(
@@ -1038,7 +1040,7 @@ class UpdateWebChatForm(UpdateChannelForm):
                 label=_("Side of Screen"),
                 help_text=_("This is related to the side of the screen that we will display the widget"),
             ),
-            None,
+            default=None,
         )
 
         self.add_config_field(
@@ -1046,11 +1048,11 @@ class UpdateWebChatForm(UpdateChannelForm):
             forms.ChoiceField(
                 label=_("Auto Open"), help_text=_("Whether the chatbox should open when the website page is loaded")
             ),
-            None,
+            default=None,
         )
 
         self.add_config_field(
-            "action_type", forms.CharField(widget=forms.HiddenInput()), "update_and_generate_code_snippet"
+            "action_type", forms.CharField(widget=forms.HiddenInput()), default="update_and_generate_code_snippet"
         )
 
         unlisted_fields = ["name", "alert_email"]
