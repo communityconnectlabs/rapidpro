@@ -134,12 +134,12 @@ class InitTest(TembaTest):
     def test_sizeof_fmt(self):
         self.assertEqual("512.0 b", sizeof_fmt(512))
         self.assertEqual("1.0 Kb", sizeof_fmt(1024))
-        self.assertEqual("1.0 Mb", sizeof_fmt(1024**2))
-        self.assertEqual("1.0 Gb", sizeof_fmt(1024**3))
-        self.assertEqual("1.0 Tb", sizeof_fmt(1024**4))
-        self.assertEqual("1.0 Pb", sizeof_fmt(1024**5))
-        self.assertEqual("1.0 Eb", sizeof_fmt(1024**6))
-        self.assertEqual("1.0 Zb", sizeof_fmt(1024**7))
+        self.assertEqual("1.0 Mb", sizeof_fmt(1024 ** 2))
+        self.assertEqual("1.0 Gb", sizeof_fmt(1024 ** 3))
+        self.assertEqual("1.0 Tb", sizeof_fmt(1024 ** 4))
+        self.assertEqual("1.0 Pb", sizeof_fmt(1024 ** 5))
+        self.assertEqual("1.0 Eb", sizeof_fmt(1024 ** 6))
+        self.assertEqual("1.0 Zb", sizeof_fmt(1024 ** 7))
 
     def test_str_to_bool(self):
         self.assertFalse(str_to_bool(None))
@@ -827,7 +827,9 @@ class GSM7Test(TembaTest):
         text = "@ΔSP0¡P¿p£_!1AQaq$Φ\"2BRbr¥Γ#3CScsèΛ¤4DTdtéΩ%5EUeuùΠ&6FVfvìΨ'7GWgwòΣ(8HXhxÇΘ)9IYiy"
         result = replace_accented_chars(text)
 
-        self.assertEqual(result["updated"], "@SP0Pp_!1AQaq$\"2BRbrΓ#3CScse4DTdte%5EUeuu&6FVfvi'7GWgwo(8HXhxCO)9IYiy")
+        self.assertEqual(
+            result["updated"], "@SP0Pp_!!1/2AQaq$\"2BRbrΓ#3/4CScse4DTdte%5EUeuu&6FVfvi'7GWgwo(8HXhxCO)9IYiy"
+        )
         self.assertEqual(result["removed"], ["Δ", "¡", "¿", "£", "Φ", "¥", "Λ", "¤", "Ω", "Π", "Ψ", "Σ"])
         self.assertEqual(result["replaced"]["ò"], "o")
         self.assertEqual(result["replaced"]["Θ"], "O")
