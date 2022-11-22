@@ -11,6 +11,7 @@ from temba.channels.types.whatsapp.views import ClaimView
 from temba.contacts.models import URN
 from temba.request_logs.models import HTTPLog
 from temba.templates.models import TemplateTranslation
+from temba.utils.whatsapp import update_api_version
 from temba.utils.whatsapp.views import RefreshView, SyncLogsView, TemplatesView
 
 from ...models import ChannelType
@@ -58,9 +59,12 @@ class WhatsAppType(ChannelType):
         # deactivate all translations associated with us
         TemplateTranslation.trim(channel, [])
 
+    def get_api_headers(self, channel):
+        return {"Authorization": "Bearer %s" % channel.config[Channel.CONFIG_AUTH_TOKEN]}
+
     def activate(self, channel):
         domain = channel.org.get_brand_domain()
-        headers = {"Authorization": "Bearer %s" % channel.config[Channel.CONFIG_AUTH_TOKEN]}
+        headers = self.get_api_headers(channel)
 
         # first set our callbacks
         payload = {"webhooks": {"url": "https://" + domain + reverse("courier.wa", args=[channel.uuid, "receive"])}}
@@ -69,7 +73,7 @@ class WhatsAppType(ChannelType):
         )
 
         if resp.status_code != 200:
-            raise ValidationError(_("Unable to register callbacks: %s", resp.content))
+            raise ValidationError(_("Unable to register callbacks: %s") % resp.content)
 
         # update our quotas so we can send at 15/s
         payload = {
@@ -82,7 +86,9 @@ class WhatsAppType(ChannelType):
         )
 
         if resp.status_code != 200:
-            raise ValidationError(_("Unable to configure channel: %s", resp.content))
+            raise ValidationError(_("Unable to configure channel: %s") % resp.content)
+
+        update_api_version(channel)
 
     def get_api_templates(self, channel):
         if (
@@ -116,3 +122,16 @@ class WhatsAppType(ChannelType):
         except requests.RequestException as e:
             HTTPLog.create_from_exception(HTTPLog.WHATSAPP_TEMPLATES_SYNCED, url, e, start, channel=channel)
             return [], False
+
+    def check_health(self, channel):
+        headers = self.get_api_headers(channel)
+
+        try:
+            response = requests.get(channel.config[Channel.CONFIG_BASE_URL] + "/v1/health", headers=headers)
+        except Exception as ex:
+            raise Exception(f"Could not establish a connection with the WhatsApp server: {ex}")
+
+        if response.status_code >= 400:
+            raise requests.RequestException(f"Error checking API health: {response.content}", response=response)
+
+        return response

@@ -1,6 +1,6 @@
 import logging
 
-from celery.task import task
+from celery import shared_task
 
 from temba.flows.models import Flow
 from .models import Link, LinkContacts, ExportLinksTask
@@ -8,7 +8,7 @@ from .models import Link, LinkContacts, ExportLinksTask
 logger = logging.getLogger(__name__)
 
 
-@task(track_started=True, name="export_link_task")
+@shared_task(track_started=True, name="export_link_task")
 def export_link_task(id):
     """
     Export link contacts to a file and e-mail a link to the user
@@ -16,7 +16,7 @@ def export_link_task(id):
     ExportLinksTask.objects.get(id=id).perform()
 
 
-@task(track_started=True, name="handle_link_task")
+@shared_task(track_started=True, name="handle_link_task")
 def handle_link_task(link_id, contact_id, related_flow_uuid=None):
     link = Link.objects.filter(pk=link_id).only("created_by", "modified_by").first()
     related_flow = Flow.objects.filter(uuid=related_flow_uuid).first() if related_flow_uuid else None

@@ -94,6 +94,8 @@ class DependencyMixin:
     Utility mixin for models which can be flow dependencies
     """
 
+    soft_dependent_types = {"flow"}
+
     def get_dependents(self):
         return {"flow": self.dependent_flows.filter(is_active=True)}
 
@@ -103,7 +105,7 @@ class DependencyMixin:
         """
 
         for dep_type, deps in self.get_dependents().items():
-            if dep_type != "flow" and deps.exists():
+            if dep_type not in self.soft_dependent_types and deps.exists():
                 raise AssertionError(f"can't delete {self} that still has {dep_type} dependents")
 
         self.dependent_flows.update(has_issues=True)
@@ -309,14 +311,19 @@ class Org(SmartModel):
     LIMIT_FIELDS = "fields"
     LIMIT_GLOBALS = "globals"
     LIMIT_GROUPS = "groups"
-
-    LIMIT_DEFAULTS = {
-        LIMIT_FIELDS: settings.MAX_ACTIVE_CONTACTFIELDS_PER_ORG,
-        LIMIT_GLOBALS: settings.MAX_ACTIVE_GLOBALS_PER_ORG,
-        LIMIT_GROUPS: settings.MAX_ACTIVE_CONTACTGROUPS_PER_ORG,
-    }
+    LIMIT_LABELS = "labels"
+    LIMIT_TOPICS = "topics"
 
     DELETE_DELAY_DAYS = 7  # how many days after releasing that an org is deleted
+
+    BLOCKER_SUSPENDED = _(
+        "Sorry, your workspace is currently suspended. To re-enable starting flows and sending messages, please "
+        "contact support."
+    )
+    BLOCKER_FLAGGED = _(
+        "Sorry, your workspace is currently flagged. To re-enable starting flows and sending messages, please "
+        "contact support."
+    )
 
     uuid = models.UUIDField(unique=True, default=uuid4)
 
@@ -685,7 +692,7 @@ class Org(SmartModel):
         )
 
     def get_limit(self, limit_type):
-        return int(self.limits.get(limit_type, self.LIMIT_DEFAULTS.get(limit_type)))
+        return int(self.limits.get(limit_type, settings.ORG_LIMIT_DEFAULTS.get(limit_type)))
 
     def flag(self):
         self.is_flagged = True
@@ -781,7 +788,9 @@ class Org(SmartModel):
 
         # with all the flows and dependencies committed, we can now have mailroom do full validation
         for flow in new_flows:
-            mailroom.get_client().flow_inspect(self.id, flow.get_definition())
+            flow_info = mailroom.get_client().flow_inspect(self.id, flow.get_definition())
+            flow.has_issues = len(flow_info[Flow.INSPECT_ISSUES]) > 0
+            flow.save(update_fields=("has_issues",))
 
     def validate_import(self, import_def):
         from temba.triggers.models import Trigger
@@ -926,10 +935,14 @@ class Org(SmartModel):
         normalize_contact_tels_task.delay(self.pk)
 
     @cached_property
-    def cached_active_contacts_group(self):
+    def active_contacts_group(self):
         from temba.contacts.models import ContactGroup
 
-        return ContactGroup.all_groups.get(org=self, group_type=ContactGroup.TYPE_ACTIVE)
+        return self.all_groups(manager="system_groups").get(group_type=ContactGroup.TYPE_ACTIVE)
+
+    @cached_property
+    def default_ticket_topic(self):
+        return self.topics.get(is_default=True)
 
     def get_resthooks(self):
         """
@@ -1106,16 +1119,17 @@ class Org(SmartModel):
     def get_dayfirst(self):
         return self.date_format == Org.DATE_FORMAT_DAY_FIRST
 
-    def get_datetime_formats(self):
-        format_date = Org.DATE_FORMATS_PYTHON.get(self.date_format)
-        format_datetime = format_date + " %H:%M"
-        return format_date, format_datetime
+    def get_datetime_formats(self, *, seconds=False):
+        date_format = Org.DATE_FORMATS_PYTHON.get(self.date_format)
+        time_format = "%H:%M:%S" if seconds else "%H:%M"
+        datetime_format = f"{date_format} {time_format}"
+        return date_format, datetime_format
 
-    def format_datetime(self, d, show_time=True):
+    def format_datetime(self, d, *, show_time=True, seconds=False):
         """
         Formats a datetime with or without time using this org's date format
         """
-        formats = self.get_datetime_formats()
+        formats = self.get_datetime_formats(seconds=seconds)
         format = formats[1] if show_time else formats[0]
         return datetime_to_str(d, format, self.timezone)
 
@@ -1790,13 +1804,13 @@ class Org(SmartModel):
 
         return all_components
 
-    def initialize(self, branding=None, topup_size=None):
+    def initialize(self, branding=None, topup_size=None, sample_flows=True):
         """
         Initializes an organization, creating all the dependent objects we need for it to work properly.
         """
         from temba.middleware import BrandingMiddleware
         from temba.contacts.models import ContactField, ContactGroup
-        from temba.tickets.models import Ticketer
+        from temba.tickets.models import Ticketer, Topic
 
         with transaction.atomic():
             if not branding:
@@ -1805,12 +1819,14 @@ class Org(SmartModel):
             ContactGroup.create_system_groups(self)
             ContactField.create_system_fields(self)
             Ticketer.create_internal_ticketer(self, branding)
+            Topic.create_default_topic(self)
 
             self.init_topups(topup_size)
             self.update_capabilities()
 
         # outside of the transaction as it's going to call out to mailroom for flow validation
-        self.create_sample_flows(branding.get("api_link", ""))
+        if sample_flows:
+            self.create_sample_flows(branding.get("api_link", ""))
 
     def download_and_save_media(self, request, extension=None):  # pragma: needs cover
         """
@@ -1932,7 +1948,8 @@ class Org(SmartModel):
 
         user = self.modified_by
 
-        # delete exports
+        # delete notifications and exports
+        self.notifications.all().delete()
         self.exportcontactstasks.all().delete()
         self.exportmessagestasks.all().delete()
         self.exportflowresultstasks.all().delete()
@@ -1966,13 +1983,12 @@ class Org(SmartModel):
             flow_label.delete()
 
         # delete contact-related data
+        self.http_logs.all().delete()
         self.sessions.all().delete()
         self.ticket_events.all().delete()
         self.tickets.all().delete()
+        self.topics.all().delete()
         self.airtime_transfers.all().delete()
-
-        for result in self.webhook_results.all():
-            result.release()
 
         # delete our contacts
         for contact in self.contacts.all():
@@ -1989,7 +2005,7 @@ class Org(SmartModel):
 
         # delete our groups
         for group in self.all_groups.all():
-            group.release()
+            group.release(user)
             group.delete()
 
         # delete our channels
@@ -1999,9 +2015,6 @@ class Org(SmartModel):
             channel.template_translations.all().delete()
 
             channel.delete()
-
-        for log in self.http_logs.all():
-            log.release()
 
         for g in self.globals.all():
             g.release(user)
@@ -2026,8 +2039,7 @@ class Org(SmartModel):
         for topup in self.topups.all():
             topup.release()
 
-        for event in self.webhookevent_set.all():
-            event.release()
+        self.webhookevent_set.all().delete()
 
         for resthook in self.resthooks.all():
             resthook.release(user)
@@ -2372,7 +2384,7 @@ def _user_verify_2fa(user, *, otp: str = None, backup_token: str = None) -> bool
 
 
 def _user_name(user: User) -> str:
-    return " ".join([n for n in (user.first_name, user.last_name) if n])
+    return user.get_full_name()
 
 
 def _user_as_engine_ref(user: User) -> dict:

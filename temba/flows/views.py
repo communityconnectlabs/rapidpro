@@ -66,15 +66,14 @@ from temba.mailroom import FlowValidationException
 from temba.msgs.models import Attachment
 from temba.orgs.models import IntegrationType, Org, LOOKUPS, GIFTCARDS
 from temba.orgs.views import ModalMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
-from temba.templates.models import Template
 from temba.triggers.models import Trigger
 from temba.utils import analytics, gettext, json, languages, on_transaction_commit, str_to_bool, build_flow_parameters
 from temba.utils.fields import (
     CheckboxWidget,
     ContactSearchWidget,
     InputWidget,
-    JSONField,
     OmniboxChoice,
+    OmniboxField,
     SelectMultipleWidget,
     SelectWidget,
     CompletionTextarea,
@@ -82,7 +81,7 @@ from temba.utils.fields import (
 from temba.utils.s3 import private_file_storage
 from temba.utils.text import slugify_with
 from temba.utils.uuid import uuid4
-from temba.utils.views import BulkActionMixin
+from temba.utils.views import BulkActionMixin, SpaMixin
 from . import legacy
 
 from .merging import (
@@ -103,6 +102,7 @@ from .models import (
     FlowVersionConflictException,
     MergeFlowsTask,
 )
+from ..templates.models import Template
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +206,7 @@ class FlowSessionCRUDL(SmartCRUDL):
 
         def get(self, request, *args, **kwargs):
             session = self.get_object()
-            output = session.output
+            output = session.output_json
             output["_metadata"] = dict(
                 session_id=session.id, org=session.org.name, org_id=session.org_id, site=self.request.branding["link"]
             )
@@ -461,7 +461,6 @@ class FlowCRUDL(SmartCRUDL):
         "export_results",
         "upload_action_recording",
         "editor",
-        "editor_next",
         "results",
         "run_table",
         "links_table",
@@ -597,7 +596,7 @@ class FlowCRUDL(SmartCRUDL):
 
         def get(self, request, *args, **kwargs):
             flow = self.get_object()
-            revision_id = self.kwargs["revision_id"]
+            revision_id = self.kwargs.get("revision_id")
 
             # the editor requests the spec version it supports which allows us to add support for new versions
             # on the goflow/mailroom side before updating the editor to use that new version
@@ -1373,21 +1372,11 @@ class FlowCRUDL(SmartCRUDL):
 
             return qs
 
-    class EditorNext(AllowOnlyActiveFlowMixin, OrgObjPermsMixin, SmartReadView):
-        slug_url_kwarg = "uuid"
-
-        def get(self, request, *args, **kwargs):
-            # redirect to the editor endpoint
-            return HttpResponseRedirect(reverse("flows.flow_editor", args=[self.get_object().uuid]))
-
-    class Editor(OrgObjPermsMixin, SmartReadView):
+    class Editor(SpaMixin, OrgObjPermsMixin, SmartReadView):
         slug_url_kwarg = "uuid"
 
         def derive_title(self):
             return self.object.name
-
-        def get_template_names(self):
-            return "flows/flow_editor.haml"
 
         def get_context_data(self, *args, **kwargs):
             context = super().get_context_data(*args, **kwargs)
@@ -1443,59 +1432,35 @@ class FlowCRUDL(SmartCRUDL):
 
             context["dev_mode"] = dev_mode
             context["is_starting"] = flow.is_starting()
-
-            feature_filters = []
-
-            facebook_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
-            if facebook_channel is not None and flow.flow_type == Flow.TYPE_MESSAGE:
-                feature_filters.append("facebook")
-
-            whatsapp_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
-            if whatsapp_channel is not None:
-                feature_filters.append("whatsapp")
-
-            if flow.org.get_integrations(IntegrationType.Category.AIRTIME):
-                feature_filters.append("airtime")
-
-            if flow.org.classifiers.filter(is_active=True).exists():
-                feature_filters.append("classifier")
-
-            if flow.org.ticketers.filter(is_active=True).exists():
-                feature_filters.append("ticketer")
-
-            if flow.org.get_resthooks():
-                feature_filters.append("resthook")
-
-            if flow.org.is_ivr_machine_detection_enabled():
-                feature_filters.append("machine_detection")
-
-            if flow.flow_type != Flow.TYPE_MESSAGE:
-                feature_filters.append("spell_checker")
-
-            context["feature_filters"] = json.dumps(feature_filters)
-
-            context["mergeable_flows"] = self.get_mergeable_flows()
-            org = self.derive_org()
-            context["has_translator"] = org.has_translation_service() if org else None
-
-            # check if there is no other users that edititing current flow
-            # then make this user as main editor and set expiration time of editing to this user
-            r = get_redis_connection()
-            flow_key = f"active-flow-editor-{flow.uuid}"
-            active_flow_editor = r.get(flow_key)
-            if active_flow_editor is not None:
-                active_editor_email = active_flow_editor.decode()
-                if active_editor_email == self.request.user.username:
-                    return context
-
-                context["mutable"] = False
-                context["immutable_alert"] = (
-                    _("%s is currently editing this Flow. You can open this flow only in view mode.")
-                    % active_editor_email
-                )
-            else:
-                r.set(flow_key, self.request.user.username, ex=30)
+            context["feature_filters"] = json.dumps(self.get_features(flow.org, flow))
             return context
+
+        def get_features(self, org, flow=None) -> list:
+            features = []
+
+            facebook_channel = org.get_channel(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
+            whatsapp_channel = org.get_channel(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
+
+            if facebook_channel:
+                features.append("facebook")
+            if whatsapp_channel:
+                features.append("whatsapp")
+            if org.get_integrations(IntegrationType.Category.AIRTIME):
+                features.append("airtime")
+            if org.classifiers.filter(is_active=True).exists():
+                features.append("classifier")
+            if org.ticketers.filter(is_active=True).exists():
+                features.append("ticketer")
+            if org.get_resthooks():
+                features.append("resthook")
+            if org.country_id:
+                features.append("locations")
+            if org.is_ivr_machine_detection_enabled():
+                features.append("machine_detection")
+            if flow is not None and flow.flow_type != Flow.TYPE_MESSAGE:
+                features.append("spell_checker")
+
+            return features
 
         def get_gear_links(self):
             links = []
@@ -1676,29 +1641,6 @@ class FlowCRUDL(SmartCRUDL):
             context["dev_mode"] = dev_mode
             context["is_starting"] = flow.is_starting()
 
-            feature_filters = []
-
-            facebook_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
-            if facebook_channel is not None:
-                feature_filters.append("facebook")
-
-            whatsapp_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
-            if whatsapp_channel is not None:
-                feature_filters.append("whatsapp")
-
-            if flow.org.classifiers.filter(is_active=True).exists():
-                feature_filters.append("classifier")
-
-            if flow.org.ticketers.filter(is_active=True).exists():
-                feature_filters.append("ticketer")
-
-            if flow.org.get_resthooks():
-                feature_filters.append("resthook")
-
-            if flow.flow_type != Flow.TYPE_MESSAGE:
-                feature_filters.append("spell_checker")
-
-            context["feature_filters"] = json.dumps(feature_filters)
             return context
 
     class ChangeLanguage(OrgObjPermsMixin, SmartUpdateView):
@@ -1961,13 +1903,6 @@ class FlowCRUDL(SmartCRUDL):
                 widget=CheckboxWidget(),
             )
 
-            extra_queries = JSONField(
-                required=False,
-                label=_("Extra Query Parameters"),
-                help_text=_("Configuration to filter runs by contact fields or responses"),
-                widget=forms.HiddenInput(),
-            )
-
             def __init__(self, user, *args, **kwargs):
                 super().__init__(*args, **kwargs)
                 self.user = user
@@ -2065,7 +2000,7 @@ class FlowCRUDL(SmartCRUDL):
                 )
                 on_transaction_commit(lambda: export_flow_results_task.delay(export.pk))
 
-                if not getattr(settings, "CELERY_ALWAYS_EAGER", False):  # pragma: needs cover
+                if not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):  # pragma: needs cover
                     messages.info(
                         self.request,
                         _("We are preparing your export. We will e-mail you at %s when it is ready.")
@@ -2492,7 +2427,7 @@ class FlowCRUDL(SmartCRUDL):
                 initial=MODE_SELECT,
             )
 
-            omnibox = JSONField(
+            omnibox = OmniboxField(
                 required=False,
                 widget=OmniboxChoice(
                     attrs={
@@ -2543,39 +2478,16 @@ class FlowCRUDL(SmartCRUDL):
 
             def clean(self):
                 cleaned_data = super().clean()
-                mode = cleaned_data["mode"]
-                omnibox = cleaned_data.get("omnibox")
-                query = cleaned_data.get("query")
 
-                if mode == self.MODE_SELECT and not omnibox:
-                    self.add_error("omnibox", _("This field is required."))
-                elif mode == self.MODE_QUERY and not query:
-                    # TODO https://github.com/nyaruka/temba-components/issues/103
-                    # self.add_error("query", _("This field is required."))
-                    raise ValidationError(_("Contact query is required."))
+                if self.is_valid():
+                    mode = cleaned_data["mode"]
+                    omnibox = cleaned_data.get("omnibox")
+                    query = cleaned_data.get("query")
 
-                # check whether there are any flow starts that are incomplete
-                if self.instance.is_starting():
-                    raise ValidationError(
-                        _(
-                            "This flow is already being started, please wait until that process is complete before "
-                            "starting more contacts."
-                        )
-                    )
-
-                if self.instance.org.is_suspended:
-                    raise ValidationError(
-                        _(
-                            "Sorry, your workspace is currently suspended. "
-                            "To enable starting flows, please contact support."
-                        )
-                    )
-                if self.instance.org.is_flagged:
-                    raise ValidationError(
-                        _(
-                            "Sorry, your workspace is currently flagged. To enable starting flows, please contact support."
-                        )
-                    )
+                    if mode == self.MODE_SELECT and not omnibox:
+                        self.add_error("omnibox", _("This field is required."))
+                    elif mode == self.MODE_QUERY and not query:
+                        self.add_error("query", _("This field is required."))
 
                 return cleaned_data
 
@@ -2588,6 +2500,32 @@ class FlowCRUDL(SmartCRUDL):
         submit_button_name = _("Start Flow")
         success_url = "uuid@flows.flow_editor"
 
+        blockers = {
+            "already_starting": _(
+                "This flow is already being started - please wait until that process completes before starting "
+                "more contacts."
+            ),
+            "no_send_channel": _(
+                'To get started you need to <a href="%(link)s">add a channel</a> to your workspace which will allow '
+                "you to send messages to your contacts."
+            ),
+            "no_call_channel": _(
+                'To get started you need to <a href="%(link)s">add a voice channel</a> to your workspace which will '
+                "allow you to make and receive calls."
+            ),
+        }
+
+        warnings = {
+            "facebook_topic": _(
+                "This flow does not specify a Facebook topic. You may still start this flow but Facebook contacts who "
+                "have not sent an incoming message in the last 24 hours may not receive it."
+            ),
+            "no_templates": _(
+                "This flow does not use message templates. You may still start this flow but WhatsApp contacts who "
+                "have not sent an incoming message in the last 24 hours may not receive it."
+            ),
+        }
+
         def has_facebook_topic(self, flow):
             if not flow.is_legacy():
                 definition = flow.get_current_revision().get_migrated_definition()
@@ -2599,35 +2537,47 @@ class FlowCRUDL(SmartCRUDL):
         def get_context_data(self, *args, **kwargs):
             context = super().get_context_data(*args, **kwargs)
             flow = self.get_object()
-            org = flow.org
 
-            warnings = []
+            context["blockers"] = self.get_blockers(flow)
+            context["warnings"] = self.get_warnings(flow)
+            return context
+
+        def get_blockers(self, flow) -> list:
+            blockers = []
+
+            if flow.org.is_suspended:
+                blockers.append(Org.BLOCKER_SUSPENDED)
+            elif flow.org.is_flagged:
+                blockers.append(Org.BLOCKER_FLAGGED)
+            elif flow.is_starting():
+                blockers.append(self.blockers["already_starting"])
+
+            if flow.flow_type == Flow.TYPE_MESSAGE and not flow.org.get_send_channel():
+                blockers.append(self.blockers["no_send_channel"] % {"link": reverse("channels.channel_claim")})
+            elif flow.flow_type == Flow.TYPE_VOICE and not flow.org.get_call_channel():
+                blockers.append(self.blockers["no_call_channel"] % {"link": reverse("channels.channel_claim")})
+
+            return blockers
+
+        def get_warnings(self, flow) -> list:
+            warnings = [_("Please read the options below carefully as they have changed recently.")]
 
             # facebook channels need to warn if no topic is set
-            facebook_channel = org.get_channel(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
-            if facebook_channel:
-                if not self.has_facebook_topic(flow):
-                    warnings.append(
-                        _(
-                            "This flow does not specify a Facebook topic. You may still start this flow but Facebook contacts who have not sent an incoming message in the last 24 hours may not receive it."
-                        )
-                    )
+            facebook_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.FACEBOOK_SCHEME)
+            if facebook_channel and not self.has_facebook_topic(flow):
+                warnings.append(self.warnings["facebook_topic"])
 
             # if we have a whatsapp channel
-            whatsapp_channel = org.get_channel(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
+            whatsapp_channel = flow.org.get_channel(Channel.ROLE_SEND, scheme=URN.WHATSAPP_SCHEME)
             if whatsapp_channel:
                 # check to see we are using templates
                 templates = flow.get_dependencies_metadata("template")
                 if not templates:
-                    warnings.append(
-                        _(
-                            "This flow does not use message templates. You may still start this flow but WhatsApp contacts who have not sent an incoming message in the last 24 hours may not receive it."
-                        )
-                    )
+                    warnings.append(self.warnings["no_templates"])
 
                 # check that this template is synced and ready to go
                 for ref in templates:
-                    template = Template.objects.filter(org=org, uuid=ref["uuid"]).first()
+                    template = flow.org.templates.filter(uuid=ref["uuid"]).first()
                     if not template:
                         warnings.append(
                             _(f"The message template {ref['name']} does not exist on your account and cannot be sent.")
@@ -2636,13 +2586,7 @@ class FlowCRUDL(SmartCRUDL):
                         warnings.append(
                             _(f"Your message template {template.name} is not approved and cannot be sent.")
                         )
-
-            run_stats = self.object.get_run_stats()
-
-            context["warnings"] = warnings
-            context["run_count"] = run_stats["total"]
-            context["complete_count"] = run_stats["completed"]
-            return context
+            return warnings
 
         def save(self, *args, **kwargs):
             mode = self.form.cleaned_data["mode"]
@@ -2724,7 +2668,7 @@ class FlowCRUDL(SmartCRUDL):
                 initial=MODE_SELECT,
             )
 
-            omnibox = JSONField(
+            omnibox = OmniboxField(
                 required=False,
                 widget=OmniboxChoice(
                     attrs={
@@ -3184,7 +3128,7 @@ class FlowCRUDL(SmartCRUDL):
                 choices=[],
             )
 
-            omnibox = JSONField(
+            omnibox = OmniboxField(
                 label=_("Contacts & Groups"),
                 required=False,
                 help_text=_("These contacts will be added to the flow, sending the first message if appropriate."),

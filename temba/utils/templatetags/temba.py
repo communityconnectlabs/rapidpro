@@ -10,7 +10,7 @@ from django.template import TemplateSyntaxError
 from django.template.defaultfilters import register
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escapejs
+from django.utils.html import escapejs, escape, strip_tags
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext, ugettext_lazy as _, ungettext_lazy
 
@@ -159,7 +159,7 @@ def delta_filter(delta):
             seconds2, name2 = TIME_SINCE_CHUNKS[i + 1]
             count2 = (since - (seconds * count)) // seconds2
             if count2 != 0:
-                result += ugettext(", ") + name2 % count2
+                result += ", " + name2 % count2
         return result
 
     except Exception:
@@ -286,18 +286,21 @@ def short_datetime(context, dtime):
 
 
 @register.simple_tag(takes_context=True)
-def format_datetime(context, dtime):
-    if dtime.tzinfo is None:
-        dtime = dtime.replace(tzinfo=pytz.utc)
+def format_datetime(context, dt, seconds: bool = False):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=pytz.utc)
 
     tz = pytz.UTC
     org = context.get("user_org")
     if org:
         tz = org.timezone
-    dtime = dtime.astimezone(tz)
+    dt = dt.astimezone(tz)
+
     if org:
-        return org.format_datetime(dtime)
-    return datetime_to_str(dtime, "%d-%m-%Y %H:%M", tz)
+        return org.format_datetime(dt, seconds=seconds)
+
+    fmt = "%d-%m-%Y %H:%M:%S" if seconds else "%d-%m-%Y %H:%M"
+    return datetime_to_str(dt, fmt, tz)
 
 
 @register.filter
@@ -339,3 +342,8 @@ def temba_get_value(context, obj, field):
 @register.simple_tag
 def to_dict(obj):
     return str(obj.__dict__)
+
+
+@register.filter
+def xss_safe(string):
+    return "" if "javascript:" in string else escape(strip_tags(string))

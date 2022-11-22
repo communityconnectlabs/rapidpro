@@ -317,7 +317,22 @@ class IntegrationFormaxView(IntegrationViewMixin, ComponentFormMixin, SmartFormV
         return response
 
 
-class DependencyUsagesModal(OrgObjPermsMixin, SmartReadView):
+class DependencyModalMixin(OrgObjPermsMixin):
+    dependent_order = {"campaign_event": "relative_to__label"}
+    dependent_select_related = {"campaign_event": ("campaign", "relative_to")}
+
+    def get_dependents(self, obj) -> dict:
+        dependents = {}
+        for type_key, type_qs in obj.get_dependents().items():
+            # only include dependency types which we have at least one dependent of
+            if type_qs.exists():
+                dependents[type_key] = type_qs.order_by(self.dependent_order.get(type_key, "name")).select_related(
+                    *self.dependent_select_related.get(type_key, ())
+                )
+        return dependents
+
+
+class DependencyUsagesModal(DependencyModalMixin, SmartReadView):
     """
     Base view for usage modals of flow dependencies
     """
@@ -327,11 +342,11 @@ class DependencyUsagesModal(OrgObjPermsMixin, SmartReadView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["dependents"] = [qs for qs in self.object.get_dependents().values() if qs.exists()]
+        context["dependents"] = self.get_dependents(self.object)
         return context
 
 
-class DependencyDeleteModal(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+class DependencyDeleteModal(DependencyModalMixin, ModalMixin, SmartDeleteView):
     """
     Base view for delete modals of flow dependencies
     """
@@ -342,11 +357,24 @@ class DependencyDeleteModal(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
     submit_button_name = _("Delete")
     template_name = "orgs/dependency_delete_modal.haml"
 
+    type_warnings = {"flow": _("these may not work as expected"), "campaign_event": _("these will be removed")}
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # lookup dependent flows for this object
-        context["dep_flows"] = self.get_object().dependent_flows.only("uuid", "name").order_by("name")
+        # get dependents and sort by soft vs hard
+        all_dependents = self.get_dependents(self.object)
+        soft_dependents = {}
+        hard_dependents = {}
+        for type_key, type_qs in all_dependents.items():
+            if type_key in self.object.soft_dependent_types:
+                soft_dependents[type_key] = type_qs
+            else:
+                hard_dependents[type_key] = type_qs
+
+        context["soft_dependents"] = soft_dependents
+        context["hard_dependents"] = hard_dependents
+        context["type_warnings"] = self.type_warnings
         return context
 
     def post(self, request, *args, **kwargs):
@@ -1048,6 +1076,30 @@ class UserCRUDL(SmartCRUDL):
             return context
 
 
+class SpaView(InferOrgMixin, OrgPermsMixin, SmartTemplateView):
+    permission = "orgs.org_home"
+    template_name = "spa_frame.haml"
+
+    def has_permission(self, request, *args, **kwargs):
+        return not request.user.is_anonymous and request.user.is_beta()
+
+
+class MenuMixin(OrgPermsMixin):
+    def add_menu(self, menu, name, icon, reverse_name, href=None):
+        if self.has_org_perm(reverse_name):
+            menu_item = {
+                "id": slugify(name),
+                "name": name,
+                "icon": icon,
+                "endpoint": reverse(reverse_name),
+            }
+
+            if href and self.has_org_perm(href):
+                menu_item["href"] = reverse(href)
+
+            menu.append(menu_item)
+
+
 class OrgCRUDL(SmartCRUDL):
     actions = (
         "signup",
@@ -1065,6 +1117,7 @@ class OrgCRUDL(SmartCRUDL):
         "manage_accounts",
         "manage_accounts_sub_org",
         "manage",
+        "menu",
         "update",
         "country",
         "languages",
@@ -1098,6 +1151,39 @@ class OrgCRUDL(SmartCRUDL):
     )
 
     model = Org
+
+    class Menu(MenuMixin, InferOrgMixin, SmartTemplateView):
+        def render_to_response(self, context, **response_kwargs):
+            menu = []
+            self.add_menu(menu, "Messages", "message-square", "msgs.msg_menu")
+            self.add_menu(menu, "Contacts", "contact", "contacts.contact_menu")
+            # self.add_menu(menu, "Flows", "flow", "flows.flow_menu")
+            self.add_menu(menu, "Campaigns", "campaign", "campaigns.campaigns_menu")
+            self.add_menu(menu, "Tickets", "agent", "tickets.ticket_menu", "tickets.ticket_list")
+            self.add_menu(menu, "Triggers", "radio", "triggers.trigger_menu")
+            self.add_menu(menu, "Channels", "zap", "channels.channel_menu")
+
+            # menu.append(
+            #    {
+            #        "id": "settings",
+            #        "name": "Settings",
+            #        "icon": "settings",
+            #        "bottom": True,
+            #        "href": reverse("orgs.org_home"),
+            #    }
+            # )
+
+            menu.append(
+                {
+                    "id": "support",
+                    "name": "Support",
+                    "icon": "help-circle",
+                    "bottom": True,
+                    "trigger": "showSupportWidget",
+                }
+            )
+
+            return JsonResponse({"results": menu})
 
     class Import(NonAtomicMixin, InferOrgMixin, OrgPermsMixin, SmartFormView):
         class FlowImportForm(Form):
@@ -2923,7 +3009,7 @@ class OrgCRUDL(SmartCRUDL):
 
             return obj
 
-    class Resthooks(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+    class Resthooks(ComponentFormMixin, InferOrgMixin, OrgPermsMixin, SmartUpdateView):
         class ResthookForm(forms.ModelForm):
             new_slug = forms.SlugField(
                 required=False,
@@ -2938,7 +3024,7 @@ class OrgCRUDL(SmartCRUDL):
                 field_mapping = []
 
                 for resthook in self.instance.get_resthooks():
-                    check_field = forms.BooleanField(required=False)
+                    check_field = forms.BooleanField(required=False, widget=CheckboxWidget())
                     field_name = "resthook_%d" % resthook.id
 
                     field_mapping.append((field_name, check_field))
@@ -3484,13 +3570,6 @@ class OrgCRUDL(SmartCRUDL):
         success_url = "@orgs.org_home"
         success_message = ""
 
-        def get_context_data(self, **kwargs):
-            from temba.api.models import WebHookResult
-
-            context = super().get_context_data(**kwargs)
-            context["failed_webhooks"] = WebHookResult.get_recent_errored(self.request.user.get_org()).exists()
-            return context
-
     class Prometheus(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
         class ToggleForm(forms.ModelForm):
             class Meta:
@@ -3647,7 +3726,7 @@ class OrgCRUDL(SmartCRUDL):
                     formax.add_section(
                         "tickets",
                         reverse("tickets.ticketer_read", args=[ticketer.uuid]),
-                        icon=ticketer.get_type().icon,
+                        icon=ticketer.type.icon,
                     )
 
             if self.has_org_perm("orgs.org_profile"):
@@ -3663,6 +3742,9 @@ class OrgCRUDL(SmartCRUDL):
             if self.has_org_perm("orgs.org_languages"):
                 formax.add_section("languages", reverse("orgs.org_languages"), icon="icon-language")
                 formax.add_section("translations", reverse("orgs.org_translations"), icon="icon-language")
+
+            if self.has_org_perm("orgs.org_country") and org.get_branding().get("location_support"):
+                formax.add_section("country", reverse("orgs.org_country"), icon="icon-location2")
 
             if self.has_org_perm("orgs.org_dashboard_setup") or self.request.user.is_superuser:
                 formax.add_section("dashboard_setup", reverse("orgs.org_dashboard_setup"), icon="icon-bars-3")

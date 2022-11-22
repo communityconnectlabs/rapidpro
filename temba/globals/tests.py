@@ -1,9 +1,6 @@
-from unittest.mock import patch
-
 from django.test.utils import override_settings
 from django.urls import reverse
 
-from temba.orgs.models import Org
 from temba.tests import CRUDLTestMixin, TembaTest
 
 from .models import Global
@@ -85,7 +82,7 @@ class GlobalCRUDLTest(TembaTest, CRUDLTestMixin):
         self.global2 = Global.get_or_create(self.org, self.admin, "access_token", "Access Token", "23464373")
         self.other_org_global = Global.get_or_create(self.org2, self.admin, "access_token", "Access Token", "653732")
 
-        self.flow = self.get_flow("color")
+        self.flow = self.create_flow("Color Flow")
         self.flow.global_dependencies.add(self.global1)
 
     def test_list_views(self):
@@ -105,8 +102,7 @@ class GlobalCRUDLTest(TembaTest, CRUDLTestMixin):
 
         self.assertListFetch(unused_url, allow_viewers=False, allow_editors=False, context_objects=[self.global2])
 
-    @override_settings(MAX_ACTIVE_GLOBALS_PER_ORG=4)
-    @patch.object(Org, "LIMIT_DEFAULTS", dict(globals=4))
+    @override_settings(ORG_LIMIT_DEFAULTS={"globals": 4})
     def test_create(self):
         create_url = reverse("globals.global_create")
 
@@ -120,7 +116,7 @@ class GlobalCRUDLTest(TembaTest, CRUDLTestMixin):
         )
 
         # try to submit with name that would become invalid key
-        self.assertCreateSubmit(create_url, {"name": "-"}, form_errors={"name": "Isn't a valid name"})
+        self.assertCreateSubmit(create_url, {"name": "-", "value": "123"}, form_errors={"name": "Isn't a valid name"})
 
         # submit with valid values
         self.assertCreateSubmit(
@@ -186,7 +182,7 @@ class GlobalCRUDLTest(TembaTest, CRUDLTestMixin):
             detail_url, allow_viewers=False, allow_editors=False, context_object=self.global1
         )
 
-        self.assertEqual([[self.flow]], [list(qs) for qs in response.context["dependents"]])
+        self.assertEqual({"flow": [self.flow]}, {t: list(qs) for t, qs in response.context["dependents"].items()})
 
     def test_delete(self):
         delete_url = reverse("globals.global_delete", args=[self.global2.uuid])
@@ -204,7 +200,8 @@ class GlobalCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertFalse(self.flow.has_issues)
 
         response = self.assertDeleteFetch(delete_url)
-        self.assertContains(response, "is used by the following flows")
+        self.assertContains(response, "is used by the following items but can still be deleted:")
+        self.assertContains(response, "Color Flow")
 
         response = self.assertDeleteSubmit(delete_url, object_deleted=self.global1, success_status=200)
         self.assertEqual("/global/", response["Temba-Success"])

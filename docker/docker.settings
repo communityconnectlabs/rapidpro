@@ -126,6 +126,7 @@ DATABASES = {
     "default": _default_database_config,
     "direct": _direct_database_config,
     "read_only_db": _readonly_database_config,
+    "readonly": _readonly_database_config,
 }
 
 INTERNAL_IPS = ("*",)
