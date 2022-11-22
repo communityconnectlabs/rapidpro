@@ -451,6 +451,7 @@ PERMISSIONS = {
         "token",
         "translations",
         "opt_out_message",
+        "dashboard_setup",
     ),
     "channels.channel": (
         "api",
@@ -591,6 +592,7 @@ GROUP_PERMISSIONS = {
         "orgs.topup_create",
         "orgs.topup_manage",
         "orgs.topup_update",
+        "orgs.org_dashboard_setup",
         "policies.policy_create",
         "policies.policy_update",
         "policies.policy_admin",
@@ -805,6 +807,7 @@ GROUP_PERMISSIONS = {
         "orgs.topup_list",
         "orgs.topup_read",
         "orgs.org_opt_out_message",
+        "orgs.org_dashboard",
         "channels.channel_api",
         "channels.channel_bulk_sender_options",
         "channels.channel_claim",
@@ -1287,7 +1290,7 @@ CHANNEL_TYPES = [
     "temba.channels.types.discord.DiscordType",
     "temba.channels.types.webchat.WebChatType",
     "temba.channels.types.rocketchat.RocketChatType",
-    # "temba.channels.types.mgage.MGageType",
+    "temba.channels.types.mgage.MGageType",
 ]
 
 # set of ISO-639-3 codes of languages to allow in addition to all ISO-639-1 languages
@@ -1461,3 +1464,6 @@ ALLOW_DUPLICATE_CONTACT_IMPORT = os.environ.get("ALLOW_DUPLICATE_CONTACT_IMPORT"
 DEACTIVATED_CONTACTS_EMAILS = os.environ.get("DEACTIVATED_CONTACTS_EMAILS", "").split(",")
 
 AMAZON_CONNECT_LAMBDA_FUNCTION_URL = os.environ.get("AMAZON_CONNECT_LAMBDA_FUNCTION_URL", "")
+
+METABASE_SECRET_KEY = os.environ.get("METABASE_SECRET_KEY", "")
+METABASE_SITE_URL = os.environ.get("METABASE_SITE_URL", "")
