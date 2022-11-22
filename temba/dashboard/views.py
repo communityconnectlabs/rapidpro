@@ -54,9 +54,7 @@ class Home(OrgPermsMixin, SmartTemplateView):
                 "exp": round(time.time()) + (60 * 10),  # 10 minute expiration
             }
             token = jwt.encode(payload, settings.METABASE_SECRET_KEY, algorithm="HS256")
-            dashboard_url = (
-                f"{settings.METABASE_SITE_URL}/embed/dashboard/{token.decode('utf-8')}#bordered=false&titled=false"
-            )
+            dashboard_url = f"{settings.METABASE_SITE_URL}/embed/dashboard/{token}#bordered=false&titled=false"
             context["dashboard_url"] = dashboard_url
             context["title"] = dashboard.metabase_dashboard_title
 
