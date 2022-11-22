@@ -485,6 +485,7 @@ class FlowCRUDL(SmartCRUDL):
         "launch_studio_flow",
         "dialogflow_api",
         "show_templates",
+        "monitoring",
     )
 
     model = Flow
@@ -1555,6 +1556,15 @@ class FlowCRUDL(SmartCRUDL):
             if self.has_org_perm("flows.flow_import_translation"):
                 links.append(
                     dict(title=_("Import Translation"), href=reverse("flows.flow_import_translation", args=[flow.id]))
+                )
+
+            if self.has_org_perm("flows.flow_monitoring"):
+                links.append(
+                    dict(
+                        id="Monitoring",
+                        title=_("Monitoring"),
+                        href=reverse("flows.flow_monitoring", args=[self.object.pk]),
+                    )
                 )
 
             user = self.get_user()
@@ -3229,6 +3239,17 @@ class FlowCRUDL(SmartCRUDL):
             context_data["numbers"] = json.dumps(self.studio_numbers)
             context_data["flow_numbers"] = json.dumps(self.studio_flow_numbers)
             return context_data
+
+    class Monitoring(OrgPermsMixin, SmartReadView):
+        template_name = "flows/monitoring.haml"
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["current_time"] = timezone.now()
+            context["updated_time"] = timezone.now()
+            context["start_time"] = timezone.now()
+            context["end_time"] = timezone.now()
+            return context
 
 
 # this is just for adhoc testing of the preprocess url

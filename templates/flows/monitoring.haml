@@ -1,0 +1,62 @@
+-extends "smartmin/read.html"
+-load smartmin sms temba compress humanize contacts i18n
+
+-block title
+  {{object.name}} - Monitoring
+
+-block subtitle
+  .flex.flex-col
+    .summary
+      .inline-block
+        %table.subtitle_table
+          %tbody
+            %tr
+              %td
+                Current Time: {{ current_time }}
+              %td
+                Last Updated: {{ updated_time }}
+            %tr
+              %td
+                Start Time: {{ start_time }}
+              %td
+                End Time: {% if end_time %}{{ end_time }}{% else %}-{% endif %}
+
+-block content
+  %div.flex.flex-col
+    %table.list
+      %tbody
+        %tr
+          %td
+            Total Number of Contacts: {{ total_contacts }}
+          %td
+            Number of Contacts Messaged SMS: {{ reached_contacts }}
+          %td
+            Number of Contacts Remaining: {{ remaining_contacts }}
+        %tr
+          %td
+            Invalid Contacts: {{ invalid_contacts }}
+          %td
+            Errors on Carrier Side: {{ carrier_errors }}
+          %td
+            Errors on CCL Platform Side: {{ ccl_errors }}
+        %tr
+          %td
+            Opt-Outs: {{ opt_outs }}
+          %td
+            Bounces: {{ bounces }}
+          %td
+            Number of Inbound Messages: {{ inbound }}
+
+    -if org_perms.orgs.org_dashboard
+      %a.mt-2(href="{% url 'dashboard.dashboard_home' %}")
+        Full dashboard can be found here
+
+
+-block extra-style
+  :css
+    .subtitle_table {
+      color: #1a1a1a !important;
+      font-size: 14px;
+      font-weight: 300;
+    }
+

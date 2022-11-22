@@ -1,3 +1,4 @@
+from django.utils import timezone
 from smartmin.views import SmartCreateView, SmartCRUDL, SmartDeleteView, SmartListView, SmartReadView, SmartUpdateView
 
 from django import forms
@@ -41,7 +42,7 @@ class CampaignForm(forms.ModelForm):
 
 class CampaignCRUDL(SmartCRUDL):
     model = Campaign
-    actions = ("create", "read", "update", "list", "archived", "archive", "activate")
+    actions = ("create", "read", "update", "list", "archived", "archive", "activate", "monitoring")
 
     class Update(OrgObjPermsMixin, ModalMixin, SmartUpdateView):
         fields = ("name", "group")
@@ -135,6 +136,15 @@ class CampaignCRUDL(SmartCRUDL):
                             title="Archive",
                             js_class="posterize archive-campaign",
                             href=reverse("campaigns.campaign_archive", args=[self.object.id]),
+                        )
+                    )
+
+                if self.has_org_perm("flows.flow_monitoring"):
+                    links.append(
+                        dict(
+                            id="Monitoring",
+                            title=_("Monitoring"),
+                            href=reverse("campaigns.campaign_monitoring", args=[self.object.pk]),
                         )
                     )
 
@@ -235,6 +245,18 @@ class CampaignCRUDL(SmartCRUDL):
         def save(self, obj):
             obj.apply_action_restore(self.request.user, Campaign.objects.filter(id=obj.id))
             return obj
+
+    class Monitoring(OrgPermsMixin, SmartReadView):
+        template_name = "flows/monitoring.haml"
+        permission = "flows.flow_monitoring"
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["current_time"] = timezone.now()
+            context["updated_time"] = timezone.now()
+            context["start_time"] = timezone.now()
+            context["end_time"] = timezone.now()
+            return context
 
 
 class CampaignEventForm(forms.ModelForm):
