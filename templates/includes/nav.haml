@@ -228,14 +228,13 @@
       .title
         -trans "android"
 
-  -if request.user.is_superuser or perms.orgs.org_dashboard
+  -if not request.user.is_anonymous
     %a{href:"{% url 'dashboard.dashboard_home' %}", class:"{% active request 'dashboard(?!/flows)' %}"}
       .circle
         .icon-bars-3.icon-1
       .title
-        -trans "dashboard"
+        -trans "dashboards"
 
-  -if not request.user.is_anonymous
     .more
       %a.icon-menu-4{href:"#"}
       .submenu-container.hide

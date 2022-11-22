@@ -640,6 +640,14 @@ class Org(SmartModel):
                 )
             )
 
+    def get_metabase_dashboards(self):
+        """
+        Returns the Metabase dashboards set up on this Org
+        """
+        if self.config:
+            return self.config.get("metabase_dashboards", [])
+        return []
+
     def lock_on(self, lock, qualifier=None):
         """
         Creates the requested type of org-level lock

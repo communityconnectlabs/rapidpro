@@ -1,0 +1,13 @@
+-extends "smartmin/update.html"
+-load smartmin i18n humanize
+
+-block summary
+  -if metabase_dashboards
+    -blocktrans trimmed with dashboards=metabase_dashboards
+      Selected dashboards: <b>{{ dashboards }}</b>.
+  -else
+    -trans "Select the Metabase dashboards available."
+
+
+-block fields
+  -render_field "dashboards"
