@@ -11,7 +11,7 @@
     id="{{task.uuid}}"
   >
     %td
-      %a(href="{% url 'flows.flow_editor_next' task.source.uuid %}")
+      %a(href="{% url 'flows.flow_editor' task.source.uuid %}")
         = task.source
     %td
       = task.get_status_display
