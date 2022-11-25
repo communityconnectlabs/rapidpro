@@ -2712,7 +2712,7 @@ class MergeFlowsTask(TembaModel):
                     {
                         "source_name": self.source.name,
                         "target_name": self.merging_metadata.get("previous_target_name", self.target.name),
-                        "link": f"{branding['link']}{reverse('flows.flow_editor_next', args=[self.target.uuid])}",
+                        "link": f"{branding['link']}{reverse('flows.flow_editor', args=[self.target.uuid])}",
                     },
                     branding,
                 )

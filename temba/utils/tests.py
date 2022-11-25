@@ -827,7 +827,9 @@ class GSM7Test(TembaTest):
         text = "@ΔSP0¡P¿p£_!1AQaq$Φ\"2BRbr¥Γ#3CScsèΛ¤4DTdtéΩ%5EUeuùΠ&6FVfvìΨ'7GWgwòΣ(8HXhxÇΘ)9IYiy"
         result = replace_accented_chars(text)
 
-        self.assertEqual(result["updated"], "@SP0Pp_!1AQaq$\"2BRbrΓ#3CScse4DTdte%5EUeuu&6FVfvi'7GWgwo(8HXhxCO)9IYiy")
+        self.assertEqual(
+            result["updated"], "@SP0Pp_!!1/2AQaq$\"2BRbrΓ#3/4CScse4DTdte%5EUeuu&6FVfvi'7GWgwo(8HXhxCO)9IYiy"
+        )
         self.assertEqual(result["removed"], ["Δ", "¡", "¿", "£", "Φ", "¥", "Λ", "¤", "Ω", "Π", "Ψ", "Σ"])
         self.assertEqual(result["replaced"]["ò"], "o")
         self.assertEqual(result["replaced"]["Θ"], "O")

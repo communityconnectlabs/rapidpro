@@ -10,7 +10,7 @@ from django.template import TemplateSyntaxError
 from django.template.defaultfilters import register
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escapejs
+from django.utils.html import escapejs, escape, strip_tags
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext, ugettext_lazy as _, ungettext_lazy
 
@@ -342,3 +342,8 @@ def temba_get_value(context, obj, field):
 @register.simple_tag
 def to_dict(obj):
     return str(obj.__dict__)
+
+
+@register.filter
+def xss_safe(string):
+    return "" if "javascript:" in string else escape(strip_tags(string))

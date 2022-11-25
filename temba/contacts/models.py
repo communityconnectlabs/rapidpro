@@ -2149,7 +2149,7 @@ def get_import_upload_path(instance: Any, filename: str):
 
 
 class ContactImport(SmartModel):
-    MAX_RECORDS = 100_000
+    MAX_RECORDS = 2_000_000
     BATCH_SIZE = 100
     EXPLICIT_CLEAR = "--"
 
