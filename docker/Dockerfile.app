@@ -1,4 +1,4 @@
-FROM greatnonprofits/ccl-base:v3
+FROM greatnonprofits/ccl-base:v4
 
 RUN wget https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem \
     -O /usr/local/share/ca-certificates/rds.crt
