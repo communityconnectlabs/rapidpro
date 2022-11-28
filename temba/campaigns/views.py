@@ -249,13 +249,59 @@ class CampaignCRUDL(SmartCRUDL):
     class Monitoring(OrgPermsMixin, SmartReadView):
         template_name = "flows/monitoring.haml"
         permission = "flows.flow_monitoring"
+        select_data_sql = """
+        SELECT id,
+          min(cast(t.flow_data ->> 'start_time' as timestamp))     as start_time,
+          max(cast(t.flow_data ->> 'updated_time' as timestamp))   as updated_time,
+          sum(cast(t.flow_data ->> 'total_contacts' as integer))   as total_contacts,
+          sum(cast(t.flow_data ->> 'bounces' as integer))          as bounces,
+          sum(cast(t.flow_data ->> 'reached_contacts' as integer)) as reached_contacts,
+          sum(cast(t.flow_data ->> 'inbound' as integer))          as inbound,
+          max(cast(t.flow_data ->> 'has_running' as integer))      as has_running
+        FROM (
+          SELECT cp.id id, ce.flow_id, (
+            SELECT row_to_json(flow_data)
+            FROM (
+              SELECT min(fs.created_on)                                               as start_time,
+                     max(fs.modified_on)                                              as updated_time,
+                     sum(fs.contact_count)                                            as total_contacts,
+                     count(fr.id) filter ( where fr.responded = true )                as bounces,
+                     count(fr.id) filter ( where fr.status not in ('A', 'W'))         as reached_contacts,
+                     count(fr_evt.type) filter ( where fr_evt.type = 'msg_received' ) as inbound,
+                     max(case when fr.status in ('S', 'P') then 1 else 0 end)         as has_running
+              FROM flows_flowstart as fs
+              LEFT JOIN flows_flowrun as fr on fs.id = fr.start_id
+              LEFT JOIN (
+                SELECT ffr.id, jsonb_array_elements(ffr.events) ->> 'type' as type
+                FROM flows_flowrun as ffr
+                WHERE ffr.flow_id = ce.flow_id
+              ) fr_evt on fr_evt.id = fr.id
+              WHERE fs.flow_id = ce.flow_id
+              GROUP BY fs.flow_id
+            ) flow_data) flow_data
+          FROM campaigns_campaign as cp LEFT JOIN campaigns_campaignevent as ce on ce.campaign_id = cp.id
+          WHERE cp.id = 2 AND ce.event_type = 'F'
+          GROUP BY cp.id, ce.flow_id
+        ) t GROUP BY t.id;
+        """
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
+
+            campaign = self.get_object()
+            data = Campaign.objects.raw(self.select_data_sql, params=[campaign.id, campaign.id])
             context["current_time"] = timezone.now()
-            context["updated_time"] = timezone.now()
-            context["start_time"] = timezone.now()
-            context["end_time"] = timezone.now()
+            try:
+                context["start_time"] = data[0].start_time
+                context["updated_time"] = data[0].updated_time
+                context["end_time"] = data[0].updated_time if not data[0].has_running else None
+                context["total_contacts"] = data[0].total_contacts
+                context["reached_contacts"] = data[0].reached_contacts
+                context["remaining_contacts"] = data[0].total_contacts - data[0].reached_contacts
+                context["bounces"] = data[0].bounces
+                context["inbound"] = data[0].inbound
+            except IndexError:
+                pass
             return context
 
 
