@@ -98,6 +98,7 @@ CACHES = {
 }
 
 BROKER_URL = CACHES["default"]["LOCATION"]
+CELERY_BROKER_URL = CACHES["default"]["LOCATION"]
 
 _default_database_config = {
     "ENGINE": "django.contrib.gis.db.backends.postgis",
@@ -136,6 +137,7 @@ MIDDLEWARE = ("temba.middleware.ExceptionMiddleware",) + MIDDLEWARE
 CELERY_ALWAYS_EAGER = False
 CELERY_EAGER_PROPAGATES_EXCEPTIONS = True
 BROKER_BACKEND = "redis"
+CELERY_RESULT_BACKEND = "redis"
 
 warnings.filterwarnings(
     "error", r"DateTimeField .* received a naive datetime", RuntimeWarning, r"django\.db\.models\.fields"
