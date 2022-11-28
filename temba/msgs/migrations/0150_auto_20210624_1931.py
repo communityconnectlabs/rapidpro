@@ -20,7 +20,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP INDEX IF EXIST msgs_broadcasts_org_created_id_where_active
+DROP INDEX IF EXISTS msgs_broadcasts_org_created_id_where_active
 """
 
 
