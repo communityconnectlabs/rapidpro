@@ -86,5 +86,5 @@ class Migration(migrations.Migration):
                 name="channelconnection_ivr_to_retry",
             ),
         ),
-        migrations.RunSQL("DROP INDEX channels_channelsession_pending_events;"),
+        migrations.RunSQL("DROP INDEX IF EXISTS channels_channelsession_pending_events;"),
     ]
