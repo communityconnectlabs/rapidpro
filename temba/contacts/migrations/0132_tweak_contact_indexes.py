@@ -15,5 +15,5 @@ class Migration(migrations.Migration):
             model_name="contact",
             index=models.Index(fields=["org", "-modified_on"], name="contacts_contact_org_modified"),
         ),
-        migrations.RunSQL("DROP INDEX contacts_contact_name;"),
+        migrations.RunSQL("DROP INDEX IF EXISTS contacts_contact_name;"),
     ]

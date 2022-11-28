@@ -2,7 +2,7 @@
 
 from django.db import migrations, models
 
-SQL = """DROP INDEX msgs_msg_org_created_id_where_outbound_visible_sent"""
+SQL = """DROP INDEX IF EXIST msgs_msg_org_created_id_where_outbound_visible_sent"""
 
 
 class Migration(migrations.Migration):
