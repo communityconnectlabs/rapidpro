@@ -267,15 +267,13 @@ class CampaignCRUDL(SmartCRUDL):
                      sum(fs.contact_count)                                            as total_contacts,
                      count(fr.id) filter ( where fr.responded = true )                as bounces,
                      count(fr.id) filter ( where fr.status not in ('A', 'W'))         as reached_contacts,
-                     count(fr_evt.type) filter ( where fr_evt.type = 'msg_received' ) as inbound,
-                     max(case when fr.status in ('S', 'P') then 1 else 0 end)         as has_running
+                     max(case when fr.status in ('S', 'P') then 1 else 0 end)         as has_running,
+                     sum((
+                       SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
+                       FROM jsonb_array_elements(fr.events) evt)
+                     ) as inbound
               FROM flows_flowstart as fs
               LEFT JOIN flows_flowrun as fr on fs.id = fr.start_id
-              LEFT JOIN (
-                SELECT ffr.id, jsonb_array_elements(ffr.events) ->> 'type' as type
-                FROM flows_flowrun as ffr
-                WHERE ffr.flow_id = ce.flow_id
-              ) fr_evt on fr_evt.id = fr.id
               WHERE fs.flow_id = ce.flow_id
               GROUP BY fs.flow_id
             ) flow_data) flow_data
