@@ -35,10 +35,13 @@
         %tr
           %td
             Invalid Contacts: {{ invalid_contacts }}
+            .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'A bad contact, such as a landline, or poorly formed email address.' %}")
           %td
             Errors on Carrier Side: {{ carrier_errors }}
+            .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'An issue with the underlying messaging provider.' %}")
           %td
             Errors on CCL Platform Side: {{ ccl_errors }}
+            .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'An issue with the CCL platform.' %}")
         %tr
           %td
             Opt-Outs: {{ opt_outs }}
@@ -51,6 +54,12 @@
       %a.mt-2(href="{% url 'dashboard.dashboard_home' %}")
         Full dashboard can be found here
 
+-block extra-script
+  {{ block.super }}
+
+  :javascript
+    $('[data-toggle="tooltip"]').tooltip();
+
 
 -block extra-style
   :css
@@ -60,3 +69,8 @@
       font-weight: 300;
     }
 
+    .inverted {
+      color: var(--color-text-light);
+      background: #1a1a1a;
+      border-radius: 100%;
+    }

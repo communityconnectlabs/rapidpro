@@ -3245,14 +3245,14 @@ class FlowCRUDL(SmartCRUDL):
         select_data_sql = """
         SELECT
                fs.flow_id as id,
-               min(fs.created_on) as start_time,
-               max(fs.modified_on) as updated_time,
-               sum(fs.contact_count) as total_contacts,
-               count(fr.id) filter ( where fr.responded = true ) as bounces,
+               min(fs.created_on)                                       as start_time,
+               max(fs.modified_on)                                      as updated_time,
+               sum(fs.contact_count)                                    as total_contacts,
+               count(ct.id) filter ( where ct.is_active = false )       as invalid_contacts,
                count(fr.id) filter ( where fr.status not in ('A', 'W')) as reached_contacts,
-               count(ct.id) filter ( where ct.is_active = false ) as invalid_contacts,
-               count(DISTINCT ct.id) filter ( where ct.status = 'S' ) as opt_outs,
+               count(fr.id) filter ( where fr.responded = true )        as bounces,
                max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
+               count(ct.id) filter ( where ct.status = 'S' )   as opt_outs,
                sum((
                    SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
                    FROM jsonb_array_elements(fr.events) evt)

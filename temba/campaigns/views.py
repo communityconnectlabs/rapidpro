@@ -254,26 +254,31 @@ class CampaignCRUDL(SmartCRUDL):
           min(cast(t.flow_data ->> 'start_time' as timestamp))     as start_time,
           max(cast(t.flow_data ->> 'updated_time' as timestamp))   as updated_time,
           sum(cast(t.flow_data ->> 'total_contacts' as integer))   as total_contacts,
-          sum(cast(t.flow_data ->> 'bounces' as integer))          as bounces,
+          sum(cast(t.flow_data ->> 'invalid_contacts' as integer)) as invalid_contacts,
           sum(cast(t.flow_data ->> 'reached_contacts' as integer)) as reached_contacts,
+          sum(cast(t.flow_data ->> 'bounces' as integer))          as bounces,
           sum(cast(t.flow_data ->> 'inbound' as integer))          as inbound,
+          sum(cast(t.flow_data ->> 'opt_outs' as integer))         as opt_outs,
           max(cast(t.flow_data ->> 'has_running' as integer))      as has_running
         FROM (
           SELECT cp.id id, ce.flow_id, (
             SELECT row_to_json(flow_data)
             FROM (
-              SELECT min(fs.created_on)                                               as start_time,
-                     max(fs.modified_on)                                              as updated_time,
-                     sum(fs.contact_count)                                            as total_contacts,
-                     count(fr.id) filter ( where fr.responded = true )                as bounces,
-                     count(fr.id) filter ( where fr.status not in ('A', 'W'))         as reached_contacts,
-                     max(case when fr.status in ('S', 'P') then 1 else 0 end)         as has_running,
+              SELECT min(fs.created_on)                                       as start_time,
+                     max(fs.modified_on)                                      as updated_time,
+                     sum(fs.contact_count)                                    as total_contacts,
+                     count(ct.id) filter ( where ct.is_active = false )       as invalid_contacts,
+                     count(fr.id) filter ( where fr.status not in ('A', 'W')) as reached_contacts,
+                     count(fr.id) filter ( where fr.responded = true )        as bounces,
+                     max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
+                     count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
                      sum((
                        SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
                        FROM jsonb_array_elements(fr.events) evt)
                      ) as inbound
               FROM flows_flowstart as fs
               LEFT JOIN flows_flowrun as fr on fs.id = fr.start_id
+              LEFT JOIN contacts_contact as ct on fr.contact_id = ct.id
               WHERE fs.flow_id = ce.flow_id
               GROUP BY fs.flow_id
             ) flow_data) flow_data
@@ -294,10 +299,12 @@ class CampaignCRUDL(SmartCRUDL):
                 context["updated_time"] = data[0].updated_time
                 context["end_time"] = data[0].updated_time if not data[0].has_running else None
                 context["total_contacts"] = data[0].total_contacts
+                context["invalid_contacts"] = data[0].invalid_contacts
                 context["reached_contacts"] = data[0].reached_contacts
                 context["remaining_contacts"] = data[0].total_contacts - data[0].reached_contacts
                 context["bounces"] = data[0].bounces
                 context["inbound"] = data[0].inbound
+                context["opt_outs"] = data[0].opt_outs
             except IndexError:
                 pass
             return context
