@@ -259,7 +259,9 @@ class CampaignCRUDL(SmartCRUDL):
           sum(cast(t.flow_data ->> 'bounces' as integer))          as bounces,
           sum(cast(t.flow_data ->> 'inbound' as integer))          as inbound,
           sum(cast(t.flow_data ->> 'opt_outs' as integer))         as opt_outs,
-          max(cast(t.flow_data ->> 'has_running' as integer))      as has_running
+          max(cast(t.flow_data ->> 'has_running' as integer))      as has_running,
+          sum(cast(t.flow_data ->> 'carrier_errors' as integer))   as carrier_errors,
+          sum(cast(t.flow_data ->> 'ccl_errors' as integer))       as ccl_errors
         FROM (
           SELECT cp.id id, ce.flow_id, (
             SELECT row_to_json(flow_data)
@@ -272,6 +274,8 @@ class CampaignCRUDL(SmartCRUDL):
                      count(fr.id) filter ( where fr.responded = true )        as bounces,
                      max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
                      count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
+                     count(fr.id) filter ( where fr.status = 'F')             as carrier_errors,
+                     count(fr.id) filter ( where fr.status in ('E', 'I'))     as ccl_errors,
                      sum((
                        SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
                        FROM jsonb_array_elements(fr.events) evt)
@@ -305,6 +309,8 @@ class CampaignCRUDL(SmartCRUDL):
                 context["bounces"] = data[0].bounces
                 context["inbound"] = data[0].inbound
                 context["opt_outs"] = data[0].opt_outs
+                context["ccl_errors"] = data[0].ccl_errors
+                context["carrier_errors"] = data[0].carrier_errors
             except IndexError:
                 pass
             return context

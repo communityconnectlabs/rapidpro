@@ -3252,7 +3252,9 @@ class FlowCRUDL(SmartCRUDL):
                count(fr.id) filter ( where fr.status not in ('A', 'W')) as reached_contacts,
                count(fr.id) filter ( where fr.responded = true )        as bounces,
                max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
-               count(ct.id) filter ( where ct.status = 'S' )   as opt_outs,
+               count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
+               count(fr.id) filter ( where fr.status = 'F')             as carrier_errors,
+               count(fr.id) filter ( where fr.status in ('E', 'I'))     as ccl_errors,
                sum((
                    SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
                    FROM jsonb_array_elements(fr.events) evt)
@@ -3281,6 +3283,8 @@ class FlowCRUDL(SmartCRUDL):
                 context["opt_outs"] = data[0].opt_outs
                 context["inbound"] = data[0].inbound
                 context["bounces"] = data[0].bounces
+                context["ccl_errors"] = data[0].ccl_errors
+                context["carrier_errors"] = data[0].carrier_errors
             except IndexError:
                 pass
             return context
