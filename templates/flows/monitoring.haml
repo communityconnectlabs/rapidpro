@@ -12,9 +12,13 @@
           %tbody
             %tr
               %td
-                Current Time: {{ current_time }}
+                Current Time:
+                .current-time.inline
+                  {{ current_time }}
               %td
-                Last Updated: {{ updated_time }}
+                Last Updated:
+                .last-updated.inline
+                  {{ current_time }}
             %tr
               %td
                 Start Time: {{ start_time }}
@@ -22,43 +26,57 @@
                 End Time: {% if end_time %}{{ end_time }}{% else %}-{% endif %}
 
 -block content
-  %div.flex.flex-col
-    %table.list
-      %tbody
-        %tr
-          %td
-            Total Number of Contacts: {{ total_contacts }}
-          %td
-            Number of Contacts Messaged SMS: {{ reached_contacts }}
-          %td
-            Number of Contacts Remaining: {{ remaining_contacts }}
-        %tr
-          %td
-            Invalid Contacts: {{ invalid_contacts }}
-            .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'A bad contact, such as a landline, or poorly formed email address.' %}")
-          %td
-            Errors on Carrier Side: {{ carrier_errors }}
-            .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'An issue with the underlying messaging provider.' %}")
-          %td
-            Errors on CCL Platform Side: {{ ccl_errors }}
-            .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'An issue with the CCL platform.' %}")
-        %tr
-          %td
-            Opt-Outs: {{ opt_outs }}
-          %td
-            Bounces: {{ bounces }}
-          %td
-            Number of Inbound Messages: {{ inbound }}
+  #pjax
+    -block pjax
+      %div.flex.flex-col
+        %table.list
+          %tbody
+            %tr
+              %td
+                Total Number of Contacts: {{ total_contacts }}
+              %td
+                Number of Contacts Messaged SMS: {{ reached_contacts }}
+              %td
+                Number of Contacts Remaining: {{ remaining_contacts }}
+            %tr
+              %td
+                Invalid Contacts: {{ invalid_contacts }}
+                .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'A bad contact, such as a landline, or poorly formed email address.' %}")
+              %td
+                Errors on Carrier Side: {{ carrier_errors }}
+                .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'An issue with the underlying messaging provider.' %}")
+              %td
+                Errors on CCL Platform Side: {{ ccl_errors }}
+                .icon-help.inverted(data-toggle="tooltip" data-placement="top" title="{% trans 'An issue with the CCL platform.' %}")
+            %tr
+              %td
+                Opt-Outs: {{ opt_outs }}
+              %td
+                Bounces: {{ bounces }}
+              %td
+                Number of Inbound Messages: {{ inbound }}
 
-    -if org_perms.orgs.org_dashboard
-      %a.mt-2(href="{% url 'dashboard.dashboard_home' %}")
-        Full dashboard can be found here
+        -if org_perms.orgs.org_dashboard
+          %a.mt-2(href="{% url 'dashboard.dashboard_home' %}")
+            Full dashboard can be found here
 
 -block extra-script
   {{ block.super }}
 
   :javascript
     $('[data-toggle="tooltip"]').tooltip();
+
+    function onRefreshSuccess() {
+      let currentTime = '{{ current_time }}';
+      document.querySelectorAll(".current-time, .last-updated").forEach(el => {
+        el.innerText = currentTime;
+      });
+    }
+
+    function scheduleRefresh() {
+      window.setTimeout(function () {refresh(onRefreshSuccess, false)}, refreshTimeout);
+    }
+}
 
 
 -block extra-style

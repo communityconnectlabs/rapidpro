@@ -247,6 +247,7 @@ class CampaignCRUDL(SmartCRUDL):
             return obj
 
     class Monitoring(OrgPermsMixin, SmartReadView):
+        refresh = 60000
         template_name = "flows/monitoring.haml"
         permission = "flows.flow_monitoring"
         select_data_sql = """

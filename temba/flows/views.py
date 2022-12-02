@@ -3241,6 +3241,7 @@ class FlowCRUDL(SmartCRUDL):
             return context_data
 
     class Monitoring(OrgPermsMixin, SmartReadView):
+        refresh = 60000
         template_name = "flows/monitoring.haml"
         select_data_sql = """
         SELECT
