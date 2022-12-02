@@ -669,7 +669,9 @@ class CampaignTest(TembaTest):
         self.assertContains(response, "Archived", count=0)
 
         gear_links = response.context["view"].get_gear_links()
-        self.assertListEqual([gl["title"] for gl in gear_links], ["Add Event", "Export", "Edit", "Archive"])
+        self.assertListEqual(
+            [gl["title"] for gl in gear_links], ["Add Event", "Export", "Edit", "Archive", "Monitoring"]
+        )
 
         # archive the campaign
         campaign.is_archived = True
