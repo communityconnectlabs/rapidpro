@@ -3287,7 +3287,22 @@ class FlowCRUDL(SmartCRUDL):
                 context["ccl_errors"] = data[0].ccl_errors
                 context["carrier_errors"] = data[0].carrier_errors
             except IndexError:
-                pass
+                context.update(
+                    {
+                        "start_time": "-",
+                        "updated_time": "-",
+                        "end_time": None,
+                        "total_contacts": 0,
+                        "invalid_contacts": 0,
+                        "reached_contacts": 0,
+                        "remaining_contacts": 0,
+                        "bounces": 0,
+                        "inbound": 0,
+                        "opt_outs": 0,
+                        "ccl_errors": 0,
+                        "carrier_errors": 0,
+                    }
+                )
             return context
 
 

@@ -288,7 +288,7 @@ class CampaignCRUDL(SmartCRUDL):
               GROUP BY fs.flow_id
             ) flow_data) flow_data
           FROM campaigns_campaign as cp LEFT JOIN campaigns_campaignevent as ce on ce.campaign_id = cp.id
-          WHERE cp.id = 2 AND ce.event_type = 'F'
+          WHERE cp.id = %s AND ce.event_type = 'F'
           GROUP BY cp.id, ce.flow_id
         ) t GROUP BY t.id;
         """
@@ -297,7 +297,7 @@ class CampaignCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
 
             campaign = self.get_object()
-            data = Campaign.objects.raw(self.select_data_sql, params=[campaign.id, campaign.id])
+            data = Campaign.objects.raw(self.select_data_sql, params=[campaign.id])
             context["current_time"] = timezone.now()
             try:
                 context["start_time"] = data[0].start_time
@@ -313,7 +313,22 @@ class CampaignCRUDL(SmartCRUDL):
                 context["ccl_errors"] = data[0].ccl_errors
                 context["carrier_errors"] = data[0].carrier_errors
             except IndexError:
-                pass
+                context.update(
+                    {
+                        "start_time": "-",
+                        "updated_time": "-",
+                        "end_time": None,
+                        "total_contacts": 0,
+                        "invalid_contacts": 0,
+                        "reached_contacts": 0,
+                        "remaining_contacts": 0,
+                        "bounces": 0,
+                        "inbound": 0,
+                        "opt_outs": 0,
+                        "ccl_errors": 0,
+                        "carrier_errors": 0,
+                    }
+                )
             return context
 
 
