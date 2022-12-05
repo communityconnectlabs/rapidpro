@@ -1022,6 +1022,10 @@ class Flow(TembaModel):
         self.exit_counts.all().delete()
         self.labels.clear()
 
+        from temba.reports.models import CollectedFlowResultsData
+
+        CollectedFlowResultsData.objects.filter(flow=self).delete()
+
         super().delete()
 
     def update_related_flows(self):

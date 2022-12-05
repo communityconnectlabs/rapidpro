@@ -2004,8 +2004,11 @@ class Org(SmartModel):
             contactfield.delete()
 
         # delete our groups
+        from temba.contacts.models import ContactGroupCount
+
         for group in self.all_groups.all():
-            group.release(user)
+            group.release(user, full=True)
+            ContactGroupCount.objects.filter(group=group).delete()
             group.delete()
 
         # delete our channels
