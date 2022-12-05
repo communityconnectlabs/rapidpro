@@ -485,6 +485,7 @@ class FlowCRUDL(SmartCRUDL):
         "launch_studio_flow",
         "dialogflow_api",
         "show_templates",
+        "monitoring",
     )
 
     model = Flow
@@ -1555,6 +1556,15 @@ class FlowCRUDL(SmartCRUDL):
             if self.has_org_perm("flows.flow_import_translation"):
                 links.append(
                     dict(title=_("Import Translation"), href=reverse("flows.flow_import_translation", args=[flow.id]))
+                )
+
+            if self.has_org_perm("flows.flow_monitoring"):
+                links.append(
+                    dict(
+                        id="Monitoring",
+                        title=_("Monitoring"),
+                        href=reverse("flows.flow_monitoring", args=[self.object.pk]),
+                    )
                 )
 
             user = self.get_user()
@@ -3229,6 +3239,71 @@ class FlowCRUDL(SmartCRUDL):
             context_data["numbers"] = json.dumps(self.studio_numbers)
             context_data["flow_numbers"] = json.dumps(self.studio_flow_numbers)
             return context_data
+
+    class Monitoring(OrgPermsMixin, SmartReadView):
+        refresh = 60000
+        template_name = "flows/monitoring.haml"
+        select_data_sql = """
+        SELECT
+               fs.flow_id as id,
+               min(fs.created_on)                                       as start_time,
+               max(fs.modified_on)                                      as updated_time,
+               sum(fs.contact_count)                                    as total_contacts,
+               count(ct.id) filter ( where ct.is_active = false )       as invalid_contacts,
+               count(fr.id) filter ( where fr.status not in ('A', 'W')) as reached_contacts,
+               count(fr.id) filter ( where fr.responded = true )        as bounces,
+               max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
+               count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
+               count(fr.id) filter ( where fr.status = 'F')             as carrier_errors,
+               count(fr.id) filter ( where fr.status in ('E', 'I'))     as ccl_errors,
+               sum((
+                   SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
+                   FROM jsonb_array_elements(fr.events) evt)
+               ) as inbound
+        FROM flows_flowstart as fs
+        LEFT JOIN flows_flowrun as fr on fs.id = fr.start_id
+        LEFT JOIN contacts_contact as ct on fr.contact_id = ct.id
+        WHERE fs.flow_id=%s
+        GROUP BY fs.flow_id;
+        """
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+
+            flow = self.get_object()
+            data = Flow.objects.raw(self.select_data_sql, params=[flow.id])
+            context["current_time"] = timezone.now()
+            try:
+                context["start_time"] = data[0].start_time
+                context["updated_time"] = data[0].updated_time
+                context["end_time"] = data[0].updated_time if not data[0].has_running else None
+                context["total_contacts"] = data[0].total_contacts
+                context["reached_contacts"] = data[0].reached_contacts
+                context["remaining_contacts"] = data[0].total_contacts - data[0].reached_contacts
+                context["invalid_contacts"] = data[0].invalid_contacts
+                context["opt_outs"] = data[0].opt_outs
+                context["inbound"] = data[0].inbound
+                context["bounces"] = data[0].bounces
+                context["ccl_errors"] = data[0].ccl_errors
+                context["carrier_errors"] = data[0].carrier_errors
+            except IndexError:
+                context.update(
+                    {
+                        "start_time": "-",
+                        "updated_time": "-",
+                        "end_time": None,
+                        "total_contacts": 0,
+                        "invalid_contacts": 0,
+                        "reached_contacts": 0,
+                        "remaining_contacts": 0,
+                        "bounces": 0,
+                        "inbound": 0,
+                        "opt_outs": 0,
+                        "ccl_errors": 0,
+                        "carrier_errors": 0,
+                    }
+                )
+            return context
 
 
 # this is just for adhoc testing of the preprocess url

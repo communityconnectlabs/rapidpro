@@ -1,3 +1,4 @@
+from django.utils import timezone
 from smartmin.views import SmartCreateView, SmartCRUDL, SmartDeleteView, SmartListView, SmartReadView, SmartUpdateView
 
 from django import forms
@@ -41,7 +42,7 @@ class CampaignForm(forms.ModelForm):
 
 class CampaignCRUDL(SmartCRUDL):
     model = Campaign
-    actions = ("create", "read", "update", "list", "archived", "archive", "activate")
+    actions = ("create", "read", "update", "list", "archived", "archive", "activate", "monitoring")
 
     class Update(OrgObjPermsMixin, ModalMixin, SmartUpdateView):
         fields = ("name", "group")
@@ -135,6 +136,15 @@ class CampaignCRUDL(SmartCRUDL):
                             title="Archive",
                             js_class="posterize archive-campaign",
                             href=reverse("campaigns.campaign_archive", args=[self.object.id]),
+                        )
+                    )
+
+                if self.has_org_perm("flows.flow_monitoring"):
+                    links.append(
+                        dict(
+                            id="Monitoring",
+                            title=_("Monitoring"),
+                            href=reverse("campaigns.campaign_monitoring", args=[self.object.pk]),
                         )
                     )
 
@@ -235,6 +245,91 @@ class CampaignCRUDL(SmartCRUDL):
         def save(self, obj):
             obj.apply_action_restore(self.request.user, Campaign.objects.filter(id=obj.id))
             return obj
+
+    class Monitoring(OrgPermsMixin, SmartReadView):
+        refresh = 60000
+        template_name = "flows/monitoring.haml"
+        permission = "flows.flow_monitoring"
+        select_data_sql = """
+        SELECT id,
+          min(cast(t.flow_data ->> 'start_time' as timestamp))     as start_time,
+          max(cast(t.flow_data ->> 'updated_time' as timestamp))   as updated_time,
+          sum(cast(t.flow_data ->> 'total_contacts' as integer))   as total_contacts,
+          sum(cast(t.flow_data ->> 'invalid_contacts' as integer)) as invalid_contacts,
+          sum(cast(t.flow_data ->> 'reached_contacts' as integer)) as reached_contacts,
+          sum(cast(t.flow_data ->> 'bounces' as integer))          as bounces,
+          sum(cast(t.flow_data ->> 'inbound' as integer))          as inbound,
+          sum(cast(t.flow_data ->> 'opt_outs' as integer))         as opt_outs,
+          max(cast(t.flow_data ->> 'has_running' as integer))      as has_running,
+          sum(cast(t.flow_data ->> 'carrier_errors' as integer))   as carrier_errors,
+          sum(cast(t.flow_data ->> 'ccl_errors' as integer))       as ccl_errors
+        FROM (
+          SELECT cp.id id, ce.flow_id, (
+            SELECT row_to_json(flow_data)
+            FROM (
+              SELECT min(fs.created_on)                                       as start_time,
+                     max(fs.modified_on)                                      as updated_time,
+                     sum(fs.contact_count)                                    as total_contacts,
+                     count(ct.id) filter ( where ct.is_active = false )       as invalid_contacts,
+                     count(fr.id) filter ( where fr.status not in ('A', 'W')) as reached_contacts,
+                     count(fr.id) filter ( where fr.responded = true )        as bounces,
+                     max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
+                     count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
+                     count(fr.id) filter ( where fr.status = 'F')             as carrier_errors,
+                     count(fr.id) filter ( where fr.status in ('E', 'I'))     as ccl_errors,
+                     sum((
+                       SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
+                       FROM jsonb_array_elements(fr.events) evt)
+                     ) as inbound
+              FROM flows_flowstart as fs
+              LEFT JOIN flows_flowrun as fr on fs.id = fr.start_id
+              LEFT JOIN contacts_contact as ct on fr.contact_id = ct.id
+              WHERE fs.flow_id = ce.flow_id
+              GROUP BY fs.flow_id
+            ) flow_data) flow_data
+          FROM campaigns_campaign as cp LEFT JOIN campaigns_campaignevent as ce on ce.campaign_id = cp.id
+          WHERE cp.id = %s AND ce.event_type = 'F'
+          GROUP BY cp.id, ce.flow_id
+        ) t GROUP BY t.id;
+        """
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+
+            campaign = self.get_object()
+            data = Campaign.objects.raw(self.select_data_sql, params=[campaign.id])
+            context["current_time"] = timezone.now()
+            try:
+                context["start_time"] = data[0].start_time
+                context["updated_time"] = data[0].updated_time
+                context["end_time"] = data[0].updated_time if not data[0].has_running else None
+                context["total_contacts"] = data[0].total_contacts
+                context["invalid_contacts"] = data[0].invalid_contacts
+                context["reached_contacts"] = data[0].reached_contacts
+                context["remaining_contacts"] = data[0].total_contacts - data[0].reached_contacts
+                context["bounces"] = data[0].bounces
+                context["inbound"] = data[0].inbound
+                context["opt_outs"] = data[0].opt_outs
+                context["ccl_errors"] = data[0].ccl_errors
+                context["carrier_errors"] = data[0].carrier_errors
+            except IndexError:
+                context.update(
+                    {
+                        "start_time": "-",
+                        "updated_time": "-",
+                        "end_time": None,
+                        "total_contacts": 0,
+                        "invalid_contacts": 0,
+                        "reached_contacts": 0,
+                        "remaining_contacts": 0,
+                        "bounces": 0,
+                        "inbound": 0,
+                        "opt_outs": 0,
+                        "ccl_errors": 0,
+                        "carrier_errors": 0,
+                    }
+                )
+            return context
 
 
 class CampaignEventForm(forms.ModelForm):
