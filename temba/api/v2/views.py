@@ -13,7 +13,7 @@ from django.conf import settings
 from django.template.defaultfilters import slugify
 from django_redis import get_redis_connection
 from parse_rest.datatypes import Date
-from rest_framework import generics, status, views
+from rest_framework import generics, mixins, status, views
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -160,6 +160,7 @@ class RootView(views.APIView):
      * [/api/v2/trackable_link_report](/api/v2/trackable_link_report) - to generate a report about trackable links
      * [/api/v2/phone_validation](/api/v2/phone_validation) - to retrieve additional information about a phone number
      * [/api/v2/replace_accented_chars](/api/v2/replace_accented_chars) - to replace accented characters in a message
+     * [/api/v2/validate_flow_links](/api/v2/validate_flow_links) - to check if all the links in the flow are valid
 
     To use the endpoint simply append _.json_ to the URL. For example [/api/v2/flows](/api/v2/flows) will return the
     documentation for that endpoint but a request to [/api/v2/flows.json](/api/v2/flows.json) will return a JSON list of
@@ -271,9 +272,10 @@ class RootView(views.APIView):
                 "topics": reverse("api.v2.topics", request=request),
                 "users": reverse("api.v2.users", request=request),
                 "phone_validation": reverse("api.v2.phone_validation", request=request),
-                "replace_accented_chars": reverse("api.v2.replace_accented_chars", request=request),
                 # "tickets": reverse("api.v2.tickets", request=request),
                 "workspace": reverse("api.v2.workspace", request=request),
+                "replace_accented_chars": reverse("api.v2.replace_accented_chars", request=request),
+                "validate_flow_links": reverse("api.v2.validate_flow_links", request=request),
             }
         )
 
@@ -350,6 +352,7 @@ class ExplorerView(SmartTemplateView):
             TrackableLinkReportEndpoint.get_read_explorer(),
             PhoneValidationEndpoint.get_read_explorer(),
             ReplaceAccentedCharsEndpoint.get_read_explorer(),
+            ValidateFlowLinks.get_read_explorer(),
         ]
         return context
 
@@ -6094,4 +6097,61 @@ class ReplaceAccentedCharsEndpoint(BaseAPIView):
                 },
             ],
             "example": {"body": json.dumps({"message": "compàre our résumé"})},
+        }
+
+
+class ValidateFlowLinks(mixins.RetrieveModelMixin, BaseAPIView):
+    permission = "flows.flow_editor"
+    model = Flow
+    lookup_params = {"flow_id": "id"}
+
+    @property
+    def lookup_values(self):
+        return self.get_lookup_values()
+
+    def get(self, request, *args, **kwargs):
+        flow = self.get_object()
+        definition = flow.get_definition()
+        links = []
+        for node in definition.get("nodes", []):
+            for action in node.get("actions", []):
+                if action["type"] == "send_msg":
+                    text = action["text"]
+                    action_links = re.findall(r"(https?://[^\s]+)", text)
+                    links.extend(
+                        [
+                            {
+                                "node_uuid": node["uuid"],
+                                "action_uuid": action["uuid"],
+                                "link": link,
+                            }
+                            for link in action_links
+                        ]
+                    )
+        for link in links:
+            link["status_code"] = status.HTTP_400_BAD_REQUEST
+            try:
+                response = requests.get(link["link"])
+                link["status_code"] = response.status_code
+                if not response.ok:
+                    link["error"] = response.reason
+            except (requests.ConnectionError, requests.HTTPError, requests.RequestException) as e:
+                link["error"] = e.__doc__
+        return Response({"id": flow.id, "name": flow.name, "links": links}, status=status.HTTP_200_OK)
+
+    @classmethod
+    def get_read_explorer(cls):
+        return {
+            "method": "GET",
+            "title": "Validate Flow Links",
+            "url": reverse("api.v2.validate_flow_links"),
+            "slug": "validate-flow-links",
+            "fields": [
+                {
+                    "name": "flow_id",
+                    "required": True,
+                    "help": "The ID of the Flow to be checked.",
+                },
+            ],
+            "example": {"body": json.dumps({"flow_id": "1"})},
         }
