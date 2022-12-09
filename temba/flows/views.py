@@ -3248,9 +3248,8 @@ class FlowCRUDL(SmartCRUDL):
                fs.flow_id as id,
                min(fs.created_on)                                       as start_time,
                max(fs.modified_on)                                      as updated_time,
-               sum(fs.contact_count)                                    as total_contacts,
                count(ct.id) filter ( where ct.is_active = false )       as invalid_contacts,
-               count(fr.id) filter ( where fr.status not in ('A', 'W')) as reached_contacts,
+               count(fr.id) filter ( where fr.status = 'C')             as reached_contacts,
                count(fr.id) filter ( where fr.responded = true )        as bounces,
                max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
                count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
@@ -3269,17 +3268,20 @@ class FlowCRUDL(SmartCRUDL):
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
+            context["current_time"] = timezone.now()
 
             flow = self.get_object()
-            data = Flow.objects.raw(self.select_data_sql, params=[flow.id])
-            context["current_time"] = timezone.now()
+            data = Flow.objects.using("readonly").raw(self.select_data_sql, params=[flow.id])
+            agg_starts = flow.starts.using("readonly").aggregate(total_contacts=Sum("contact_count"))
+            total_contacts = agg_starts.get("total_contacts", 0)
             try:
+                processed_contacts = data[0].reached_contacts + data[0].ccl_errors + data[0].carrier_errors
                 context["start_time"] = data[0].start_time
                 context["updated_time"] = data[0].updated_time
                 context["end_time"] = data[0].updated_time if not data[0].has_running else None
-                context["total_contacts"] = data[0].total_contacts
+                context["total_contacts"] = total_contacts
                 context["reached_contacts"] = data[0].reached_contacts
-                context["remaining_contacts"] = data[0].total_contacts - data[0].reached_contacts
+                context["remaining_contacts"] = total_contacts - processed_contacts
                 context["invalid_contacts"] = data[0].invalid_contacts
                 context["opt_outs"] = data[0].opt_outs
                 context["inbound"] = data[0].inbound
