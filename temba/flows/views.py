@@ -3273,7 +3273,7 @@ class FlowCRUDL(SmartCRUDL):
             flow = self.get_object()
             data = Flow.objects.using("readonly").raw(self.select_data_sql, params=[flow.id])
             agg_starts = flow.starts.using("readonly").aggregate(total_contacts=Sum("contact_count"))
-            total_contacts = agg_starts.get("total_contacts", 0)
+            total_contacts = agg_starts.get("total_contacts") or 0
             try:
                 processed_contacts = data[0].reached_contacts + data[0].ccl_errors + data[0].carrier_errors
                 context["start_time"] = data[0].start_time
