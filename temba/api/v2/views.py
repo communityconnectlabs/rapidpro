@@ -11,9 +11,10 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.template.defaultfilters import slugify
+from django.utils import timezone
 from django_redis import get_redis_connection
 from parse_rest.datatypes import Date
-from rest_framework import generics, mixins, status, views
+from rest_framework import generics, status, views
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import CursorPagination
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -6100,44 +6101,78 @@ class ReplaceAccentedCharsEndpoint(BaseAPIView):
         }
 
 
-class ValidateFlowLinks(mixins.RetrieveModelMixin, BaseAPIView):
-    permission = "flows.flow_editor"
-    model = Flow
-    lookup_params = {"flow_id": "id"}
+class ValidateFlowLinks(BaseAPIView):
+    """
+    This endpoint provides a list of links in a flow and statuses of following them.
 
-    @property
-    def lookup_values(self):
-        return self.get_lookup_values()
+    A **GET** returns a list of links discovered in a flow
+
+    * **flow_id** - The indentifier of the flow to be checked
+
+    Example:
+
+        GET /api/v2/validate_flow_links.json?flow_id=1
+
+    Response:
+
+        {
+            "id": 1,
+            "name": "Links Flow",
+            "links": [{
+                "node_uuid": "858f78c9-ff10-4e19-83ab-10762320f8db",
+                "action_uuid": "49e2047b-9dc6-4ae9-b9be-6607488357f4",
+                "link": "https://hauyfjwgfjw.com/",
+                "status_code": 400,
+                "error": "A Connection error occurred."
+            }]
+        }
+    """
+
+    permission = "flows.flow_editor"
+    http_method_names = ["get"]
+    model = Flow
 
     def get(self, request, *args, **kwargs):
-        flow = self.get_object()
-        definition = flow.get_definition()
-        links = []
-        for node in definition.get("nodes", []):
-            for action in node.get("actions", []):
-                if action["type"] == "send_msg":
-                    text = action["text"]
-                    action_links = re.findall(r"(https?://[^\s]+)", text)
-                    links.extend(
-                        [
-                            {
-                                "node_uuid": node["uuid"],
-                                "action_uuid": action["uuid"],
-                                "link": link,
-                            }
-                            for link in action_links
-                        ]
-                    )
-        for link in links:
-            link["status_code"] = status.HTTP_400_BAD_REQUEST
-            try:
-                response = requests.get(link["link"])
-                link["status_code"] = response.status_code
-                if not response.ok:
-                    link["error"] = response.reason
-            except (requests.ConnectionError, requests.HTTPError, requests.RequestException) as e:
-                link["error"] = e.__doc__
-        return Response({"id": flow.id, "name": flow.name, "links": links}, status=status.HTTP_200_OK)
+        try:
+            flow_id = self.request.data.get("flow_id") or self.request.query_params.get("flow_id", 0)
+            flow = self.model.objects.get(id=flow_id)
+            definition = flow.get_definition()
+            links = []
+            for node in definition.get("nodes", []):
+                for action in node.get("actions", []):
+                    if action["type"] == "send_msg":
+                        text = action["text"]
+                        action_links = re.findall(r"(https?://[^\s]+)", text)
+                        links.extend(
+                            [
+                                {
+                                    "node_uuid": node["uuid"],
+                                    "action_uuid": action["uuid"],
+                                    "link": link,
+                                }
+                                for link in action_links
+                            ]
+                        )
+            for link in links:
+                link["status_code"] = status.HTTP_400_BAD_REQUEST
+                try:
+                    response = requests.get(link["link"])
+                    link["status_code"] = response.status_code
+                    if not response.ok:
+                        link["error"] = response.reason
+                except (requests.ConnectionError, requests.HTTPError, requests.RequestException) as e:
+                    link["error"] = e.__doc__
+            return Response(
+                {
+                    "id": flow.id,
+                    "name": flow.name,
+                    "links": links,
+                    "run_on": timezone.now(),
+                },
+                status=status.HTTP_200_OK,
+            )
+        except self.model.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
     @classmethod
     def get_read_explorer(cls):
