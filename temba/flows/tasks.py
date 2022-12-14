@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 import time
 import boto3
 
@@ -7,6 +8,7 @@ from datetime import datetime
 
 import iso8601
 import pytz
+import requests
 from django_redis import get_redis_connection
 
 from django.conf import settings
@@ -21,6 +23,7 @@ from temba.utils import chunk_list
 from temba.utils.celery import nonoverlapping_task
 
 from .models import (
+    Flow,
     ExportFlowImagesTask,
     ExportFlowResultsTask,
     FlowCategoryCount,
@@ -249,3 +252,55 @@ def merge_flows_task(uuid):
 def start_active_merge_flows():
     for task_ in MergeFlowsTask.objects.filter(status=MergeFlowsTask.STATUS_ACTIVE):
         task_.process_merging()
+
+
+@nonoverlapping_task(name="validate_flow_links")
+def validate_flow_links(flow_id):
+    try:
+        # mark that flow links are being validated
+        flow = Flow.objects.get(id=flow_id)
+        definition = flow.get_definition()
+        flow.metadata["validated_links"] = {
+            "revision": definition.get("revision", 0),
+            "validating": True,
+        }
+        flow.save(update_fields=["metadata"])
+
+        print("")
+
+        # validating the flow links
+        links = []
+        for node in definition.get("nodes", []):
+            for action in node.get("actions", []):
+                if action["type"] == "send_msg":
+                    text = action["text"]
+                    action_links = re.findall(r"(https?://[^\s]+)", text)
+                    links.extend(
+                        [
+                            {
+                                "node_uuid": node["uuid"],
+                                "action_uuid": action["uuid"],
+                                "link": link,
+                            }
+                            for link in action_links
+                        ]
+                    )
+        for link in links:
+            link["status_code"] = 400
+            try:
+                response = requests.get(link["link"])
+                link["status_code"] = response.status_code
+                if not response.ok:
+                    link["error"] = response.reason
+            except (requests.ConnectionError, requests.HTTPError, requests.RequestException) as e:
+                link["error"] = e.__doc__
+
+        # saving the validation result
+        flow.metadata["validated_links"] = {
+            "processed_on": timezone.now(),
+            "revision": definition.get("revision", 0),
+            "links": links,
+        }
+        flow.save(update_fields=["metadata"])
+    except Flow.DoesNotExist:
+        pass

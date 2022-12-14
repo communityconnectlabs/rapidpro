@@ -6108,6 +6108,7 @@ class ValidateFlowLinks(BaseAPIView):
     A **GET** returns a list of links discovered in a flow
 
     * **flow_id** - The indentifier of the flow to be checked
+    * **refresh - The flag to trigger retesting links
 
     Example:
 
@@ -6133,41 +6134,33 @@ class ValidateFlowLinks(BaseAPIView):
     model = Flow
 
     def get(self, request, *args, **kwargs):
+        from temba.flows.tasks import validate_flow_links
+
         try:
             flow_id = self.request.data.get("flow_id") or self.request.query_params.get("flow_id", 0)
             flow = self.model.objects.get(id=flow_id)
-            definition = flow.get_definition()
-            links = []
-            for node in definition.get("nodes", []):
-                for action in node.get("actions", []):
-                    if action["type"] == "send_msg":
-                        text = action["text"]
-                        action_links = re.findall(r"(https?://[^\s]+)", text)
-                        links.extend(
-                            [
-                                {
-                                    "node_uuid": node["uuid"],
-                                    "action_uuid": action["uuid"],
-                                    "link": link,
-                                }
-                                for link in action_links
-                            ]
-                        )
-            for link in links:
-                link["status_code"] = status.HTTP_400_BAD_REQUEST
-                try:
-                    response = requests.get(link["link"])
-                    link["status_code"] = response.status_code
-                    if not response.ok:
-                        link["error"] = response.reason
-                except (requests.ConnectionError, requests.HTTPError, requests.RequestException) as e:
-                    link["error"] = e.__doc__
+            refresh = str(self.request.data.get("refresh", "false")).lower() == "true"
+            refresh = refresh or str(self.request.query_params.get("refresh", "false")).lower() == "true"
+            links_data = flow.metadata.get("validated_links")
+
+            if not links_data or refresh:
+                validate_flow_links.delay(flow_id)
+                return Response(
+                    {
+                        "id": flow.id,
+                        "name": flow.name,
+                        "validating": True,
+                        "refresh_timeout": 5000,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
             return Response(
                 {
                     "id": flow.id,
                     "name": flow.name,
-                    "links": links,
-                    "run_on": timezone.now(),
+                    "links": links_data.get("links"),
+                    "processed_on": links_data.get("processed_on", timezone.now()),
                 },
                 status=status.HTTP_200_OK,
             )
