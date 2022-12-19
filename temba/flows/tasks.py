@@ -266,8 +266,6 @@ def validate_flow_links(flow_id):
         }
         flow.save(update_fields=["metadata"])
 
-        print("")
-
         # validating the flow links
         links = []
         for node in definition.get("nodes", []):
