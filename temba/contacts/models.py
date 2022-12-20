@@ -1752,7 +1752,7 @@ class ContactGroup(TembaModel, DependencyMixin):
         dependents["campaign"] = self.campaigns.filter(is_active=True)
         return dependents
 
-    def release(self, user, full=False):
+    def release(self, user):
         """
         Releases this group, removing all contacts and marking as inactive
         """
@@ -1765,9 +1765,6 @@ class ContactGroup(TembaModel, DependencyMixin):
 
         # do the hard work of actually clearing out contacts etc in a background task
         on_transaction_commit(lambda: release_group_task.delay(self.id))
-
-        if full:
-            self._full_release()
 
     def _full_release(self):
         from temba.campaigns.models import EventFire
@@ -1800,6 +1797,8 @@ class ContactGroup(TembaModel, DependencyMixin):
         eventfire_ids = EventFire.objects.filter(event__campaign__group=self, fired=None).values_list("id", flat=True)
         for id_batch in chunk_list(eventfire_ids, 1000):
             EventFire.objects.filter(id__in=id_batch).delete()
+
+        self.delete()
 
     @property
     def is_dynamic(self):
