@@ -2009,6 +2009,7 @@ class Org(SmartModel):
         for group in self.all_groups.all():
             ContactGroupCount.objects.filter(group=group).delete()
             group.release(user)
+            group.delete()
 
         # delete our channels
         for channel in self.channels.all():
