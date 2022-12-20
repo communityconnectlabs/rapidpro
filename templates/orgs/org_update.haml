@@ -17,9 +17,12 @@
     -if org.is_verified
       .alert-info.mb-4
         -trans "This workspace has been verified"
-  -else
+  -elif org.released_on and not org.deleted_on
     .alert-danger.mb-4
       -trans "This workspace has been scheduled for deletion"
+  -elif org.deleted_on
+    .alert-danger.mb-4
+      -trans "This workspace has been deleted"
 
   {{ block.super }}
 
