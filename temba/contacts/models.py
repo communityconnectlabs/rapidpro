@@ -1798,8 +1798,6 @@ class ContactGroup(TembaModel, DependencyMixin):
         for id_batch in chunk_list(eventfire_ids, 1000):
             EventFire.objects.filter(id__in=id_batch).delete()
 
-        self.delete()
-
     @property
     def is_dynamic(self):
         return self.query is not None
