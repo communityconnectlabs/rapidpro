@@ -42,7 +42,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(zeroize_ticket_count, reverse),
+        # migrations.RunPython(zeroize_ticket_count, reverse),
         migrations.AlterField(
             model_name="contact",
             name="ticket_count",
