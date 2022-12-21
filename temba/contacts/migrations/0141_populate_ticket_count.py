@@ -34,4 +34,4 @@ class Migration(migrations.Migration):
 
     dependencies = [("contacts", "0140_zeroize_ticket_count"), ("tickets", "0017_update_trigger")]
 
-    operations = [migrations.RunPython(populate_ticket_count, reverse)]
+    operations = []
