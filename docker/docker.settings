@@ -212,6 +212,14 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
 
 REST_HANDLE_EXCEPTIONS = os.environ.get("REST_HANDLE_EXCEPTIONS", "true") == "true"
 
+ORG_LIMIT_DEFAULTS = {
+    "fields": 2000,
+    "globals": 2000,
+    "groups": 5000,
+    "labels": 2000,
+    "topics": 2000,
+}
+
 MAILROOM_URL = os.environ.get("MAILROOM_URL", "http://localhost:8090")
 MAILROOM_AUTH_TOKEN = os.environ.get("MAILROOM_AUTH_TOKEN", "")
 

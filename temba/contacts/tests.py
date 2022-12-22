@@ -125,7 +125,7 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
             self.org, self.user, "Group being created", status=ContactGroup.STATUS_INITIALIZING
         )
 
-        with self.assertNumQueries(57):
+        with self.assertNumQueries(59):
             response = self.client.get(list_url)
 
         self.assertEqual([frank, joe], list(response.context["object_list"]))

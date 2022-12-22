@@ -59,7 +59,10 @@ def release_group_task(group_id):
     """
     Releases group
     """
-    ContactGroup.all_groups.get(id=group_id)._full_release()
+    try:
+        ContactGroup.all_groups.get(id=group_id)._full_release()
+    except ContactGroup.DoesNotExist:
+        pass
 
 
 @nonoverlapping_task(track_started=True, name="squash_contactgroupcounts", lock_timeout=7200)

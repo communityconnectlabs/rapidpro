@@ -2007,8 +2007,8 @@ class Org(SmartModel):
         from temba.contacts.models import ContactGroupCount
 
         for group in self.all_groups.all():
-            group.release(user, full=True)
             ContactGroupCount.objects.filter(group=group).delete()
+            group.release(user)
             group.delete()
 
         # delete our channels
