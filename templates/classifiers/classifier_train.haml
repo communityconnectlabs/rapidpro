@@ -1,0 +1,222 @@
+-extends "smartmin/form.html"
+
+-load smartmin
+-load i18n humanize
+
+-block fields
+  #language-list
+    -render_field 'languages'
+
+    %div#languages_errors
+      {{ form.languages.errors }}
+
+  #file-upload
+    %label
+      -trans "Upload Training CSV"
+      %input(type="file" name="file" id="import-file" onchange='onFileChange(this)' accept=".csv")
+      #real-button.flex.mb-4
+        %input(type="text" id="file-field")
+        .button-light.ml-4(style="margin-top:-1px")
+          -trans "Choose File"
+    %div#import_file_errors
+
+  #messages
+
+-block extra-style
+  {{block.super}}
+  %link{rel:"stylesheet", href:"{{ STATIC_URL }}css/tailwind.css", type:"text/css"}
+
+  :css
+    input {
+      padding: 9px;
+      cursor: pointer;
+      box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 3px 20px 0px, rgba(0, 0, 0, 0.02) 0px 1px 2px 0px;
+    }
+
+    #file-upload {
+      position: relative;
+    }
+
+    #real-button {
+      position: relative;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    #file-field {
+      width: 300px;
+      height: 35px;
+      font-size: 16px;
+      margin-bottom: 0px;
+      border-radius: 5px;
+    }
+
+    #import-file {
+      position: absolute;
+      width: 450px;
+      height: 35px;
+      top: 0;
+      left: 0;
+      text-align: right;
+      -moz-opacity:0 ;
+      filter: alpha(opacity: 0);
+      opacity: 0;
+      z-index: 2;
+    }
+
+
+
+
+-block extra-script
+  {{ block.super }}
+  <script id="ccl-script" src="{{ STATIC_URL }}js/ccl-utils.js"></script>
+
+  :javascript
+      function getFormElements() {
+        const { modaxBody, dialogFooter, modalView } = getModalResources('bot-training');
+        const form = modaxBody.querySelector('form');
+        const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
+        const messagesDiv = form.querySelector('#messages');
+        return {
+          form,
+          modaxBody,
+          modalView,
+          messagesDiv,
+          dialogFooter,
+          currentSubmit
+        }
+      }
+
+      function onFileChange() {
+        const { form } = getFormElements();
+
+        const uploadField = form.querySelector('#import-file');
+        const realField = form.querySelector('#file-field');
+        let file = $(uploadField).val();
+
+        while (file.indexOf('\\') >= 0) {
+          file = file.substring(file.indexOf('\\') + 1, file.length);
+        }
+        $(realField).val(file);
+      }
+
+      function enableSubmitButton(dialogFooter) {
+        const button = dialogFooter.querySelector('temba-button')
+        $(button).attr('disabled', false);
+      }
+
+      function removeErrorMessages(form, selectors) {
+        const nodes = form.querySelectorAll(selectors);
+        nodes.forEach((element) => {
+          const errorNode = element.querySelector('.alert-error');
+          if (errorNode) element.removeChild(errorNode);
+        });
+      }
+
+      function addMessage(form, elementId, message) {
+        const errorDiv = form.querySelector(`#${elementId}`);
+        $(errorDiv).html(`<div class="alert-error">${message}</div>`);
+      }
+
+      function submitForm(event) {
+        event.preventDefault();
+        const { form, modalView, messagesDiv, dialogFooter } = getFormElements();
+        const formData = new FormData(form);
+        const options = { ...getHTTPOptions(), method: 'POST', body: formData };
+
+        removeErrorMessages(form, '#import_file_errors, #languages_errors');
+        removeMessage(messagesDiv)
+        event.target.disabled = true;
+        $(messagesDiv).text('This will take some time to complete, you will see a summary report when its done.');
+
+        fetch(modalView.endpoint, options)
+          .then((response) => {
+            if (response.status < 400) return response.json();
+            if (response.status === 400) return Promise.reject(response.json());
+            return Promise.reject(response.text());
+          })
+          .then((response) => {
+            enableSubmitButton(dialogFooter);
+            $(messagesDiv).html(showMessages(response));
+          })
+          .catch((error) => {
+            enableSubmitButton(dialogFooter);
+            error.then((err) => {
+              if (err.file) addMessage(form, 'import_file_errors', err.file);
+              if (err.languages) addMessage(form, 'languages_errors', err.file);
+            });
+          });
+      }
+
+      function setupModal() {
+        const { currentSubmit, dialogFooter } = getFormElements();
+        const submitButton = createButton({ name: 'Train Bot', onclick: submitForm, primary: true });
+        try {
+          if (currentSubmit) {
+            dialogFooter.removeChild(currentSubmit);
+            dialogFooter.prepend(submitButton);
+          }
+        } catch (e) {}
+      }
+
+      function renderError(error) {
+        let message = error
+        if (typeof error === 'object')
+          message = JSON.stringify(error);
+        return `<div class="error-message">${message}</div>`
+      }
+
+      function removeMessage(messageDiv) {
+        const node = messageDiv.querySelector('#training-messages');
+        if (node) messageDiv.removeChild(node);
+      }
+
+      function countListInObject(obj) {
+        return Object.values(obj).reduce((allCount, list) => list.length + allCount, 0);
+      }
+
+      function hasLanguageErrors(response) {
+        const updateErrors = countListInObject(response.update_errors);
+        const createErrors = countListInObject(response.create_errors);
+        return updateErrors > 0 || createErrors > 0;
+      }
+
+      function showMessages(response = {}) {
+        const messages = {
+          ...{ created: {}, updated: {}, create_errors: {}, update_errors: {}, errors: []},
+          ...response
+        };
+        let message = 'Training phrases pushed to dialogflow successfully';
+        let hasErrors = false;
+        if (messages.create_errors.length || hasLanguageErrors(response)) {
+          message += ', with some errors';
+          hasErrors = true;
+        } else {
+          message += ' without error';
+        }
+        let html = [`
+          <div class="alert-${hasErrors? 'errors' : 'success'}">${message}</div>
+          <div>Total intents created = ${JSON.stringify(messages.created)}</div>
+          <div>Total intents updated = ${JSON.stringify(messages.updated)}</div>
+          <div>Other errors = ${messages.errors.length}</div>
+        `];
+
+        if (countListInObject(messages.create_errors)) {
+          html.push(`<div class="create_errors">${Object.values(messages.update_errors).map(renderError).join('')}</div>`);
+        }
+
+        if (countListInObject(messages.update_errors)) {
+          html.push(`<div class="update-errors">${Object.values(messages.update_errors).map(renderError).join('')}</div>`);
+        }
+
+        if (messages.errors.length) {
+          html.push(`<div class="other-errors">${messages.errors.map(renderError).join('')}</div>`);
+        }
+
+        return `<div id="training-messages">${html.join('')}</div>`;
+      }
+
+      $(document).ready(function () {
+        setTimeout(setupModal, 200);
+      });
