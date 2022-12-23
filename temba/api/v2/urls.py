@@ -49,6 +49,7 @@ from .views import (
     PhoneValidationEndpoint,
     ReplaceAccentedCharsEndpoint,
     ValidateUrlAttachmentEndpoint,
+    ValidateFlowLinks,
 )
 
 urlpatterns = [
@@ -99,6 +100,7 @@ urlpatterns = [
     url(r"^trackable_link_report$", TrackableLinkReportEndpoint.as_view(), name="api.v2.trackable_link_report"),
     url(r"^phone_validation$", PhoneValidationEndpoint.as_view(), name="api.v2.phone_validation"),
     url(r"^replace_accented_chars$", ReplaceAccentedCharsEndpoint.as_view(), name="api.v2.replace_accented_chars"),
+    url(r"^validate_flow_links$", ValidateFlowLinks.as_view(), name="api.v2.validate_flow_links"),
 ]
 
 urlpatterns = format_suffix_patterns(urlpatterns, allowed=["json", "api"])
