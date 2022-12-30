@@ -11,6 +11,7 @@ from temba.orgs.views import DependencyDeleteModal, OrgObjPermsMixin, OrgPermsMi
 from temba.utils.views import ComponentFormMixin
 from temba.utils import languages
 from temba.utils.fields import SelectMultipleWidget
+from temba.utils.languages import alpha3_to_alpha2
 
 from .models import Classifier
 
@@ -136,6 +137,18 @@ class ClassifierCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
             return context
 
+        @classmethod
+        def convert_langs(cls, langs) -> list:
+            converted = []
+            for lang in langs:
+                alpha_2 = alpha3_to_alpha2(lang)
+                # correction for Dialogflow chinese language code
+                if alpha_2 == "zh":
+                    alpha_2 = "zh-cn"
+                converted.append(alpha_2)
+
+            return converted
+
         def post(self, *args, **kwargs):
             from .types.dialogflow.train_bot import TrainingClient
 
@@ -147,7 +160,7 @@ class ClassifierCRUDL(SmartCRUDL):
             if file and langs:
                 raw_data = file.read().decode("utf-8").splitlines()
                 obj = self.get_object()
-                trainer = TrainingClient(credential=obj.config, csv_data=raw_data, languages=langs)
+                trainer = TrainingClient(credential=obj.config, csv_data=raw_data, languages=self.convert_langs(langs))
                 trainer.train_bot()
                 message = trainer.messages
             else:
