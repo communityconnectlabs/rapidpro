@@ -137,13 +137,7 @@ var refreshTimeout = 10000;
 
 refreshTimeout = {{ refresh }};
 function scheduleRefresh() {
-  window.setTimeout(function () {
-      if (onRefreshSuccess) {
-          refresh(onRefreshSuccess, false)
-      } else {
-          refresh();
-      }
-  }, refreshTimeout);
+  window.setTimeout(refresh, refreshTimeout);
 }
 
 </script>

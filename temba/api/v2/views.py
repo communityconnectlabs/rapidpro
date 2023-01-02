@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.template.defaultfilters import slugify
+from django.utils import timezone
 from django_redis import get_redis_connection
 from parse_rest.datatypes import Date
 from rest_framework import generics, status, views
@@ -160,6 +161,7 @@ class RootView(views.APIView):
      * [/api/v2/trackable_link_report](/api/v2/trackable_link_report) - to generate a report about trackable links
      * [/api/v2/phone_validation](/api/v2/phone_validation) - to retrieve additional information about a phone number
      * [/api/v2/replace_accented_chars](/api/v2/replace_accented_chars) - to replace accented characters in a message
+     * [/api/v2/validate_flow_links](/api/v2/validate_flow_links) - to check if all the links in the flow are valid
 
     To use the endpoint simply append _.json_ to the URL. For example [/api/v2/flows](/api/v2/flows) will return the
     documentation for that endpoint but a request to [/api/v2/flows.json](/api/v2/flows.json) will return a JSON list of
@@ -271,9 +273,10 @@ class RootView(views.APIView):
                 "topics": reverse("api.v2.topics", request=request),
                 "users": reverse("api.v2.users", request=request),
                 "phone_validation": reverse("api.v2.phone_validation", request=request),
-                "replace_accented_chars": reverse("api.v2.replace_accented_chars", request=request),
                 # "tickets": reverse("api.v2.tickets", request=request),
                 "workspace": reverse("api.v2.workspace", request=request),
+                "replace_accented_chars": reverse("api.v2.replace_accented_chars", request=request),
+                "validate_flow_links": reverse("api.v2.validate_flow_links", request=request),
             }
         )
 
@@ -350,6 +353,7 @@ class ExplorerView(SmartTemplateView):
             TrackableLinkReportEndpoint.get_read_explorer(),
             PhoneValidationEndpoint.get_read_explorer(),
             ReplaceAccentedCharsEndpoint.get_read_explorer(),
+            ValidateFlowLinks.get_read_explorer(),
         ]
         return context
 
@@ -6094,4 +6098,88 @@ class ReplaceAccentedCharsEndpoint(BaseAPIView):
                 },
             ],
             "example": {"body": json.dumps({"message": "compàre our résumé"})},
+        }
+
+
+class ValidateFlowLinks(BaseAPIView):
+    """
+    This endpoint provides a list of links in a flow and statuses of following them.
+
+    A **GET** returns a list of links discovered in a flow
+
+    * **flow_id** - The indentifier of the flow to be checked
+    * **refresh - The flag to trigger retesting links
+
+    Example:
+
+        GET /api/v2/validate_flow_links.json?flow_id=1
+
+    Response:
+
+        {
+            "id": 1,
+            "name": "Links Flow",
+            "links": [{
+                "node_uuid": "858f78c9-ff10-4e19-83ab-10762320f8db",
+                "action_uuid": "49e2047b-9dc6-4ae9-b9be-6607488357f4",
+                "link": "https://hauyfjwgfjw.com/",
+                "status_code": 400,
+                "error": "A Connection error occurred."
+            }]
+        }
+    """
+
+    permission = "flows.flow_editor"
+    http_method_names = ["get"]
+    model = Flow
+
+    def get(self, request, *args, **kwargs):
+        from temba.flows.tasks import validate_flow_links
+
+        try:
+            flow_id = self.request.data.get("flow_id") or self.request.query_params.get("flow_id", 0)
+            flow = self.model.objects.get(id=flow_id)
+            refresh = str(self.request.data.get("refresh", "false")).lower() == "true"
+            refresh = refresh or str(self.request.query_params.get("refresh", "false")).lower() == "true"
+            links_data = flow.metadata.get("validated_links")
+
+            if not links_data or refresh:
+                validate_flow_links.delay(flow_id)
+                return Response(
+                    {
+                        "id": flow.id,
+                        "name": flow.name,
+                        "validating": True,
+                        "refresh_timeout": 5000,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "id": flow.id,
+                    "name": flow.name,
+                    "links": links_data.get("links"),
+                    "processed_on": links_data.get("processed_on", timezone.now()),
+                },
+                status=status.HTTP_200_OK,
+            )
+        except self.model.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+    @classmethod
+    def get_read_explorer(cls):
+        return {
+            "method": "GET",
+            "title": "Validate Flow Links",
+            "url": reverse("api.v2.validate_flow_links"),
+            "slug": "validate-flow-links",
+            "fields": [
+                {
+                    "name": "flow_id",
+                    "required": True,
+                    "help": "The ID of the Flow to be checked.",
+                },
+            ],
+            "example": {"body": json.dumps({"flow_id": "1"})},
         }
