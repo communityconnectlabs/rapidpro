@@ -5,7 +5,7 @@
 
 -block fields
   #language-list
-    -render_field 'languages'
+    -render_field 'language_list'
 
     %div#languages_errors
       {{ form.languages.errors }}
@@ -18,7 +18,13 @@
         %input(type="text" id="file-field")
         .button-light.ml-4(style="margin-top:-1px")
           -trans "Choose File"
+
     %div#import_file_errors
+      {{ form.file.errors }}
+
+  #loading-status.hidden
+    %span.visually-hidden
+      -trans "Loading..."
 
   #messages
 
@@ -78,8 +84,10 @@
         const form = modaxBody.querySelector('form');
         const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
         const messagesDiv = form.querySelector('#messages');
+        const loaderDiv = form.querySelector('#loading-status');
         return {
           form,
+          loaderDiv,
           modaxBody,
           modalView,
           messagesDiv,
@@ -102,8 +110,14 @@
       }
 
       function enableSubmitButton(dialogFooter) {
-        const button = dialogFooter.querySelector('temba-button')
+        const button = dialogFooter.querySelector('temba-button');
         $(button).attr('disabled', false);
+      }
+
+      function toggleLoadingStatus() {
+        const { loaderDiv } = getFormElements();
+        if ($(loaderDiv).hasClass('hidden')) $(loaderDiv).removeClass('hidden');
+        else $(loaderDiv).addClass('hidden');
       }
 
       function removeErrorMessages(form, selectors) {
@@ -121,13 +135,14 @@
 
       function submitForm(event) {
         event.preventDefault();
-        const { form, modalView, messagesDiv, dialogFooter } = getFormElements();
+        const { form, modalView, loaderDiv, messagesDiv, dialogFooter } = getFormElements();
         const formData = new FormData(form);
         const options = { ...getHTTPOptions(), method: 'POST', body: formData };
 
         removeErrorMessages(form, '#import_file_errors, #languages_errors');
         removeMessage(messagesDiv)
         event.target.disabled = true;
+        toggleLoadingStatus();
         $(messagesDiv).text('This will take some time to complete, you will see a summary report when its done.');
 
         fetch(modalView.endpoint, options)
@@ -139,12 +154,14 @@
           .then((response) => {
             enableSubmitButton(dialogFooter);
             $(messagesDiv).html(showMessages(response));
+            toggleLoadingStatus();
           })
           .catch((error) => {
             enableSubmitButton(dialogFooter);
+            toggleLoadingStatus(loaderDiv);
             error.then((err) => {
               if (err.file) addMessage(form, 'import_file_errors', err.file);
-              if (err.languages) addMessage(form, 'languages_errors', err.file);
+              if (err.language_list) addMessage(form, 'languages_errors', err.language_list);
             });
           });
       }

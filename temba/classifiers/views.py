@@ -120,7 +120,7 @@ class ClassifierCRUDL(SmartCRUDL):
 
         class Form(forms.Form):
             file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=("csv",))])
-            languages = forms.MultipleChoiceField(
+            language_list = forms.MultipleChoiceField(
                 choices=languages.NAMES.items(),
                 required=True,
                 widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Languages"}),
@@ -156,10 +156,11 @@ class ClassifierCRUDL(SmartCRUDL):
             status = 200
 
             file = self.request.FILES.get("file")
-            langs = self.request.POST.getlist("languages")
+            langs = self.request.POST.getlist("language_list")
             if file and langs:
                 raw_data = file.read().decode("utf-8").splitlines()
                 obj = self.get_object()
+
                 trainer = TrainingClient(credential=obj.config, csv_data=raw_data, languages=self.convert_langs(langs))
                 trainer.train_bot()
                 message = trainer.messages
@@ -168,6 +169,6 @@ class ClassifierCRUDL(SmartCRUDL):
                 if not file:
                     message["file"] = "file is required"
                 if not langs:
-                    message["languages"] = "kindly select at least one language"
+                    message["language_list"] = "kindly select at least one language"
 
             return JsonResponse(message, status=status)

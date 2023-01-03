@@ -18,34 +18,19 @@ class TrainingClient:
         count_per_lang = dict(zip(languages, fill_zero))
         self.messages = dict(
             errors=[],
-            update_errors=errors_per_lang,
-            create_errors=errors_per_lang,
-            created=count_per_lang,
-            updated=count_per_lang,
+            update_errors=errors_per_lang.copy(),
+            create_errors=errors_per_lang.copy(),
+            created=count_per_lang.copy(),
+            updated=count_per_lang.copy(),
         )
 
-    def get_csv(self):
-        reader = csv.reader(self.csv_data)
-        data_list = list(reader)
-
-        header = data_list.pop(0)
-        return data_list, header
-
-    def csv_to_dict(self, language_code):
-        csv_list, header_list = self.get_csv()
+    def csv_to_dict(self):
+        header_list = self.csv_data.pop(0)
+        header_list = header_list.split(",")
         header = [str(column).lower() for column in header_list]
-        dict_list = []
-        lang_headers = self.get_language_headers(language_code)
-        training_phrase = lang_headers.get("training_phrase")
-        for i, row in enumerate(csv_list):
-            csv_dict = dict(zip(header, row))
+        reader = csv.DictReader(self.csv_data, fieldnames=header)
 
-            if training_phrase and csv_dict.get(training_phrase):
-                col = csv_dict.get(training_phrase).rstrip("]").lstrip("[").split(",")
-                col = [element.strip().strip("'") for element in col]
-                csv_dict[training_phrase] = col
-            dict_list.append(csv_dict)
-        return dict_list
+        return reader
 
     @classmethod
     def get_intents_from_dict(cls, dict_list):
@@ -123,6 +108,13 @@ class TrainingClient:
 
             logger.info("Intents updated")
 
+    @classmethod
+    def clean_training_phrases(cls, data):
+        if data:
+            data_list = data.rstrip("]").lstrip("[").split(",")
+            return [element.strip().strip("'") for element in data_list]
+        return data
+
     def extract_intents_from_csv(self, csv_data, lang_headers, intent_dict):
         to_be_created = []
         to_be_updated = []
@@ -131,6 +123,7 @@ class TrainingClient:
             counter += 1  # count rows regardless of skipping
             training_key = lang_headers["training_phrase"]
             training_phrases = intent.get(training_key)
+            training_phrases = self.clean_training_phrases(training_phrases)
 
             if not training_phrases or len(training_phrases) == 0:
                 error_msg = f"No training phrases found here, skipping row {counter}"
@@ -144,6 +137,7 @@ class TrainingClient:
                 error_msg = f"No intent answer found, skipping row {counter}"
                 logger.warning(error_msg)
                 self.messages["errors"].append(error_msg)
+                continue
 
             try:
                 intent_name = intent[lang_headers["intent"]]
@@ -173,7 +167,7 @@ class TrainingClient:
         return to_be_created, to_be_updated
 
     def process_sync_intents_for_lang(self, language_code):
-        csv_data = self.csv_to_dict(language_code)
+        csv_data = self.csv_to_dict()
         lang_headers = self.get_language_headers(language_code)
 
         intents = self.get_intents(language_code)
