@@ -9,23 +9,29 @@ import temba.utils.models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('contacts', '0144_merge_20221101_1805'),
+        ("contacts", "0144_merge_20221101_1805"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='contactimport',
-            name='headers',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), null=True, size=None),
+            model_name="contactimport",
+            name="headers",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=255), null=True, size=None
+            ),
         ),
         migrations.AlterField(
-            model_name='contactimportbatch',
-            name='blocked_uuids',
-            field=temba.utils.models.JSONField(decoder=temba.utils.json.TembaDecoder, default=list, encoder=temba.utils.json.TembaEncoder),
+            model_name="contactimportbatch",
+            name="blocked_uuids",
+            field=temba.utils.models.JSONField(
+                decoder=temba.utils.json.TembaDecoder, default=list, encoder=temba.utils.json.TembaEncoder
+            ),
         ),
         migrations.AlterField(
-            model_name='contactimportbatch',
-            name='carrier_groups',
-            field=temba.utils.models.JSONField(decoder=temba.utils.json.TembaDecoder, default=dict, encoder=temba.utils.json.TembaEncoder),
+            model_name="contactimportbatch",
+            name="carrier_groups",
+            field=temba.utils.models.JSONField(
+                decoder=temba.utils.json.TembaDecoder, default=dict, encoder=temba.utils.json.TembaEncoder
+            ),
         ),
     ]

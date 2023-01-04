@@ -1106,7 +1106,7 @@ CELERY_BEAT_SCHEDULE = {
     "sync-old-seen-channels": {"task": "sync_old_seen_channels_task", "schedule": timedelta(seconds=600)},
     "track-org-channel-counts": {"task": "track_org_channel_counts", "schedule": crontab(hour=4, minute=0)},
     "trim-channel-log": {"task": "trim_channel_log_task", "schedule": crontab(hour=3, minute=0)},
-    "trim-event-fires": {"task": "trim_event_fires_task", "schedule": timedelta(seconds=900)},
+    "trim-event-fires": {"task": "trim_event_fires_task", "schedule": timedelta(minutes=5)},
     "trim-flow-revisions": {"task": "trim_flow_revisions", "schedule": crontab(hour=0, minute=0)},
     "trim-flow-sessions-and-starts": {"task": "trim_flow_sessions_and_starts", "schedule": crontab(hour=0, minute=0)},
     "trim-http-logs": {"task": "trim_http_logs_task", "schedule": crontab(hour=3, minute=0)},
