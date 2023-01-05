@@ -791,6 +791,14 @@ class ContactCRUDL(SmartCRUDL):
                         flow_uuid=fire.event.flow.uuid,
                         flow_name=fire.event.flow.name,
                         scheduled=fire.scheduled,
+                        **(
+                            {}
+                            if not fire.event.campaign
+                            else dict(
+                                trigger_name=fire.event.campaign.name,
+                                trigger_url=reverse("campaigns.campaign_read", kwargs={"pk": fire.event.campaign.id}),
+                            )
+                        ),
                     )
                 )
 
@@ -803,6 +811,14 @@ class ContactCRUDL(SmartCRUDL):
                         flow_uuid=sched_trigger.flow.uuid,
                         flow_name=sched_trigger.flow.name,
                         scheduled=sched_trigger.schedule.next_fire,
+                        **(
+                            {}
+                            if not sched_trigger
+                            else dict(
+                                trigger_name=f"Triggers {sched_trigger.schedule.get_display()}",
+                                trigger_url=reverse("triggers.trigger_list"),
+                            )
+                        ),
                     )
                 )
 
@@ -815,6 +831,14 @@ class ContactCRUDL(SmartCRUDL):
                         flow_uuid=None,
                         flow_name=None,
                         scheduled=sched_broadcast.schedule.next_fire,
+                        **(
+                            {}
+                            if not sched_broadcast
+                            else dict(
+                                trigger_name=f"Triggers {sched_broadcast.schedule.get_display()}",
+                                trigger_url=reverse("triggers.trigger_list"),
+                            )
+                        ),
                     )
                 )
 

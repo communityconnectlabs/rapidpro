@@ -207,12 +207,14 @@
 
         %tr.item{class:"{% if evt.event_type == 'M' %}msg{%else%}non-msg{%endif%}"}
           %td.icon
+            {% if evt.trigger_url %}<a href="{{ evt.trigger_url }}" data-toggle="tooltip" data-placement="top" title="{{ evt.trigger_name }}">{% endif %}
             -if evt.event_type == 'M'
               %span.glyph.icon-bubble-right
             -elif evt.event_type == 'F'
               %span.glyph.icon-flow
             -else
               %span.glyph.icon-clock
+            {% if evt.trigger_url %}</a>{% endif %}
           %td.details.w-full
             .activity-scheduled
               -if evt.event_type == 'M'
@@ -652,3 +654,7 @@
       }
     }
     {% endif %}
+
+    $(function () {
+      $('[data-toggle="tooltip"]').tooltip()
+    })
