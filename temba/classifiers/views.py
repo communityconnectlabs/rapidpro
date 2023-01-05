@@ -1,12 +1,17 @@
+from django.core.validators import FileExtensionValidator
+from django import forms
 from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTemplateView, SmartUpdateView
 
 from django.contrib import messages
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
 from temba.orgs.views import DependencyDeleteModal, OrgObjPermsMixin, OrgPermsMixin
 from temba.utils.views import ComponentFormMixin
+from temba.utils import languages
+from temba.utils.fields import SelectMultipleWidget
+from temba.utils.languages import alpha3_to_alpha2
 
 from .models import Classifier
 
@@ -39,7 +44,7 @@ class BaseConnectView(ComponentFormMixin, OrgPermsMixin, SmartFormView):
 
 class ClassifierCRUDL(SmartCRUDL):
     model = Classifier
-    actions = ("read", "connect", "delete", "sync")
+    actions = ("read", "connect", "delete", "sync", "train")
 
     class Delete(DependencyDeleteModal):
         cancel_url = "uuid@classifiers.classifier_read"
@@ -72,6 +77,16 @@ class ClassifierCRUDL(SmartCRUDL):
                     )
                 )
 
+            if self.has_org_perm("classifiers.classifier_train"):
+                links.append(
+                    dict(
+                        id="bot-training",
+                        title=_("Training"),
+                        modax=_("Train Classifier"),
+                        href=reverse("classifiers.classifier_train", args=[self.object.uuid]),
+                    )
+                )
+
             return links
 
         def get_queryset(self, **kwargs):
@@ -99,3 +114,61 @@ class ClassifierCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
             context["classifier_types"] = Classifier.get_types()
             return context
+
+    class Train(OrgObjPermsMixin, SmartUpdateView):
+        slug_url_kwarg = "uuid"
+
+        class Form(forms.Form):
+            file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=("csv",))])
+            language_list = forms.MultipleChoiceField(
+                choices=languages.NAMES.items(),
+                required=True,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Languages"}),
+            )
+
+        form_class = Form
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            del kwargs["instance"]
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            return context
+
+        @classmethod
+        def convert_langs(cls, langs) -> list:
+            converted = []
+            for lang in langs:
+                alpha_2 = alpha3_to_alpha2(lang)
+                # correction for Dialogflow chinese language code
+                if alpha_2 == "zh":
+                    alpha_2 = "zh-cn"
+                converted.append(alpha_2)
+
+            return converted
+
+        def post(self, *args, **kwargs):
+            from .types.dialogflow.train_bot import TrainingClient
+
+            message = {}
+            status = 200
+
+            file = self.request.FILES.get("file")
+            langs = self.request.POST.getlist("language_list")
+            if file and langs:
+                raw_data = file.read().decode("utf-8").splitlines()
+                obj = self.get_object()
+
+                trainer = TrainingClient(credential=obj.config, csv_data=raw_data, languages=self.convert_langs(langs))
+                trainer.train_bot()
+                message = trainer.messages
+            else:
+                status = 400
+                if not file:
+                    message["file"] = "file is required"
+                if not langs:
+                    message["language_list"] = "kindly select at least one language"
+
+            return JsonResponse(message, status=status)

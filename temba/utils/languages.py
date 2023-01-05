@@ -86,3 +86,11 @@ def alpha2_to_alpha3(alpha_2: str):
     """
     lang = pycountry.languages.get(alpha_2=alpha_2[:2])
     return lang.alpha_3 if lang else None
+
+
+def alpha3_to_alpha2(alpha_3: str):
+    """
+    Convert 3-char code (e.g. spa) to a 2-char code (e.g. es)
+    """
+    lang = pycountry.languages.get(alpha_3=alpha_3[:3])
+    return lang.alpha_2 if lang else None
