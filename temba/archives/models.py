@@ -94,6 +94,9 @@ class Archive(models.Model):
         Deletes all the archives for an org, also iterating any remaining files in S3 and removing that path
         as well.
         """
+        if not settings.ARCHIVE_BUCKET:
+            return
+
         # release all of our archives in turn
         for archive in Archive.objects.filter(org=org):
             archive.release()

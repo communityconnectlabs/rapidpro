@@ -2454,7 +2454,7 @@ class ContactImportCRUDL(SmartCRUDL):
                 GROUP BY ci.id, ci.is_active, ci.group_id;
                 """
                 import_task = ContactImport.objects.raw(import_task_raw_query, [self.kwargs.get("pk")])[0]
-                import_task_status = ContactImport._get_overall_status(set(getattr(import_task, "statuses", [])))
+                import_task_status = ContactImport.get_overall_status(set(getattr(import_task, "statuses", [])))
                 is_task_completed = import_task_status in (ContactImport.STATUS_COMPLETE, ContactImport.STATUS_FAILED)
             except IndexError:
                 raise Http404
@@ -2462,12 +2462,12 @@ class ContactImportCRUDL(SmartCRUDL):
             # process unblocking
             if import_task.is_active and is_task_completed:
                 if unblock:
-                    Groups = ContactGroup.contacts.through
+                    _groups = ContactGroup.contacts.through
                     import_group = import_task.group
                     contact_uuids = set(chain(*getattr(import_task, "blocked_uuids", [])))
                     contacts = Contact.objects.filter(uuid__in=contact_uuids, status=Contact.STATUS_BLOCKED)
-                    Groups.objects.bulk_create(
-                        [Groups(contact=contact, contactgroup=import_group) for contact in contacts],
+                    _groups.objects.bulk_create(
+                        [_groups(contact=contact, contactgroup=import_group) for contact in contacts],
                         ignore_conflicts=True,
                     )
                     contacts.update(status=Contact.STATUS_ACTIVE)

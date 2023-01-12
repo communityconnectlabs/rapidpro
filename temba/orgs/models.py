@@ -1943,6 +1943,8 @@ class Org(SmartModel):
         Does an actual delete of this org
         """
 
+        from temba.contacts.models import ContactImport
+
         assert not self.is_active and self.released_on, "can't delete an org which hasn't been released"
         assert not self.deleted_on, "can't delete an org twice"
 
@@ -2008,6 +2010,9 @@ class Org(SmartModel):
 
         for group in self.all_groups.all():
             ContactGroupCount.objects.filter(group=group).delete()
+
+            ContactImport.objects.filter(group=group).delete()
+
             group.release(user)
             group.delete()
 

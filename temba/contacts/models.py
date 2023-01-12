@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Set
 
 import iso8601
 import phonenumbers
@@ -2551,6 +2551,25 @@ class ContactImport(SmartModel):
             count += 1
 
         return validated_urn_carriers
+
+    @staticmethod
+    def get_overall_status(statuses: Set) -> str:
+        """
+        Merges the statuses from the import's batches into a single status value
+        """
+        if not statuses:
+            return ContactImport.STATUS_PENDING
+        elif len(statuses) == 1:  # if there's only one status then we're that
+            return list(statuses)[0]
+
+        # if any batches haven't finished, we're processing
+        if ContactImport.STATUS_PENDING in statuses or ContactImport.STATUS_PROCESSING in statuses:
+            return ContactImport.STATUS_PROCESSING
+
+        # all batches have finished - if any batch failed (shouldn't happen), we failed
+        return (
+            ContactImport.STATUS_FAILED if ContactImport.STATUS_FAILED in statuses else ContactImport.STATUS_COMPLETE
+        )
 
     @staticmethod
     def _parse_header(header: str) -> Tuple[str, str]:
