@@ -8,19 +8,21 @@ import temba.utils.models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('tickets', '0025_remove_ticket_subject'),
-        ('msgs', '0163_alter_msg_status'),
+        ("tickets", "0025_remove_ticket_subject"),
+        ("msgs", "0163_alter_msg_status"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='broadcast',
-            name='text',
+            model_name="broadcast",
+            name="text",
             field=temba.utils.models.TranslatableField(max_length=2000),
         ),
         migrations.AlterField(
-            model_name='broadcast',
-            name='ticket',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='broadcasts', to='tickets.ticket'),
+            model_name="broadcast",
+            name="ticket",
+            field=models.ForeignKey(
+                null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="broadcasts", to="tickets.ticket"
+            ),
         ),
     ]
