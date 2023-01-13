@@ -87,7 +87,7 @@ class Broadcast(models.Model):
     media = TranslatableField(max_length=2048, null=True)
 
     channel = models.ForeignKey(Channel, on_delete=models.PROTECT, null=True)
-    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.PROTECT, null=True, related_name="broadcasts")
+    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.SET_NULL, null=True, related_name="broadcasts")
 
     status = models.CharField(max_length=1, choices=STATUS_CHOICES, default=STATUS_INITIALIZING)
 
