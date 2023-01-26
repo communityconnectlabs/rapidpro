@@ -1434,6 +1434,25 @@ class FlowCRUDL(SmartCRUDL):
             context["dev_mode"] = dev_mode
             context["is_starting"] = flow.is_starting()
             context["feature_filters"] = json.dumps(self.get_features(flow.org, flow))
+
+            # check if there is no other users that edititing current flow
+            # then make this user as main editor and set expiration time of editing to this user
+            r = get_redis_connection()
+            flow_key = f"active-flow-editor-{flow.uuid}"
+            active_flow_editor = r.get(flow_key)
+            if active_flow_editor is not None:
+                active_editor_email = active_flow_editor.decode()
+                if active_editor_email == self.request.user.username:
+                    return context
+
+                context["mutable"] = False
+                context["immutable_alert"] = (
+                        _("%s is currently editing this Flow. You can open this flow only in view mode.")
+                        % active_editor_email
+                )
+            else:
+                r.set(flow_key, self.request.user.username, ex=30)
+
             return context
 
         def get_features(self, org, flow=None) -> list:
