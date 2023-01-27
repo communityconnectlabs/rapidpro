@@ -2356,11 +2356,14 @@ class FlowCRUDL(SmartCRUDL):
             r = get_redis_connection()
             flow_key = f"active-flow-editor-{flow.uuid}"
             active_editor = r.get(flow_key)
+            editing_available = False
             if active_editor is not None:
                 if self.request.user.username == active_editor.decode():
+                    editing_available = True
                     r.expire(flow_key, 30)
 
-            return JsonResponse(dict(nodes=active, segments=visited, is_starting=flow.is_starting()))
+            return JsonResponse(dict(nodes=active, segments=visited, is_starting=flow.is_starting(),
+                                     editing_available=editing_available))
 
     class Simulate(OrgObjPermsMixin, SmartReadView):
         @csrf_exempt

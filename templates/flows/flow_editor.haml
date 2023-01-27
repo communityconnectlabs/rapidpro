@@ -232,6 +232,21 @@
         }
         combineFlowsModal.open = false;
       });
+
+      var sessionTimeoutModal = document.getElementById("session-timeout");
+      sessionTimeoutModal.addEventListener("temba-button-clicked", function(event){
+        if(!event.detail.button.secondary) {
+          config.mutable = false;
+          showFlowEditor(document.getElementById('rp-flow-editor'), config);
+        } else {
+          location.reload();
+        }
+        sessionTimeoutModal.open = false;
+      });
+      document.addEventListener("editor-session-timeout", function () {
+        sessionTimeoutModal.classList.remove("hide");
+        sessionTimeoutModal.open = true;
+      })
     });
 
     function handleEditorLoaded() {
@@ -515,6 +530,9 @@
       .p-6.body
         = immutable_alert
 
+  %temba-dialog.hide#session-timeout(header='{{_("Session Time is Run Out")|escapejs}}' primaryButtonName='{{_("Stay")|escapejs}}' cancelButtonName='{{_("Refresh")|escapejs}}')
+    .p-6.body
+      = _("You have been inactive for a while and your editing session is over. You could stay on that page without the ability to do changes or reload the page to start a new editing session.")
 
   #grid.h-full
     <temba-loading units="10" size="8"></temba-loading>
