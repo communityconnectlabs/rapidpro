@@ -37,6 +37,7 @@ function createButton(options) {
   const buttonElement = document.createElement('temba-button');
   buttonElement.name = buttonOptions.name;
   if (options.onclick) buttonElement.onclick = options.onclick;
+  if (options.disabled !== undefined) buttonElement.disabled = options.disabled;
   if (options.primary) buttonElement.primary = true;
   else buttonElement.secondary = true;
   return buttonElement;
