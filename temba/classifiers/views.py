@@ -13,7 +13,7 @@ from temba.utils import languages
 from temba.utils.fields import SelectMultipleWidget
 from temba.utils.languages import alpha3_to_alpha2
 
-from .models import Classifier
+from .models import Classifier, ClassifierTrainingTask
 
 
 class BaseConnectView(ComponentFormMixin, OrgPermsMixin, SmartFormView):
@@ -84,6 +84,7 @@ class ClassifierCRUDL(SmartCRUDL):
                         title=_("Training"),
                         modax=_("Train Classifier"),
                         href=reverse("classifiers.classifier_train", args=[self.object.uuid]),
+                        destructive=True,
                     )
                 )
 
@@ -128,13 +129,46 @@ class ClassifierCRUDL(SmartCRUDL):
 
         form_class = Form
 
+        def get(self, request, *args, **kwargs):
+            report_type = request.GET.get("report-type")
+            if report_type == "progress":
+                task = ClassifierTrainingTask.get_active_task(self.get_object())
+                return JsonResponse(self.get_report(task))
+
+            if report_type == "previous":
+                task = ClassifierTrainingTask.get_last_task(self.get_object())
+                return JsonResponse(self.get_report(task))
+
+            return super().get(request, *args, **kwargs)
+
+        @classmethod
+        def get_report(cls, task):
+            report = {}
+            if task:
+                report = dict(
+                    total=task.total_intents,
+                    pushed=task.start_index,
+                    messages=task.messages,
+                    status=task.status,
+                    modified=task.modified_on,
+                )
+
+            return report
+
         def get_form_kwargs(self):
             kwargs = super().get_form_kwargs()
             del kwargs["instance"]
             return kwargs
 
         def get_context_data(self, **kwargs):
+            obj = self.get_object()
+            has_upload_task = ClassifierTrainingTask.has_task(obj)
             context = super().get_context_data(**kwargs)
+            context["has_upload_task"] = has_upload_task
+            if not has_upload_task:
+                task = ClassifierTrainingTask.get_last_task(obj)
+                context["has_prev_task"] = task is not None
+
             return context
 
         @classmethod
@@ -150,8 +184,6 @@ class ClassifierCRUDL(SmartCRUDL):
             return converted
 
         def post(self, *args, **kwargs):
-            from .types.dialogflow.train_bot import TrainingClient
-
             message = {}
             status = 200
 
@@ -160,10 +192,9 @@ class ClassifierCRUDL(SmartCRUDL):
             if file and langs:
                 raw_data = file.read().decode("utf-8").splitlines()
                 obj = self.get_object()
-
-                trainer = TrainingClient(credential=obj.config, csv_data=raw_data, languages=self.convert_langs(langs))
-                trainer.train_bot()
-                message = trainer.messages
+                ClassifierTrainingTask.create(
+                    training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs)
+                )
             else:
                 status = 400
                 if not file:

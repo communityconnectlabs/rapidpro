@@ -7,6 +7,7 @@ from django.conf.urls import url
 from django.db import models
 from django.template import Engine
 from django.utils import timezone
+from django.utils.translation import ugettext_lazy as _
 
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import on_transaction_commit
@@ -217,3 +218,123 @@ class Intent(models.Model):
 
     class Meta:
         unique_together = (("classifier", "external_id"),)
+
+
+class ClassifierTrainingTask(models.Model):
+    PENDING = "P"
+    IN_PROGRESS = "I"
+    RETRY = "R"
+    COMPLETED = "C"
+    FAILED = "F"
+
+    STATUS = (
+        (PENDING, _("Pending")),
+        (IN_PROGRESS, _("In Progress")),
+        (RETRY, _("Retry")),
+        (COMPLETED, _("Completed")),
+        (FAILED, _("Failed")),
+    )
+
+    classifier = models.ForeignKey(Classifier, on_delete=models.CASCADE)
+    training_doc = JSONField(default=list)
+    pickled_doc = models.TextField(default="")
+    status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
+    messages = JSONField(default=dict)
+    languages = JSONField(default=list)
+    start_index = models.IntegerField(default=0)
+    total_intents = models.PositiveSmallIntegerField(default=0)
+
+    # when this flow start was created
+    created_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    # when this flow start was last modified
+    modified_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    @classmethod
+    def create(cls, classifier, training_doc, languages):
+        created_obj = cls.objects.create(training_doc=training_doc, classifier=classifier, languages=languages)
+        created_obj.start_training()
+        return created_obj
+
+    def start_training(self):
+        from .tasks import train_bot
+
+        on_transaction_commit(lambda: train_bot.delay(self.id))
+
+    @classmethod
+    def get_active_tasks(cls, classifier):
+        active_status = [cls.RETRY, cls.IN_PROGRESS, cls.PENDING]
+        return cls.objects.filter(classifier=classifier, status__in=active_status)
+
+    @classmethod
+    def get_last_task(cls, classifier):
+        return cls.objects.filter(classifier=classifier).order_by("-modified_on").first()
+
+    @classmethod
+    def get_active_task(cls, classifier):
+        return cls.get_active_tasks(classifier).first()
+
+    @classmethod
+    def has_task(cls, classifier):
+        tasks = cls.get_active_tasks(classifier).count()
+        return tasks > 0
+
+    def trash_docs(self):
+        self.training_doc = []
+        self.pickled_doc = ""
+
+    @classmethod
+    def run_task(cls, instance_id):
+        from .types.dialogflow.train_bot import TrainingClient
+
+        filter_status = [cls.PENDING, cls.RETRY]
+
+        reschedule_task = False
+        training = None
+        try:
+            training = cls.objects.get(id=instance_id)
+        except Exception as e:
+            logger.error(e, exc_info=True)
+
+        if training and training.status in filter_status:
+            training.status = cls.IN_PROGRESS
+            training.save()
+
+            client = TrainingClient(
+                credential=training.classifier.config,
+                csv_data=training.training_doc,
+                languages=training.languages,
+                messages=training.messages,
+            )
+
+            if training.pickled_doc == "":
+                client.build_intent_list()
+                intent_list = client.intents_requests
+            else:
+                intent_list = client.intent_str_to_list(training.pickled_doc)
+
+            if training.start_index == 0:
+                training.total_intents = len(intent_list)
+                training.save()
+
+            index, retry, completed = client.push_to_dialogflow(intent_list, training.start_index)
+            training.start_index = index
+            training.messages = client.messages
+            if training.pickled_doc == "":
+                training.pickled_doc = client.intent_list_to_str()
+
+            if retry:
+                training.status = cls.RETRY
+            if completed:
+                training.status = cls.COMPLETED
+                training.trash_docs()
+
+            if not completed and not retry:
+                training.status = cls.FAILED
+                training.trash_docs()
+
+            reschedule_task = retry
+            training.modified_on = timezone.now()
+            training.save()
+
+        return reschedule_task
