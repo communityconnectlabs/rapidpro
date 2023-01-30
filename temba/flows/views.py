@@ -1447,8 +1447,8 @@ class FlowCRUDL(SmartCRUDL):
 
                 context["mutable"] = False
                 context["immutable_alert"] = (
-                        _("%s is currently editing this Flow. You can open this flow only in view mode.")
-                        % active_editor_email
+                    _("%s is currently editing this Flow. You can open this flow only in view mode.")
+                    % active_editor_email
                 )
             else:
                 r.set(flow_key, self.request.user.username, ex=30)
@@ -2362,8 +2362,11 @@ class FlowCRUDL(SmartCRUDL):
                     editing_available = True
                     r.expire(flow_key, 30)
 
-            return JsonResponse(dict(nodes=active, segments=visited, is_starting=flow.is_starting(),
-                                     editing_available=editing_available))
+            return JsonResponse(
+                dict(
+                    nodes=active, segments=visited, is_starting=flow.is_starting(),editing_available=editing_available
+                )
+            )
 
     class Simulate(OrgObjPermsMixin, SmartReadView):
         @csrf_exempt
