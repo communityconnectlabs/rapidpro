@@ -2364,7 +2364,7 @@ class FlowCRUDL(SmartCRUDL):
 
             return JsonResponse(
                 dict(
-                    nodes=active, segments=visited, is_starting=flow.is_starting(),editing_available=editing_available
+                    nodes=active, segments=visited, is_starting=flow.is_starting(), editing_available=editing_available
                 )
             )
 
