@@ -320,7 +320,7 @@ class ClassifierTrainingTask(models.Model):
             index, retry, completed = client.push_to_dialogflow(intent_list, training.start_index)
             training.start_index = index
             training.messages = client.messages
-            if training.pickled_doc == "":
+            if not training.pickled_doc:
                 training.pickled_doc = client.intent_list_to_str()
 
             if retry:
