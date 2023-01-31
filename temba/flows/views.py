@@ -1362,7 +1362,7 @@ class FlowCRUDL(SmartCRUDL):
             label = FlowLabel.objects.get(pk=self.kwargs["label_id"])
             children = label.children.all()
             if children:  # pragma: needs cover
-                return [l for l in FlowLabel.objects.filter(parent=label)] + [label]
+                return [lbl for lbl in FlowLabel.objects.filter(parent=label)] + [label]
             else:
                 return [label]
 
@@ -2679,7 +2679,7 @@ class FlowCRUDL(SmartCRUDL):
                 return JsonResponse(org.as_environment_def())
             else:
                 results = [{"iso": code, "name": languages.get_name(code)} for code in org.flow_languages]
-                return JsonResponse({"results": sorted(results, key=lambda l: l["name"])})
+                return JsonResponse({"results": sorted(results, key=lambda langs: langs["name"])})
 
     class Launch(ModalMixin, OrgObjPermsMixin, SmartUpdateView):
         flow_params_fields = []
