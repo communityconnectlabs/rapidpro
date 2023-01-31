@@ -178,7 +178,7 @@
         removeMessage(messagesDiv)
         event.target.disabled = true;
         toggleLoadingStatus();
-        $(messagesDiv).text('This will take some time to complete, you can clone this window and check back later');
+        $(messagesDiv).text('This will take some time to complete, you can close this window and check back later');
 
         fetch(modalView.endpoint, options)
           .then((response) => {
