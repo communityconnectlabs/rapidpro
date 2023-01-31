@@ -96,7 +96,7 @@
                 %temba-modax#create-label-modal{ header:'{% trans "Create Label" %}', endpoint:"{% url 'msgs.label_create' %}", "-temba-loaded": "handleCreateLabelModalLoaded", "-temba-submitted": "handleCreateLabelModalSubmitted"}
                   .button-light.block.mt-3
                     - trans "Create Label"
-                  
+
               -if org_perms.msgs.label_create_folder
                 %temba-modax{ header:'{% trans "Create Folder" %}', endpoint:"{% url 'msgs.label_create_folder' %}"}
                   .button-light.block.mt-3
@@ -109,9 +109,13 @@
                 -if org_perms.msgs.msg_update
                   .action-buttons.list-buttons-container.h-full.mr-2.flex-grow
                     .list-buttons.flex.items-center.-mx-2.h-full
+                      .button-action(onclick='selectAll()')
+                        .-mt-1.mr-2.glyph.icon-checkbox-checked
+                        -trans "Select All"
+
                       - if 'unlabel' in actions
                         .button-action.object-btn-unlabel
-                          .glyph.icon-box
+                          .-mt-1.mr-2.glyph.icon-box
                           -trans "Remove Label"
 
                       - if 'archive' in actions
@@ -267,6 +271,7 @@
     function handleRowClicked(event) {
 
       if (event.target.tagName == "TEMBA-CHECKBOX") {
+        showHideSelectAllButton();
         return;
       }
 
@@ -344,4 +349,26 @@
 
     function handleAddLabelClicked() {
       document.getElementById("create-label-modal").open = true;
+    }
+
+    function selectAll() {
+      document.querySelectorAll(".object-row").forEach(row => {
+        row.classList.add("checked");
+        row.querySelector("temba-checkbox").setAttribute("checked", false);
+        row.querySelector("temba-checkbox").setAttribute("checked", true);
+      });
+      document.querySelector('.page-title').style.display = "none";
+      document.querySelector('.list-buttons-container').classList.add('visible');
+      document.querySelector(".button-action>.icon-checkbox-checked").parentElement.style.display = "none";
+    }
+
+    function showHideSelectAllButton() {
+      let rows = [...document.querySelectorAll(".object-row")];
+      var checked = rows.find(el => el.classList.contains("checked"));
+      var nonChecked = rows.find(el => !el.classList.contains("checked"));
+      if (checked && nonChecked) {
+        document.querySelector(".button-action>.icon-checkbox-checked").parentElement.style.display = "flex";
+      } else if (checked && !nonChecked) {
+        document.querySelector(".button-action>.icon-checkbox-checked").parentElement.style.display = "none";
+      }
     }
