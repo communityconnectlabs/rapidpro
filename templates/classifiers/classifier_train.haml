@@ -186,8 +186,7 @@
             if (response.status === 400) return Promise.reject(response.json());
             return Promise.reject(response.text());
           })
-          .then((response) => {
-            $(messagesDiv).html(formatMessages(response));
+          .then(() => {
             toggleLoadingStatus();
             getTaskProgress(true);
           })
@@ -223,7 +222,7 @@
       }
 
       function countListInObject(obj) {
-        return Object.values(obj).reduce((allCount, list) => list.length + allCount, 0);
+        return Object.values(obj || {}).reduce((allCount, list) => list.length + allCount, 0);
       }
 
       function hasLanguageErrors(response) {
