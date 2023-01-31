@@ -237,7 +237,7 @@ class ClassifierTrainingTask(models.Model):
 
     classifier = models.ForeignKey(Classifier, on_delete=models.CASCADE)
     training_doc = JSONField(default=list)
-    pickled_doc = models.TextField(default="")
+    pickled_doc = models.TextField(null=True)
     status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
     messages = JSONField(default=dict)
     languages = JSONField(default=list)
@@ -281,7 +281,7 @@ class ClassifierTrainingTask(models.Model):
 
     def trash_docs(self):
         self.training_doc = []
-        self.pickled_doc = ""
+        self.pickled_doc = None
 
     @classmethod
     def run_task(cls, instance_id):
@@ -307,7 +307,7 @@ class ClassifierTrainingTask(models.Model):
                 messages=training.messages,
             )
 
-            if training.pickled_doc == "":
+            if not training.pickled_doc:
                 client.build_intent_list()
                 intent_list = client.intents_requests
             else:
