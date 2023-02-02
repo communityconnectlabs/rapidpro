@@ -40,9 +40,8 @@ class TrainingClient:
             intent_header = lang_headers["intent"]
             question_header = lang_headers["training_phrase"]
             answer_header = lang_headers["answer"]
-            try:
-                intent_name = row.get(intent_header)
-            except KeyError:
+            intent_name = row.get(intent_header)
+            if not intent_name:
                 intent_name = row.get("intents")
 
             training_phrases = self.clean_training_phrases(row.get(question_header))
@@ -142,7 +141,6 @@ class TrainingClient:
             counter += 1  # count rows regardless of skipping
             training_key = lang_headers["training_phrase"]
             training_phrases = intent.get(training_key)
-            # training_phrases = self.clean_training_phrases(training_phrases)
 
             if not training_phrases or len(training_phrases) == 0:
                 error_msg = f"No training phrases found here, skipping row {counter}"

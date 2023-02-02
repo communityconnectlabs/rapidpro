@@ -34,10 +34,10 @@
     -blocktrans trimmed with sample_url=STATIC_URL|add:"examples/sample_training_data.csv" code=explicit_clear max=max_records|intcomma
       You can download <a href="{{ sample_url }}">this CSV template</a> as a sample
 
-  -if has_prev_task
-    #previous-status.pt-5(onclick="getPreviousReport(this)" )
-      %a
-        -trans "Click here to prevous task result"
+
+  #previous-status.pt-5.hidden(onclick="getPreviousReport(this)" )
+    %a
+      -trans "Click here to prevous task result"
 
   #messages
 
@@ -100,9 +100,13 @@
 
   :javascript
       function hasActiveTask() {
-        let hasUploadTask = '{{has_upload_task}}'
-
+        let hasUploadTask = '{{has_upload_task}}';
         return hasUploadTask === 'True';
+      }
+
+      function hasPreviousTask() {
+        let hasPrevTask = '{{has_prev_task}}';
+        return hasPrevTask === 'True';
       }
 
       function getFormElements() {
@@ -113,6 +117,7 @@
         const loaderDiv = form.querySelector('#loading-status');
         const uploadTaskDiv = form.querySelector('#active-upload-task');
         const downloadTemplateDiv = form.querySelector('#download-template');
+        const previousStatusDiv = form.querySelector('#previous-status');
 
         const confirmationDialog = form.querySelector('#training-confirmation');
         const confirmationFooter =  confirmationDialog.shadowRoot.querySelector('.dialog-footer');
@@ -125,6 +130,7 @@
           dialogFooter,
           uploadTaskDiv,
           currentSubmit,
+          previousStatusDiv,
           confirmationDialog,
           confirmationFooter,
           downloadTemplateDiv
@@ -176,9 +182,9 @@
 
         removeErrorMessages(form, '#import_file_errors, #languages_errors');
         removeMessage(messagesDiv)
-        event.target.disabled = true;
+        updateSubmitButton(dialogFooter, true);
         toggleLoadingStatus();
-        $(messagesDiv).text('This will take some time to complete, you can clone this window and check back later');
+        $(messagesDiv).text('This will take some time to complete, you can close this window and check back later');
 
         fetch(modalView.endpoint, options)
           .then((response) => {
@@ -186,8 +192,7 @@
             if (response.status === 400) return Promise.reject(response.json());
             return Promise.reject(response.text());
           })
-          .then((response) => {
-            $(messagesDiv).html(formatMessages(response));
+          .then(() => {
             toggleLoadingStatus();
             getTaskProgress(true);
           })
@@ -223,7 +228,7 @@
       }
 
       function countListInObject(obj) {
-        return Object.values(obj).reduce((allCount, list) => list.length + allCount, 0);
+        return Object.values(obj || {}).reduce((allCount, list) => list.length + allCount, 0);
       }
 
       function hasLanguageErrors(response) {
@@ -310,6 +315,11 @@
 
       function getPreviousReport() {
         const { modalView, messagesDiv } = getFormElements();
+        const content = $(messagesDiv).text();
+        if (content.indexOf('Training phrases') > -1) {
+          $(messagesDiv).html('');
+          return;
+        }
         getReport('previous', modalView.endpoint)
           .then((response) => {
             $(messagesDiv).html(formatTaskProgress(response || {}));
@@ -334,7 +344,7 @@
       }
       
       function setupModal() {
-        const { currentSubmit, dialogFooter, confirmationDialog, confirmationFooter } = getFormElements();
+        const { currentSubmit, dialogFooter, confirmationDialog, confirmationFooter, previousStatusDiv } = getFormElements();
 
         const confirmSubmitButton = confirmationDialog.shadowRoot.querySelector('temba-button[destructive]');
         const confirmationCancelButton = confirmationFooter.querySelector('temba-button[secondary]');
@@ -361,6 +371,10 @@
 
         updateSubmitButton(dialogFooter, hasActiveTask());
         getTaskProgress(hasActiveTask());
+
+        if (hasPreviousTask()) {
+          $(previousStatusDiv).removeClass('hidden');
+        }
       }
 
       $(document).ready(function () {
