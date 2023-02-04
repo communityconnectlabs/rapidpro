@@ -345,7 +345,7 @@ class ClassifierTrainingTask(models.Model):
                 dict(
                     total_created=training.messages.get("created", 0),
                     total_updated=training.messages.get("updated", 0),
-                    errors=list(training.messages.get('errors', [])),
+                    errors=list(training.messages.get("errors", [])),
                 ),
                 training.classifier.org.get_branding(),
             )
