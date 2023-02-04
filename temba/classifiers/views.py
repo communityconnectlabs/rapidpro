@@ -169,6 +169,7 @@ class ClassifierCRUDL(SmartCRUDL):
                 task = ClassifierTrainingTask.get_last_task(obj)
                 context["has_prev_task"] = task is not None
 
+            context["redirect_success"] = reverse("classifiers.classifier_read", args=[obj.uuid])
             return context
 
         @classmethod
@@ -195,6 +196,7 @@ class ClassifierCRUDL(SmartCRUDL):
                 ClassifierTrainingTask.create(
                     training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs)
                 )
+                messages.success(self.request, f"This will take sometime. We will e-mail you at {self.request.user.username} when it is complete.")
             else:
                 status = 400
                 if not file:

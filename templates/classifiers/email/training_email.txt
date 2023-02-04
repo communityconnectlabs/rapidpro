@@ -1,0 +1,11 @@
+{% load tz %}
+{% load i18n %}
+
+{% trans "Hi there!" %}
+{% trans "We have completed the classifier training." %}
+{% trans "You can find below the results." %}
+
+{{ results }}
+
+{% trans "Thanks," %}
+{% blocktrans with brand=branding.name %}The {{ brand }} Team {% endblocktrans %}

@@ -184,7 +184,8 @@
         removeMessage(messagesDiv)
         updateSubmitButton(dialogFooter, true);
         toggleLoadingStatus();
-        $(messagesDiv).text('This will take some time to complete, you can close this window and check back later');
+
+        let hasErrors = false;
 
         fetch(modalView.endpoint, options)
           .then((response) => {
@@ -204,9 +205,16 @@
                 if (err.file) addMessage(form, 'import_file_errors', err.file);
                 if (err.language_list) addMessage(form, 'languages_errors', err.language_list);
               });
+              hasErrors = true;
             }
           })
-          .finally(() => { confirmationDialog.open = false; });
+          .finally(() => {
+            confirmationDialog.open = false;
+            if (!hasErrors) {
+              modalView.open = false;
+              window.location = "{{ redirect_success }}";
+            }
+          });
       }
 
       function showConfirmation(event) {
@@ -335,12 +343,11 @@
             .then((response) => {
               if (['F', 'C', undefined].includes(response.status) || !modalView.open) {
                 $(messagesDiv).html('<div></div>');
-                console.log('clearing interval state');
                 clearInterval(interval);
               }
               $(messagesDiv).html(formatTaskProgress(response || {}));
             });
-        }, 50000); // every 50 secs
+        }, 30000); // every 30 secs
       }
       
       function setupModal() {
