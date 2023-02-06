@@ -11,6 +11,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import on_transaction_commit
+from temba.utils.email import send_template_email
 from temba.utils.models import JSONField
 from temba.utils.uuid import uuid4
 
@@ -336,5 +337,17 @@ class ClassifierTrainingTask(models.Model):
             reschedule_task = retry
             training.modified_on = timezone.now()
             training.save()
+
+            send_template_email(
+                training.classifier.created_by.username,
+                f"[{training.classifier.org.name}] Classifier training complete",
+                "classifiers/email/training_email",
+                dict(
+                    total_created=training.messages.get("created", 0),
+                    total_updated=training.messages.get("updated", 0),
+                    errors=list(training.messages.get("errors", [])),
+                ),
+                training.classifier.org.get_branding(),
+            )
 
         return reschedule_task
