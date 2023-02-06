@@ -11,6 +11,12 @@
   {{ block.super }}
   %script{src:"{{ STATIC_URL }}js/flow-parameters.js"}
 
+  %script{src:"{{ STATIC_URL }}js/msg-encodings.js"}
+  :javascript
+    fetch("{{ MEDIA_URL }}/flow_editor/gsm7-replacements.json").then((response) => response.json()).then((data) => {
+      GSM7_REPLACEMENTS = data;
+    });
+
   :javascript
 
     var modax = document.querySelector("#event-add, #event-update");
@@ -89,6 +95,9 @@
 
     var flowField = body.querySelector("#id_flow_to_start");
     setTimeout(() => {
+      if (!flowField.values[0]) {
+        return;
+      }
       var idFlowVal = flowField.values[0].value;
       {% if flow_parameters_fields and flow_parameters_values %}
           var flowParamsFields = "{{ flow_parameters_fields }}".split("|");
@@ -248,6 +257,8 @@
     -for field in form.languages
       .language{class:'{{field.language.iso_code}} {%if forloop.counter0 > 0%}hide{%endif%}'}
         -render_field field.language.iso_code
+        -with dialog_query="#event-add, #event-update" field_name=field.language.iso_code
+          -include "utils/forms/segments_counter.haml"
 
     #event-message-start-mode
       -render_field 'message_start_mode'

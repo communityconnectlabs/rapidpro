@@ -1,0 +1,35 @@
+:css
+  .segment-counter-container {
+    padding: 5px 0;
+    display: flex;
+    flex-direction: row-reverse;
+  }
+
+
+.segment-counter-container
+  .float-counter
+    .segments{id: "{{ field_name }}-segments"}
+      0 characters / 0 segment
+    .encoding{id: "{{ field_name }}-encoding"}
+      Encoding: GSM/7-bit
+
+
+:javascript
+  function initCounter() {
+    let containerQuery = "{{ dialog_query }}";
+    let field_name = "{{ field_name }}";
+    let container = document.querySelector(containerQuery);
+    let field = container.shadowRoot.querySelector(`[name="${field_name}"]`).shadowRoot.querySelector("temba-textinput");
+    let segments = container.shadowRoot.querySelector("#{{ field_name }}-segments");
+    let encoding = container.shadowRoot.querySelector("#{{ field_name }}-encoding");
+    field.addEventListener("change", () => {
+      let message = field.value;
+      let info = getMessageInfo(message);
+      segments.innerText = `${info.count} characters / ${info.segmentCount} segments`;
+      encoding.innerText = `Encoding: ${info.characterSet}`;
+    });
+    setTimeout(() => {
+      field.dispatchEvent(new Event("change"));
+    }, 300);
+  }
+  initCounter();
