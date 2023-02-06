@@ -231,7 +231,7 @@ class Notification(models.Model):
 
     @cached_property
     def export(self):
-        return self.contact_export or self.message_export or self.results_export
+        return self.contact_export or self.message_export or self.results_export or self.links_export
 
     @property
     def type(self):
