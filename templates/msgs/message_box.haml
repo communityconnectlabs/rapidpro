@@ -396,3 +396,23 @@
         button.onclick = selectAll;
       }
     }
+
+    // overload postLabelChanges to make selectAll to work correctly
+    function postLabelChanges(smsIds, labelId, addLabel, number, onError) {
+      fetchPJAXContent(window.lastFetch || '', '#pjax', {
+        postData: {
+          objects: smsIds,
+              label: labelId,
+              add: addLabel,
+              action: 'label',
+              pjax: 'true',
+              number: number,
+          },
+          onSuccess: function (data, textStatus) {
+              recheckIds();
+              wireTableListeners();
+              showHideSelectAllButton();
+          },
+          onError: onError,
+      });
+    }
