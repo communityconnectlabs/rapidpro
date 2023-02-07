@@ -132,7 +132,7 @@ class TrainingClient:
         if data and isinstance(data, str) and len(data) > 0:
             data_list = data.rstrip("]").lstrip("[").split(",")
             return [element.strip().strip("'") for element in data_list]
-        logger.error(f"can not use training data provided ({data})")
+        logger.info(f"can not use training data provided ({data})")
         return None
 
     def extract_intents_from_csv(self, csv_data: list, lang_headers: dict, intent_dict: dict, language_code: str):

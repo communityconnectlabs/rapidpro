@@ -194,7 +194,7 @@ class ClassifierCRUDL(SmartCRUDL):
                 raw_data = file.read().decode("utf-8").splitlines()
                 obj = self.get_object()
                 ClassifierTrainingTask.create(
-                    training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs)
+                    training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs), user=self.request.user
                 )
                 messages.success(
                     self.request,

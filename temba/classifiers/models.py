@@ -221,7 +221,7 @@ class Intent(models.Model):
         unique_together = (("classifier", "external_id"),)
 
 
-class ClassifierTrainingTask(models.Model):
+class ClassifierTrainingTask(SmartModel):
     PENDING = "P"
     IN_PROGRESS = "I"
     RETRY = "R"
@@ -245,15 +245,11 @@ class ClassifierTrainingTask(models.Model):
     start_index = models.IntegerField(default=0)
     total_intents = models.PositiveSmallIntegerField(default=0)
 
-    # when this flow start was created
-    created_on = models.DateTimeField(default=timezone.now, editable=False)
-
-    # when this flow start was last modified
-    modified_on = models.DateTimeField(default=timezone.now, editable=False)
-
     @classmethod
-    def create(cls, classifier, training_doc, languages):
-        created_obj = cls.objects.create(training_doc=training_doc, classifier=classifier, languages=languages)
+    def create(cls, classifier, training_doc, languages, user):
+        created_obj = cls.objects.create(
+            training_doc=training_doc, classifier=classifier, languages=languages, created_by=user, modified_by=user
+        )
         created_obj.start_training()
         return created_obj
 
@@ -339,7 +335,7 @@ class ClassifierTrainingTask(models.Model):
             training.save()
 
             send_template_email(
-                training.classifier.created_by.username,
+                training.created_by.username,
                 f"[{training.classifier.org.name}] Classifier training complete",
                 "classifiers/email/training_email",
                 dict(
