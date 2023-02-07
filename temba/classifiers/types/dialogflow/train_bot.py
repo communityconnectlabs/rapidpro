@@ -8,6 +8,8 @@ from google.cloud import dialogflow_v2
 from google.api_core import exceptions
 from google.cloud.dialogflow_v2.services.intents import pagers
 
+from temba.utils.languages import alpha2_to_alpha3
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,10 +105,11 @@ class TrainingClient:
 
     @classmethod
     def get_language_headers(cls, language):
-        substitutes = {"en": "eng", "es": "spa", "zh-cn": "chi"}
-        substitute = substitutes.get(language, language)
-        training_phrase = f"question{substitute}"
-        answer = f"answer{substitute}"
+        language_code = str(alpha2_to_alpha3(language))
+        if language_code == "zho":  # Chinese traditional ISO code-3 is replaced by CHI
+            language_code = "chi"
+        training_phrase = f"question{language_code}"
+        answer = f"answer{language_code}"
 
         return dict(training_phrase=training_phrase, answer=answer, intent="intent")
 
