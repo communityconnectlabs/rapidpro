@@ -8,6 +8,8 @@ from google.cloud import dialogflow_v2
 from google.api_core import exceptions
 from google.cloud.dialogflow_v2.services.intents import pagers
 
+from temba.utils.languages import alpha2_to_alpha3
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,10 +105,11 @@ class TrainingClient:
 
     @classmethod
     def get_language_headers(cls, language):
-        substitutes = {"en": "eng", "es": "spa", "zh-cn": "chi"}
-        substitute = substitutes.get(language, language)
-        training_phrase = f"question{substitute}"
-        answer = f"answer{substitute}"
+        language_code = str(alpha2_to_alpha3(language))
+        if language_code == "zho":  # Chinese traditional ISO code-3 is replaced by CHI
+            language_code = "chi"
+        training_phrase = f"question{language_code}"
+        answer = f"answer{language_code}"
 
         return dict(training_phrase=training_phrase, answer=answer, intent="intent")
 
@@ -132,7 +135,7 @@ class TrainingClient:
         if data and isinstance(data, str) and len(data) > 0:
             data_list = data.rstrip("]").lstrip("[").split(",")
             return [element.strip().strip("'") for element in data_list]
-        logger.error(f"can not use training data provided ({data})")
+        logger.info(f"can not use training data provided ({data})")
         return None
 
     def extract_intents_from_csv(self, csv_data: list, lang_headers: dict, intent_dict: dict, language_code: str):
