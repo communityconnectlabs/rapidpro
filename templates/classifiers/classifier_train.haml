@@ -19,6 +19,9 @@
         .button-light.ml-4(style="margin-top:-1px")
           -trans "Choose File"
 
+  #ignore-errors
+    -render_field 'ignore_errors'
+
     %div#import_file_errors
       {{ form.file.errors }}
 
