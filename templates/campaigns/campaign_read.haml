@@ -182,6 +182,12 @@
 -block extra-script
   {{ block.super }}
 
+  %script{src:"{{ STATIC_URL }}js/msg-encodings.js"}
+  :javascript
+    fetch("{{ MEDIA_URL }}/flow_editor/gsm7-replacements.json").then((response) => response.json()).then((data) => {
+      GSM7_REPLACEMENTS = data;
+    });
+
   :javascript
 
     $(".campaign-event").on('click', function() {
