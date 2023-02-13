@@ -146,10 +146,11 @@ class TrainingClient:
             training_phrases = intent.get(training_key)
 
             if not training_phrases or len(training_phrases) == 0:
-                error_msg = f"No training phrases found here, skipping row {counter}"
+                error_msg = f"No training phrases found, skipping row {counter}"
                 logger.warning(error_msg)
                 self.messages["errors"].append(error_msg)
                 continue
+
             training_phrases = self.get_training_phases_from_text_list(training_phrases)
             answer_header = lang_headers["answer"]
             message = self.intent_message(intent[answer_header])

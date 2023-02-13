@@ -334,16 +334,17 @@ class ClassifierTrainingTask(SmartModel):
             training.modified_on = timezone.now()
             training.save()
 
-            send_template_email(
-                training.created_by.username,
-                f"[{training.classifier.org.name}] Classifier training complete",
-                "classifiers/email/training_email",
-                dict(
-                    total_created=training.messages.get("created", 0),
-                    total_updated=training.messages.get("updated", 0),
-                    errors=list(training.messages.get("errors", [])),
-                ),
-                training.classifier.org.get_branding(),
-            )
+            if training.status in [cls.COMPLETED, cls.FAILED]:
+                send_template_email(
+                    training.created_by.username,
+                    f"[{training.classifier.org.name}] Classifier training complete",
+                    "classifiers/email/training_email",
+                    dict(
+                        total_created=training.messages.get("created", 0),
+                        total_updated=training.messages.get("updated", 0),
+                        errors=list(training.messages.get("errors", [])),
+                    ),
+                    training.classifier.org.get_branding(),
+                )
 
         return reschedule_task

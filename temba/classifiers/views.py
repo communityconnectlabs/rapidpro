@@ -1,3 +1,5 @@
+import csv
+
 from django.core.validators import FileExtensionValidator
 from django import forms
 from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTemplateView, SmartUpdateView
@@ -10,7 +12,7 @@ from django.utils.translation import ugettext_lazy as _
 from temba.orgs.views import DependencyDeleteModal, OrgObjPermsMixin, OrgPermsMixin
 from temba.utils.views import ComponentFormMixin
 from temba.utils import languages
-from temba.utils.fields import SelectMultipleWidget
+from temba.utils.fields import SelectMultipleWidget, CheckboxWidget
 from temba.utils.languages import alpha3_to_alpha2
 
 from .models import Classifier, ClassifierTrainingTask
@@ -126,6 +128,12 @@ class ClassifierCRUDL(SmartCRUDL):
                 required=True,
                 widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Languages"}),
             )
+            ignore_errors = forms.BooleanField(
+                widget=CheckboxWidget(attrs={"widget_only": True}),
+                required=False,
+                label=_("Check this box if you want to ignore errors on the file"),
+                help_text=None,
+            )
 
         form_class = Form
 
@@ -184,14 +192,44 @@ class ClassifierCRUDL(SmartCRUDL):
 
             return converted
 
+        @classmethod
+        def check_file(cls, file, langs):
+            csvreader = csv.DictReader(file)
+            error_lines = []
+            lang_fields = []
+
+            for lang in langs:
+                lang_fields.append(f"Question{str(lang).upper()}")
+                lang_fields.append(f"Answer{str(lang).upper()}")
+
+            for idx, row in enumerate(csvreader, start=1):
+                invalid_dict = {k: v for k, v in row.items() if k in lang_fields and (v == "" or v == "#N/A")}
+                if invalid_dict:
+                    error_lines.append(str(idx + 1))  # excluding the file header
+
+            return error_lines
+
         def post(self, *args, **kwargs):
             message = {}
             status = 200
 
             file = self.request.FILES.get("file")
             langs = self.request.POST.getlist("language_list")
+            ignore_errors = self.request.POST.get("ignore_errors")
+
             if file and langs:
                 raw_data = file.read().decode("utf-8").splitlines()
+
+                if not ignore_errors:
+                    errors = self.check_file(raw_data, langs)
+                    if errors:
+                        status = 400
+                        message["file"] = (
+                            f"Please, check your file on the lines {', '.join(errors)}, "
+                            f"they seems to be empty or invalid."
+                        )
+                        return JsonResponse(message, status=status)
+
                 obj = self.get_object()
                 ClassifierTrainingTask.create(
                     training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs), user=self.request.user
