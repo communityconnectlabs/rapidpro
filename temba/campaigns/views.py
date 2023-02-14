@@ -1,3 +1,5 @@
+import json
+
 from django.db.models import Sum
 from django.utils import timezone
 from smartmin.views import SmartCreateView, SmartCRUDL, SmartDeleteView, SmartListView, SmartReadView, SmartUpdateView
@@ -14,6 +16,7 @@ from temba.flows.models import Flow
 from temba.msgs.models import Msg
 from temba.orgs.views import ModalMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
 from temba.utils import languages, build_flow_parameters, flow_params_context
+from temba.utils.gsm7 import GSM_REPLACEMENTS
 from temba.utils.fields import CompletionTextarea, InputWidget, SelectWidget, TembaChoiceField
 from temba.utils.views import BulkActionMixin
 
@@ -160,6 +163,11 @@ class CampaignCRUDL(SmartCRUDL):
                 )
 
             return links
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["gsm_replacements"] = json.dumps(GSM_REPLACEMENTS)
+            return context
 
     class Create(OrgPermsMixin, ModalMixin, SmartCreateView):
         fields = ("name", "group")
@@ -584,6 +592,7 @@ class CampaignEventCRUDL(SmartCRUDL):
             scheduled = scheduled_event_fires[:25]
             context["scheduled_event_fires"] = scheduled
             context["scheduled_event_fires_count"] = scheduled_event_fires.count() - len(scheduled)
+            context["gsm_replacements"] = json.dumps(GSM_REPLACEMENTS)
 
             return context
 
