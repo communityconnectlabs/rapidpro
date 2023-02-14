@@ -1457,10 +1457,6 @@ WIDGET_THEMES = {
     }
 }
 
-# Recaptcha configuration
-RECAPTCHA_SITE_KEY = ""
-RECAPTCHA_SECRET_KEY = ""
-
 # Authy configuration
 TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", False)
 AUTHY_API_KEY = os.environ.get("AUTHY_API_KEY", "")
