@@ -225,6 +225,7 @@
           .then((response) => {
             if (response.check_result) {
               enableReplaceCharsButtons(dialogFooter);
+              $(messagesDiv).html(response.check_result);
               toggleLoadingStatus();
             } else {
               enableNormalButtons(dialogFooter);

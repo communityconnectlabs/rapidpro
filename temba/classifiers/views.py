@@ -6,6 +6,7 @@ from functools import reduce
 
 from django.core.validators import FileExtensionValidator
 from django import forms
+from django.template.loader import render_to_string
 from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTemplateView, SmartUpdateView
 
 from django.contrib import messages
@@ -245,7 +246,9 @@ class ClassifierCRUDL(SmartCRUDL):
                             elif submit_type == "R":
                                 df.loc[index, [column]] = replace_accented_chars(item)["updated"]
                 if submit_type == "C" and any(replaced | removed):
-                    message["check_result"] = f"Replaced: {replaced} Removed: {removed}"
+                    message["check_result"] = render_to_string(
+                        "classifiers/replacements_message.haml", {"accent_chars": ", ".join(replaced | removed)}
+                    )
                     return JsonResponse(message, status=202)
                 file = io.StringIO()
                 df.to_csv(file, index=False)
