@@ -1,4 +1,8 @@
+import io
 import csv
+import pandas as pd
+
+from functools import reduce
 
 from django.core.validators import FileExtensionValidator
 from django import forms
@@ -14,6 +18,7 @@ from temba.utils.views import ComponentFormMixin
 from temba.utils import languages
 from temba.utils.fields import SelectMultipleWidget, CheckboxWidget
 from temba.utils.languages import alpha3_to_alpha2
+from temba.utils.gsm7 import is_gsm7, calculate_num_segments, replace_accented_chars
 
 from .models import Classifier, ClassifierTrainingTask
 
@@ -216,9 +221,43 @@ class ClassifierCRUDL(SmartCRUDL):
             file = self.request.FILES.get("file")
             langs = self.request.POST.getlist("language_list")
             ignore_errors = self.request.POST.get("ignore_errors")
+            submit_type = self.request.POST.get("submit_type", "S")  # S - normal submit, R - replace, C - check accent
+
+            def get_lang_headers(x):
+                headers_data = ClassifierTrainingTask.get_language_headers(x)
+                return [headers_data["training_phrase"], headers_data["answer"]]
+
+            def is_replacement_required(x):
+                return not is_gsm7(x) and calculate_num_segments(x) > 1
+
+            if submit_type != "S":
+                df = pd.read_csv(file)
+                df.columns = df.columns.str.lower()
+                headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)))
+                replaced, removed = set(), set()
+                for (column, items) in df[headers].items():
+                    for index, item in enumerate(items):
+                        if is_replacement_required(item):
+                            if submit_type == "C":
+                                replaced_data = replace_accented_chars(item)
+                                replaced = replaced.union(replaced_data["replaced"])
+                                removed = removed.union(replaced_data["removed"])
+                            elif submit_type == "R":
+                                df.loc[index, [column]] = replace_accented_chars(item)["updated"]
+                if submit_type == "C" and any(replaced | removed):
+                    message["check_result"] = f"Replaced: {replaced} Removed: {removed}"
+                    return JsonResponse(message, status=202)
+                file = io.StringIO()
+                df.to_csv(file, index=False)
+                file.seek(0)
+            elif file:
+                file_buf = io.StringIO()
+                file_buf.write(file.read().decode("utf-8"))
+                file = file_buf
+                file.seek(0)
 
             if file and langs:
-                raw_data = file.read().decode("utf-8").splitlines()
+                raw_data = file.read().splitlines()
 
                 if not ignore_errors:
                     errors = self.check_file(raw_data, langs)
