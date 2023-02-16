@@ -96,9 +96,6 @@
       z-index: 2;
     }
 
-
-
-
 -block extra-script
   {{ block.super }}
   <script id="ccl-script" src="{{ STATIC_URL }}js/ccl-utils.js"></script>
@@ -158,20 +155,6 @@
       function updateSubmitButton(dialogFooter, disabled = false) {
         const button = dialogFooter.querySelector('temba-button');
         $(button).attr('disabled', disabled);
-
-      function enableSubmitButton(dialogFooter) {
-        dialogFooter.querySelectorAll('temba-button').forEach((btn) => btn.removeAttribute("disabled"));
-      }
-
-      function enableNormalButtons(dialogFooter) {
-        const { form } = getFormElements();
-        const submitType = form.querySelector("#submit-type");
-        submitType.value = "C";
-        dialogFooter.querySelectorAll('temba-button:not([secondary])').forEach((btn) => {
-            dialogFooter.removeChild(btn);
-        });
-        dialogFooter.prepend(createButton({ name: 'Train Bot', onclick: submitForm, primary: true }));
-        dialogFooter.querySelector("temba-button[secondary]").removeAttribute("disabled");
       }
 
       function enableReplaceCharsButtons(dialogFooter) {
@@ -227,13 +210,11 @@
               enableReplaceCharsButtons(dialogFooter);
               $(messagesDiv).html(response.check_result);
               toggleLoadingStatus();
+              hasErrors = true;
             } else {
-              enableNormalButtons(dialogFooter);
-              $(messagesDiv).html(showMessages(response));
               toggleLoadingStatus();
+              getTaskProgress(true);
             }
-            toggleLoadingStatus();
-            getTaskProgress(true);
           })
           .catch((error) => {
             updateSubmitButton(dialogFooter);
@@ -439,3 +420,4 @@
       $(document).ready(function () {
         setTimeout(setupModal, 200);
       });
+

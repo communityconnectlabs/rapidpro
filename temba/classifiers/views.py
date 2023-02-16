@@ -225,7 +225,9 @@ class ClassifierCRUDL(SmartCRUDL):
             submit_type = self.request.POST.get("submit_type", "S")  # S - normal submit, R - replace, C - check accent
 
             def get_lang_headers(x):
-                headers_data = ClassifierTrainingTask.get_language_headers(x)
+                from temba.classifiers.types.dialogflow.train_bot import TrainingClient
+
+                headers_data = TrainingClient.get_language_headers(x)
                 return [headers_data["training_phrase"], headers_data["answer"]]
 
             def is_replacement_required(x):
