@@ -44,6 +44,8 @@
 
   #messages
 
+  %input#submit-type(type="hidden" name="submit_type" value="C")
+
   %temba-dialog#training-confirmation(header='{{ _("Confirm Action")|escapejs }}' primaryButtonName='{{ _("Train Chatbot")|escapejs }}' destructive='true')
     .p-6
       -blocktrans trimmed
@@ -94,9 +96,6 @@
       z-index: 2;
     }
 
-
-
-
 -block extra-script
   {{ block.super }}
   <script id="ccl-script" src="{{ STATIC_URL }}js/ccl-utils.js"></script>
@@ -115,7 +114,7 @@
       function getFormElements() {
         const { modaxBody, dialogFooter, modalView } = getModalResources('bot-training');
         const form = modaxBody.querySelector('form');
-        const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
+        const currentSubmit = dialogFooter.querySelector('temba-button:not([secondary])');
         const messagesDiv = form.querySelector('#messages');
         const loaderDiv = form.querySelector('#loading-status');
         const uploadTaskDiv = form.querySelector('#active-upload-task');
@@ -158,6 +157,15 @@
         $(button).attr('disabled', disabled);
       }
 
+      function enableReplaceCharsButtons(dialogFooter) {
+        dialogFooter.querySelectorAll('temba-button:not([secondary])').forEach((btn) => {
+            dialogFooter.removeChild(btn);
+        });
+        dialogFooter.prepend(createButton({ name: 'Replace', onclick: submitFormReplace, primary: true }));
+        dialogFooter.prepend(createButton({ name: 'Train Bot', onclick: submitFormNormal, primary: true }));
+        dialogFooter.querySelector("temba-button[secondary]").removeAttribute("disabled");
+      }
+
       function toggleLoadingStatus() {
         const { loaderDiv } = getFormElements();
         if ($(loaderDiv).hasClass('hidden')) $(loaderDiv).removeClass('hidden');
@@ -185,8 +193,9 @@
 
         removeErrorMessages(form, '#import_file_errors, #languages_errors');
         removeMessage(messagesDiv)
-        updateSubmitButton(dialogFooter, true);
         toggleLoadingStatus();
+        dialogFooter.querySelectorAll('temba-button:not([socondary])').forEach((btn) => btn.setAttribute("disabled", true));
+        $(messagesDiv).text('This will take some time to complete, you will see a summary report when its done.');
 
         let hasErrors = false;
 
@@ -196,9 +205,16 @@
             if (response.status === 400) return Promise.reject(response.json());
             return Promise.reject(response.text());
           })
-          .then(() => {
-            toggleLoadingStatus();
-            getTaskProgress(true);
+          .then((response) => {
+            if (response.check_result) {
+              enableReplaceCharsButtons(dialogFooter);
+              $(messagesDiv).html(response.check_result);
+              toggleLoadingStatus();
+              hasErrors = true;
+            } else {
+              toggleLoadingStatus();
+              getTaskProgress(true);
+            }
           })
           .catch((error) => {
             updateSubmitButton(dialogFooter);
@@ -218,6 +234,20 @@
               window.location = "{{ redirect_success }}";
             }
           });
+      }
+
+      function submitFormNormal(event) {
+        const { form } = getFormElements();
+        const submitType = form.querySelector("#submit-type");
+        submitType.value = "S";
+        submitForm(event);
+      }
+
+      function submitFormReplace(event) {
+        const { form } = getFormElements();
+        const submitType = form.querySelector("#submit-type");
+        submitType.value = "R";
+        submitForm(event);
       }
 
       function showConfirmation(event) {
@@ -352,7 +382,7 @@
             });
         }, 30000); // every 30 secs
       }
-      
+
       function setupModal() {
         const { currentSubmit, dialogFooter, confirmationDialog, confirmationFooter, previousStatusDiv } = getFormElements();
 
