@@ -1,7 +1,6 @@
-from collections import OrderedDict
-
+import json
 import pycountry
-
+from collections import OrderedDict
 from django.conf import settings
 
 # tweak standard ISO-639-3 names to steer users toward using languages with ISO-639-1 equivalents if possible
@@ -26,6 +25,11 @@ NAME_OVERRIDES = {
 NAMES = {}
 
 
+def load_639_2_language_codes():
+    with open("%s/flow_editor/language_codes.json" % settings.MEDIA_ROOT, "r+") as file:
+        return json.loads(file.read())
+
+
 def reload():
     """
     Reloads languages
@@ -37,6 +41,10 @@ def reload():
         is_iso6391 = getattr(lang, "alpha_2", None)
         if is_iso6391 or lang.alpha_3 in settings.NON_ISO6391_LANGUAGES:
             NAMES[lang.alpha_3] = NAME_OVERRIDES.get(lang.alpha_3, lang.name)
+
+    for alpha3, name in load_639_2_language_codes().items():
+        if alpha3 not in NAMES:
+            NAMES[alpha3] = name
 
     # sort by name
     NAMES = OrderedDict(sorted(NAMES.items(), key=lambda n: n[1]))
