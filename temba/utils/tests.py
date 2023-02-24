@@ -1257,8 +1257,16 @@ class LanguagesTest(TembaTest):
         # check that search returns results and in the proper order
         self.assertEqual(
             [
+                {"value": "afh", "name": "Afrihili"},
                 {"value": "afr", "name": "Afrikaans"},
+                {"value": "afa", "name": "Afro-Asiatic languages"},
+                {"value": "cpf", "name": "Creoles and pidgins, French-based"},
+                {"value": "frs", "name": "Eastern Frisian"},
                 {"value": "fra", "name": "French"},
+                {"value": "frm", "name": "French, Middle (ca.1400-1600)"},
+                {"value": "fro", "name": "French, Old (842-ca.1400)"},
+                {"value": "fur", "name": "Friulian"},
+                {"value": "frr", "name": "Northern Frisian"},
                 {"value": "fry", "name": "Western Frisian"},
             ],
             languages.search_by_name("Fr"),
@@ -1271,9 +1279,17 @@ class LanguagesTest(TembaTest):
             # order is based on name rather than code
             self.assertEqual(
                 [
+                    {"value": "afh", "name": "Afrihili"},
                     {"value": "afr", "name": "Afrikaans"},
+                    {"value": "afa", "name": "Afro-Asiatic languages"},
                     {"value": "frc", "name": "Cajun French"},
+                    {"value": "cpf", "name": "Creoles and pidgins, French-based"},
+                    {"value": "frs", "name": "Eastern Frisian"},
                     {"value": "fra", "name": "French"},
+                    {"value": "frm", "name": "French, Middle (ca.1400-1600)"},
+                    {"value": "fro", "name": "French, Old (842-ca.1400)"},
+                    {"value": "fur", "name": "Friulian"},
+                    {"value": "frr", "name": "Northern Frisian"},
                     {"value": "fry", "name": "Western Frisian"},
                 ],
                 languages.search_by_name("Fr"),
@@ -1285,6 +1301,7 @@ class LanguagesTest(TembaTest):
                     {"value": "ara", "name": "Arabic"},
                     {"value": "afb", "name": "Arabic (Gulf, ISO-639-3)"},
                     {"value": "acx", "name": "Arabic (Omani, ISO-639-3)"},
+                    {"value": "jrb", "name": "Judeo-Arabic"},
                 ],
                 languages.search_by_name("Arabic"),
             )
