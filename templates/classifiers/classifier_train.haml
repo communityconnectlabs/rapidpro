@@ -19,6 +19,9 @@
         .button-light.ml-4(style="margin-top:-1px")
           -trans "Choose File"
 
+  #ignore-errors
+    -render_field 'ignore_errors'
+
     %div#import_file_errors
       {{ form.file.errors }}
 
@@ -26,7 +29,27 @@
     %span.visually-hidden
       -trans "Loading..."
 
+  #active-upload-task.hidden
+    -blocktrans trimmed
+      You have one active upload task, kindly wait for it to complete to continue
+
+  #download-template
+    -blocktrans trimmed with sample_url=STATIC_URL|add:"examples/sample_training_data.csv" code=explicit_clear max=max_records|intcomma
+      You can download <a href="{{ sample_url }}">this CSV template</a> as a sample
+
+
+  #previous-status.pt-5.hidden(onclick="getPreviousReport(this)" )
+    %a
+      -trans "Click here to prevous task result"
+
   #messages
+
+  %temba-dialog#training-confirmation(header='{{ _("Confirm Action")|escapejs }}' primaryButtonName='{{ _("Train Chatbot")|escapejs }}' destructive='true')
+    .p-6
+      -blocktrans trimmed
+        WARNING: Running this training data update will overwrite existing training data and answers
+        for all existing content and intents. Are you sure you want to do this?
+
 
 -block extra-style
   {{block.super}}
@@ -79,12 +102,28 @@
   <script id="ccl-script" src="{{ STATIC_URL }}js/ccl-utils.js"></script>
 
   :javascript
+      function hasActiveTask() {
+        let hasUploadTask = '{{has_upload_task}}';
+        return hasUploadTask === 'True';
+      }
+
+      function hasPreviousTask() {
+        let hasPrevTask = '{{has_prev_task}}';
+        return hasPrevTask === 'True';
+      }
+
       function getFormElements() {
         const { modaxBody, dialogFooter, modalView } = getModalResources('bot-training');
         const form = modaxBody.querySelector('form');
         const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
         const messagesDiv = form.querySelector('#messages');
         const loaderDiv = form.querySelector('#loading-status');
+        const uploadTaskDiv = form.querySelector('#active-upload-task');
+        const downloadTemplateDiv = form.querySelector('#download-template');
+        const previousStatusDiv = form.querySelector('#previous-status');
+
+        const confirmationDialog = form.querySelector('#training-confirmation');
+        const confirmationFooter =  confirmationDialog.shadowRoot.querySelector('.dialog-footer');
         return {
           form,
           loaderDiv,
@@ -92,7 +131,12 @@
           modalView,
           messagesDiv,
           dialogFooter,
-          currentSubmit
+          uploadTaskDiv,
+          currentSubmit,
+          previousStatusDiv,
+          confirmationDialog,
+          confirmationFooter,
+          downloadTemplateDiv
         }
       }
 
@@ -109,9 +153,9 @@
         $(realField).val(file);
       }
 
-      function enableSubmitButton(dialogFooter) {
+      function updateSubmitButton(dialogFooter, disabled = false) {
         const button = dialogFooter.querySelector('temba-button');
-        $(button).attr('disabled', false);
+        $(button).attr('disabled', disabled);
       }
 
       function toggleLoadingStatus() {
@@ -135,15 +179,16 @@
 
       function submitForm(event) {
         event.preventDefault();
-        const { form, modalView, loaderDiv, messagesDiv, dialogFooter } = getFormElements();
+        const { form, modalView, loaderDiv, messagesDiv, dialogFooter, confirmationDialog } = getFormElements();
         const formData = new FormData(form);
         const options = { ...getHTTPOptions(), method: 'POST', body: formData };
 
         removeErrorMessages(form, '#import_file_errors, #languages_errors');
         removeMessage(messagesDiv)
-        event.target.disabled = true;
+        updateSubmitButton(dialogFooter, true);
         toggleLoadingStatus();
-        $(messagesDiv).text('This will take some time to complete, you will see a summary report when its done.');
+
+        let hasErrors = false;
 
         fetch(modalView.endpoint, options)
           .then((response) => {
@@ -151,30 +196,34 @@
             if (response.status === 400) return Promise.reject(response.json());
             return Promise.reject(response.text());
           })
-          .then((response) => {
-            enableSubmitButton(dialogFooter);
-            $(messagesDiv).html(showMessages(response));
+          .then(() => {
             toggleLoadingStatus();
+            getTaskProgress(true);
           })
           .catch((error) => {
-            enableSubmitButton(dialogFooter);
+            updateSubmitButton(dialogFooter);
             toggleLoadingStatus(loaderDiv);
-            error.then((err) => {
-              if (err.file) addMessage(form, 'import_file_errors', err.file);
-              if (err.language_list) addMessage(form, 'languages_errors', err.language_list);
-            });
+            if (error && error.then) {
+              error.then((err) => {
+                if (err.file) addMessage(form, 'import_file_errors', err.file);
+                if (err.language_list) addMessage(form, 'languages_errors', err.language_list);
+              });
+              hasErrors = true;
+            }
+          })
+          .finally(() => {
+            confirmationDialog.open = false;
+            if (!hasErrors) {
+              modalView.open = false;
+              window.location = "{{ redirect_success }}";
+            }
           });
       }
 
-      function setupModal() {
-        const { currentSubmit, dialogFooter } = getFormElements();
-        const submitButton = createButton({ name: 'Train Bot', onclick: submitForm, primary: true });
-        try {
-          if (currentSubmit) {
-            dialogFooter.removeChild(currentSubmit);
-            dialogFooter.prepend(submitButton);
-          }
-        } catch (e) {}
+      function showConfirmation(event) {
+        const { confirmationDialog } = getFormElements();
+        event.preventDefault();
+        confirmationDialog.open = true;
       }
 
       function renderError(error) {
@@ -190,7 +239,7 @@
       }
 
       function countListInObject(obj) {
-        return Object.values(obj).reduce((allCount, list) => list.length + allCount, 0);
+        return Object.values(obj || {}).reduce((allCount, list) => list.length + allCount, 0);
       }
 
       function hasLanguageErrors(response) {
@@ -199,7 +248,7 @@
         return updateErrors > 0 || createErrors > 0;
       }
 
-      function showMessages(response = {}) {
+      function formatMessages(response = {}) {
         const messages = {
           ...{ created: {}, updated: {}, create_errors: {}, update_errors: {}, errors: []},
           ...response
@@ -234,6 +283,111 @@
         return `<div id="training-messages">${html.join('')}</div>`;
       }
 
+      function toggleTaskItems(activeTask) {
+        const { downloadTemplateDiv, uploadTaskDiv } = getFormElements();
+        if (activeTask) {
+          $(uploadTaskDiv).removeClass('hidden');
+          $(downloadTemplateDiv).addClass('hidden');
+        } else {
+          $(uploadTaskDiv).addClass('hidden');
+          $(downloadTemplateDiv).removeClass('hidden');
+        }
+      }
+
+      function formatTaskProgress(response) {
+        const { status, pushed, total, messages } = response;
+        let html = ['<div>Task not started yet</div>']
+        const statusMap = {
+          R: 'Retrying after 2 minutes',
+          I: 'In Progress',
+          C: 'Completed',
+          F: 'Failed',
+          P: 'Pending'
+        }
+        if (['R', 'I', 'C'].includes(status)) {
+          const percentPushed = (pushed / total) * 100;
+          html = [
+            `<div>Total push items to push = ${total}</div>`,
+            `<div>Total push items pushed = ${pushed} (${Math.round(percentPushed)}%)</div>`,
+            `<div>Task status = ${statusMap[response.status]}</div>`
+          ];
+        }
+        if (messages && status === 'C') html.push(formatMessages(messages));
+        if (status === 'P') html = ['<div>Task not started yet</div>'];
+
+        return html.join('');
+      }
+
+      function getReport(reportType, endpoint) {
+        const options = { ...getHTTPOptions(), method: 'GET' };
+        return fetch(`${endpoint}?report-type=${reportType}`, options)
+            .then((response) => response.json());
+      }
+
+      function getPreviousReport() {
+        const { modalView, messagesDiv } = getFormElements();
+        const content = $(messagesDiv).text();
+        if (content.indexOf('Training phrases') > -1) {
+          $(messagesDiv).html('');
+          return;
+        }
+        getReport('previous', modalView.endpoint)
+          .then((response) => {
+            $(messagesDiv).html(formatTaskProgress(response || {}));
+          });
+      }
+
+      function getTaskProgress(activeTask) {
+        toggleTaskItems(activeTask);
+        if (!activeTask) return;
+        const { modalView, messagesDiv } = getFormElements();
+        const interval = setInterval(() => {
+          getReport('progress', modalView.endpoint)
+            .then((response) => {
+              if (['F', 'C', undefined].includes(response.status) || !modalView.open) {
+                $(messagesDiv).html('<div></div>');
+                clearInterval(interval);
+              }
+              $(messagesDiv).html(formatTaskProgress(response || {}));
+            });
+        }, 30000); // every 30 secs
+      }
+      
+      function setupModal() {
+        const { currentSubmit, dialogFooter, confirmationDialog, confirmationFooter, previousStatusDiv } = getFormElements();
+
+        const confirmSubmitButton = confirmationDialog.shadowRoot.querySelector('temba-button[destructive]');
+        const confirmationCancelButton = confirmationFooter.querySelector('temba-button[secondary]');
+
+        confirmSubmitButton.onclick = submitForm;
+        confirmationFooter.removeChild(confirmationCancelButton);
+
+        const cancelButton = createButton({
+          secondary: true,
+          onclick: () => { confirmationDialog.open = false },
+          name: 'No'
+        });
+
+        confirmationFooter.appendChild(cancelButton);
+
+        const submitButton = createButton({ name: 'Train Bot', onclick: showConfirmation, primary: true });
+
+        try {
+          if (currentSubmit) {
+            dialogFooter.removeChild(currentSubmit);
+            dialogFooter.prepend(submitButton);
+          }
+        } catch (e) {}
+
+        updateSubmitButton(dialogFooter, hasActiveTask());
+        getTaskProgress(hasActiveTask());
+
+        if (hasPreviousTask()) {
+          $(previousStatusDiv).removeClass('hidden');
+        }
+      }
+
       $(document).ready(function () {
         setTimeout(setupModal, 200);
       });
+

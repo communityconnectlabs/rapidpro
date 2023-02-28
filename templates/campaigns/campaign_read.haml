@@ -182,6 +182,11 @@
 -block extra-script
   {{ block.super }}
 
+  %script{src:"{{ STATIC_URL }}js/msg-encodings.js"}
+  -if gsm_replacements
+    :javascript
+      GSM7_REPLACEMENTS = JSON.parse('{{ gsm_replacements | escapejs }}');
+
   :javascript
 
     $(".campaign-event").on('click', function() {

@@ -1,3 +1,5 @@
+import csv
+
 from django.core.validators import FileExtensionValidator
 from django import forms
 from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTemplateView, SmartUpdateView
@@ -10,10 +12,10 @@ from django.utils.translation import ugettext_lazy as _
 from temba.orgs.views import DependencyDeleteModal, OrgObjPermsMixin, OrgPermsMixin
 from temba.utils.views import ComponentFormMixin
 from temba.utils import languages
-from temba.utils.fields import SelectMultipleWidget
+from temba.utils.fields import SelectMultipleWidget, CheckboxWidget
 from temba.utils.languages import alpha3_to_alpha2
 
-from .models import Classifier
+from .models import Classifier, ClassifierTrainingTask
 
 
 class BaseConnectView(ComponentFormMixin, OrgPermsMixin, SmartFormView):
@@ -84,6 +86,7 @@ class ClassifierCRUDL(SmartCRUDL):
                         title=_("Training"),
                         modax=_("Train Classifier"),
                         href=reverse("classifiers.classifier_train", args=[self.object.uuid]),
+                        destructive=True,
                     )
                 )
 
@@ -125,8 +128,40 @@ class ClassifierCRUDL(SmartCRUDL):
                 required=True,
                 widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Languages"}),
             )
+            ignore_errors = forms.BooleanField(
+                widget=CheckboxWidget(attrs={"widget_only": True}),
+                required=False,
+                label=_("Check this box if you want to ignore errors on the file"),
+                help_text=None,
+            )
 
         form_class = Form
+
+        def get(self, request, *args, **kwargs):
+            report_type = request.GET.get("report-type")
+            if report_type == "progress":
+                task = ClassifierTrainingTask.get_active_task(self.get_object())
+                return JsonResponse(self.get_report(task))
+
+            if report_type == "previous":
+                task = ClassifierTrainingTask.get_last_task(self.get_object())
+                return JsonResponse(self.get_report(task))
+
+            return super().get(request, *args, **kwargs)
+
+        @classmethod
+        def get_report(cls, task):
+            report = {}
+            if task:
+                report = dict(
+                    total=task.total_intents,
+                    pushed=task.start_index,
+                    messages=task.messages,
+                    status=task.status,
+                    modified=task.modified_on,
+                )
+
+            return report
 
         def get_form_kwargs(self):
             kwargs = super().get_form_kwargs()
@@ -134,7 +169,15 @@ class ClassifierCRUDL(SmartCRUDL):
             return kwargs
 
         def get_context_data(self, **kwargs):
+            obj = self.get_object()
+            has_upload_task = ClassifierTrainingTask.has_task(obj)
             context = super().get_context_data(**kwargs)
+            context["has_upload_task"] = has_upload_task
+            if not has_upload_task:
+                task = ClassifierTrainingTask.get_last_task(obj)
+                context["has_prev_task"] = task is not None
+
+            context["redirect_success"] = reverse("classifiers.classifier_read", args=[obj.uuid])
             return context
 
         @classmethod
@@ -149,21 +192,52 @@ class ClassifierCRUDL(SmartCRUDL):
 
             return converted
 
-        def post(self, *args, **kwargs):
-            from .types.dialogflow.train_bot import TrainingClient
+        @classmethod
+        def check_file(cls, file, langs):
+            csvreader = csv.DictReader(file)
+            error_lines = []
+            lang_fields = []
 
+            for lang in langs:
+                lang_fields.append(f"Question{str(lang).upper()}")
+                lang_fields.append(f"Answer{str(lang).upper()}")
+
+            for idx, row in enumerate(csvreader, start=1):
+                invalid_dict = {k: v for k, v in row.items() if k in lang_fields and (v == "" or v == "#N/A")}
+                if invalid_dict:
+                    error_lines.append(str(idx + 1))  # excluding the file header
+
+            return error_lines
+
+        def post(self, *args, **kwargs):
             message = {}
             status = 200
 
             file = self.request.FILES.get("file")
             langs = self.request.POST.getlist("language_list")
+            ignore_errors = self.request.POST.get("ignore_errors")
+
             if file and langs:
                 raw_data = file.read().decode("utf-8").splitlines()
-                obj = self.get_object()
 
-                trainer = TrainingClient(credential=obj.config, csv_data=raw_data, languages=self.convert_langs(langs))
-                trainer.train_bot()
-                message = trainer.messages
+                if not ignore_errors:
+                    errors = self.check_file(raw_data, langs)
+                    if errors:
+                        status = 400
+                        message["file"] = (
+                            f"Please, check your file on the lines {', '.join(errors)}, "
+                            f"they seems to be empty or invalid."
+                        )
+                        return JsonResponse(message, status=status)
+
+                obj = self.get_object()
+                ClassifierTrainingTask.create(
+                    training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs), user=self.request.user
+                )
+                messages.success(
+                    self.request,
+                    f"This will take sometime. We will e-mail you at {self.request.user.username} when it is complete.",
+                )
             else:
                 status = 400
                 if not file:

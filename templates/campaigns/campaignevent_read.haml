@@ -132,6 +132,10 @@
 -block extra-script
   {{block.super}}
   %script{src:"{{ STATIC_URL }}js/flow-parameters.js"}
+  %script{src:"{{ STATIC_URL }}js/msg-encodings.js"}
+  -if gsm_replacements
+    :javascript
+      GSM7_REPLACEMENTS = JSON.parse('{{ gsm_replacements | escapejs }}');
 
 -block extra-less
   -compress css

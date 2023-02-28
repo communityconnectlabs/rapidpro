@@ -327,7 +327,7 @@ class UserTest(TembaTest):
 
     @override_settings(USER_LOCKOUT_TIMEOUT=1, USER_FAILED_LOGIN_LIMIT=3)
     def test_confirm_access(self):
-        confirm_url = reverse("users.confirm_access") + f"?next=/msg/inbox/"
+        confirm_url = reverse("users.confirm_access") + "?next=/msg/inbox/"
 
         # try to access before logging in
         response = self.client.get(confirm_url)
@@ -4204,8 +4204,16 @@ class OrgCRUDLTest(TembaTest, CRUDLTestMixin):
         response = self.client.get("%s?search=Fr" % langs_url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(
             [
+                {"value": "afh", "name": "Afrihili"},
                 {"value": "afr", "name": "Afrikaans"},
+                {"value": "afa", "name": "Afro-Asiatic languages"},
+                {"value": "cpf", "name": "Creoles and pidgins, French-based"},
+                {"value": "frs", "name": "Eastern Frisian"},
                 {"value": "fra", "name": "French"},
+                {"value": "frm", "name": "French, Middle (ca.1400-1600)"},
+                {"value": "fro", "name": "French, Old (842-ca.1400)"},
+                {"value": "fur", "name": "Friulian"},
+                {"value": "frr", "name": "Northern Frisian"},
                 {"value": "fry", "name": "Western Frisian"},
             ],
             response.json()["results"],
@@ -4217,9 +4225,17 @@ class OrgCRUDLTest(TembaTest, CRUDLTestMixin):
             response = self.client.get("%s?search=Fr" % langs_url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
             self.assertEqual(
                 [
+                    {"value": "afh", "name": "Afrihili"},
                     {"value": "afr", "name": "Afrikaans"},
+                    {"value": "afa", "name": "Afro-Asiatic languages"},
                     {"value": "frc", "name": "Cajun French"},
+                    {"value": "cpf", "name": "Creoles and pidgins, French-based"},
+                    {"value": "frs", "name": "Eastern Frisian"},
                     {"value": "fra", "name": "French"},
+                    {"value": "frm", "name": "French, Middle (ca.1400-1600)"},
+                    {"value": "fro", "name": "French, Old (842-ca.1400)"},
+                    {"value": "fur", "name": "Friulian"},
+                    {"value": "frr", "name": "Northern Frisian"},
                     {"value": "fry", "name": "Western Frisian"},
                 ],
                 response.json()["results"],
