@@ -2697,7 +2697,7 @@
   },
   "00E1": {
     "char": "á",
-    "substitute": ""
+    "substitute": "a"
   },
   "00E2": {
     "char": "â",
@@ -2825,7 +2825,7 @@
   },
   "010E": {
     "char": "Ď",
-    "substitute": ""
+    "substitute": "D"
   },
   "010F": {
     "char": "ď",
@@ -2889,7 +2889,7 @@
   },
   "011E": {
     "char": "Ğ",
-    "substitute": ""
+    "substitute": "G"
   },
   "011F": {
     "char": "ğ",
@@ -3981,11 +3981,11 @@
   },
   "0232": {
     "char": "Ȳ",
-    "substitute": ""
+    "substitute": "Y"
   },
   "0233": {
     "char": "ȳ",
-    "substitute": ""
+    "substitute": "y"
   },
   "0234": {
     "char": "ȴ",
