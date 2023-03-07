@@ -40,7 +40,7 @@
 
   #previous-status.pt-5.hidden(onclick="getPreviousReport(this)" )
     %a
-      -trans "Click here to prevous task result"
+      -trans "Click here to previous task result"
 
   #messages
 
@@ -195,7 +195,6 @@
         removeMessage(messagesDiv)
         toggleLoadingStatus();
         dialogFooter.querySelectorAll('temba-button:not([socondary])').forEach((btn) => btn.setAttribute("disabled", true));
-        $(messagesDiv).text('This will take some time to complete, you will see a summary report when its done.');
 
         let hasErrors = false;
 

@@ -64,7 +64,10 @@ def is_gsm7(text):
     """
     Returns whether the passed in text can be represented in GSM7 character set
     """
-    for c in text:
+    if not isinstance(text, str):
+        return False
+
+    for c in str(text):
         if c not in GSM7_CHARS:
             return False
 
@@ -339,7 +342,7 @@ def calculate_num_segments(text):
     # first figure out if we are multipart
     is_multipart = False
     segment_size = 0
-    for c in text:
+    for c in str(text):
         if c in GSM7_EXTENDED_CHARS and gsm7:
             segment_size += 2
         else:
@@ -363,7 +366,7 @@ def calculate_num_segments(text):
 
     # calculate our total number of segments, we can't do simple division because multibyte extended chars
     # may land on a boundary between messages (`{` as character 153 will not fit and force another segment)
-    for c in text:
+    for c in str(text):
         if c in GSM7_EXTENDED_CHARS and gsm7:
             segment_size += 2
         else:

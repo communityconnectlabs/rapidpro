@@ -163,7 +163,7 @@ class TrainingClient:
 
             intent_name = intent[lang_headers["intent"]]
 
-            if len(intent_name) == 0:
+            if not intent_name or len(intent_name) == 0:
                 error_msg = f"No intent found here, skipping row {counter}"
                 logger.warning(error_msg)
                 self.messages["errors"].append(error_msg)
