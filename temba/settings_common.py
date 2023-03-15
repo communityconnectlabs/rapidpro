@@ -726,6 +726,7 @@ GROUP_PERMISSIONS = {
         "flows.ruleset.*",
         "flows.flowrun_delete",
         "flows.flowimage.*",
+        "flows.flowtemplate.*",
         "schedules.schedule.*",
         "msgs.broadcast.*",
         "msgs.broadcastschedule.*",
