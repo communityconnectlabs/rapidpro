@@ -264,7 +264,9 @@ class ClassifierCRUDL(SmartCRUDL):
                     file = file_buf
                     file.seek(0)
             except KeyError:
-                form_errors.append("Please check whether the language list of the form is matching with the file header")
+                form_errors.append(
+                    "Please check whether the language list of the form is matching with the file header"
+                )
 
             if file and langs and not form_errors:
                 raw_data = file.read().splitlines()
