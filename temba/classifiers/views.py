@@ -233,35 +233,40 @@ class ClassifierCRUDL(SmartCRUDL):
             def is_replacement_required(x):
                 return not is_gsm7(x) and calculate_num_segments(x) > 1
 
-            if submit_type != "S":
-                df = pd.read_csv(file)
-                df.columns = df.columns.str.lower()
-                headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)))
-                replaced, removed = set(), set()
-                for (column, items) in df[headers].items():
-                    for index, item in enumerate(items):
-                        if is_replacement_required(item):
-                            if submit_type == "C":
-                                replaced_data = replace_accented_chars(item)
-                                replaced = replaced.union(replaced_data["replaced"])
-                                removed = removed.union(replaced_data["removed"])
-                            elif submit_type == "R":
-                                df.loc[index, [column]] = replace_accented_chars(item)["updated"]
-                if submit_type == "C" and any(replaced | removed):
-                    message["check_result"] = render_to_string(
-                        "classifiers/replacements_message.haml", {"accent_chars": ", ".join(replaced | removed)}
-                    )
-                    return JsonResponse(message, status=202)
-                file = io.StringIO()
-                df.to_csv(file, index=False)
-                file.seek(0)
-            elif file:
-                file_buf = io.StringIO()
-                file_buf.write(file.read().decode("utf-8"))
-                file = file_buf
-                file.seek(0)
+            form_errors = []
 
-            if file and langs:
+            try:
+                if submit_type != "S":
+                    df = pd.read_csv(file)
+                    df.columns = df.columns.str.lower()
+                    headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)))
+                    replaced, removed = set(), set()
+                    for (column, items) in df[headers].items():
+                        for index, item in enumerate(items):
+                            if is_replacement_required(item):
+                                if submit_type == "C":
+                                    replaced_data = replace_accented_chars(item)
+                                    replaced = replaced.union(replaced_data["replaced"])
+                                    removed = removed.union(replaced_data["removed"])
+                                elif submit_type == "R":
+                                    df.loc[index, [column]] = replace_accented_chars(item)["updated"]
+                    if submit_type == "C" and any(replaced | removed):
+                        message["check_result"] = render_to_string(
+                            "classifiers/replacements_message.haml", {"accent_chars": ", ".join(replaced | removed)}
+                        )
+                        return JsonResponse(message, status=202)
+                    file = io.StringIO()
+                    df.to_csv(file, index=False)
+                    file.seek(0)
+                elif file:
+                    file_buf = io.StringIO()
+                    file_buf.write(file.read().decode("utf-8"))
+                    file = file_buf
+                    file.seek(0)
+            except KeyError:
+                form_errors.append("Please check whether the language list of the form is matching with the file header")
+
+            if file and langs and not form_errors:
                 raw_data = file.read().splitlines()
 
                 if not ignore_errors:
@@ -288,5 +293,7 @@ class ClassifierCRUDL(SmartCRUDL):
                     message["file"] = "file is required"
                 if not langs:
                     message["language_list"] = "kindly select at least one language"
+                if form_errors:
+                    message["file"] = ",".join(form_errors)
 
             return JsonResponse(message, status=status)
