@@ -16,8 +16,8 @@
     "is-core-module": "2.4.0",
     "less": "2.7.1",
     "queue-microtask": "1.2.3",
-    "react": "16.13.1",
-    "react-dom": "16.13.1"
+    "react": "16.14.0",
+    "react-dom": "16.14.0"
   },
   "scripts": {
     "preinstall": "npx npm-force-resolutions",
