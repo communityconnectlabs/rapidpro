@@ -13,7 +13,7 @@
     "@nyaruka/temba-components": "0.32.4",
     "colorette": "1.2.2",
     "fa-icons": "0.2.0",
-    "is-core-module": "2.4.0",
+    "is-core-module": "2.11.0",
     "less": "2.7.1",
     "queue-microtask": "1.2.3",
     "react": "16.13.1",
