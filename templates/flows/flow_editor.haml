@@ -43,7 +43,6 @@
       --curvature-widget: 4px;
     }
 
-    /* case_list_case is the dnd portal under body */
     #rp-flow-editor, .case_list_case {
       --curvature: 4px;
       --curvature-widget: 4px;
@@ -127,6 +126,19 @@
     }
 
     #grid {
+      overflow: auto;
+      z-index: 5;
+    }
+
+    #shadow {
+      box-shadow: inset 0 7px 9px -10px rgba(0,0,0,0.4);
+      z-index: 10;
+    }
+
+
+    #preview {
+      margin-bottom: 14px;
+      margin-left: -14px;
     }
 
     #rp-flow-editor {
@@ -137,15 +149,6 @@
     #rp-flow-editor h1 {
       font-weight: 300;
       font-family: 'Roboto'
-    }
-
-    #rp-flow-editor #canvas-container > div {
-      box-shadow: inset 0 7px 9px -10px rgba(0,0,0,0.4);
-    }
-
-    #rp-flow-editor #canvas-container #canvas:after {
-      box-shadow: inset 0 7px 9px -10px rgba(0,0,0,0.4);
-
     }
 
     #rp-flow-editor > div {
@@ -250,7 +253,7 @@
     });
 
     function handleEditorLoaded() {
-      $('temba-loading').hide();
+      $('.editor-loader').hide();
       $('#rp-flow-editor > div').css('opacity', '1');
       $('[class*="components_printButton"]').click((e) => {
         e.stopPropagation(); // Prevent print to PDF call on this page.
@@ -386,9 +389,9 @@
       brand: '{{brand.name|escapejs}}',
 
       help: {
-        legacy_extra: 'https://help.nyaruka.com/en/articles/3747485-migrating-away-from-legacy_extra',
-        missing_dependency: 'http://help.nyaruka.com/en/articles/3747650-fixing-missing-dependencies',
-        invalid_regex: 'http://help.nyaruka.com/en/articles/3747654-invalid-regular-expressions'
+        legacy_extra: 'https://help.nyaruka.com/',
+        missing_dependency: 'https://help.nyaruka.com/en/article/fixing-missing-dependencies-1toe127/',
+        invalid_regex: 'https://help.nyaruka.com/en/article/invalid-regular-expressions-814k8d/'
       },
 
       endpoints: {
@@ -410,13 +413,14 @@
 
         // TODO: migrate to API?
         revisions: '/flow/revisions/{{object.uuid}}/',
-        recents: '/flow/recent_messages/{{object.uuid}}/',
+        recents: '/flow/recent_contacts/{{object.uuid}}/',
         attachments: '/flow/upload_media_action/{{object.uuid}}/',
         attachments_validation: '{% url "api.v2.attachments_validation" %}',
         languages: base + 'language',
         environment: base + 'environment',
         activity: '/flow/activity/{{object.uuid}}/',
         recipients: '/contact/omnibox?v=2&types=gc',
+        contact: '/contact/read/',
 
         {% if can_simulate %}
         simulateStart: '/flow/simulate/{{object.id}}/',
@@ -534,7 +538,8 @@
     .p-6.body
       = _("You have been inactive for a while and your editing session is over. You could stay on that page without the ability to do changes or reload the page to start a new editing session.")
 
+  #shadow.pb-5.-mb-5
   #grid.h-full
-    <temba-loading units="10" size="8"></temba-loading>
+    <temba-loading class="editor-loader" units="10" size="8"></temba-loading>
     #rp-flow-editor
 

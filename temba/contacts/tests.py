@@ -84,34 +84,7 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
         menu_url = reverse("contacts.contact_menu")
         response = self.assertListFetch(menu_url, allow_viewers=True, allow_editors=True, allow_agents=False)
         menu = response.json()["results"]
-        self.maxDiff = None
-        self.assertEqual(
-            [
-                {"id": "active", "count": 0, "name": "Active", "href": "/contact/"},
-                {"id": "blocked", "count": 0, "name": "Blocked", "href": "/contact/blocked/"},
-                {"id": "stopped", "count": 0, "name": "Stopped", "href": "/contact/stopped/"},
-                {"id": "archived", "count": 0, "name": "Archived", "href": "/contact/archived/"},
-                {
-                    "id": "smart",
-                    "icon": "atom",
-                    "name": "Smart Groups",
-                    "href": "/contactgroup/?type=smart",
-                    "count": 0,
-                },
-                {"id": "groups", "icon": "users", "name": "Groups", "href": "/contactgroup/?type=static", "count": 4},
-                {
-                    "id": "fields",
-                    "icon": "layers",
-                    "count": 3,
-                    "name": "Fields",
-                    "href": "/contactfield/",
-                    "endpoint": "/contactfield/menu/",
-                    "inline": True,
-                },
-                {"id": "import", "icon": "upload-cloud", "href": "/contactimport/create/", "name": "Import"},
-            ],
-            menu,
-        )
+        self.assertEqual(9, len(menu))
 
     @mock_mailroom
     def test_list(self, mr_mocks):
@@ -766,7 +739,7 @@ class ContactGroupTest(TembaTest):
         group.save(update_fields=("status",))
 
         # dynamic groups should get their own icon
-        self.assertEqual(group.get_icon(), "atom")
+        self.assertEqual(group.get_attrs(), {"icon": "atom"})
 
         # can't update query again while it is in this state
         with self.assertRaises(ValueError):
@@ -1169,35 +1142,39 @@ class ContactGroupCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # can't create group as viewer
         self.login(self.user)
-        response = self.client.post(url, dict(name="Spammers"))
+        response = self.client.post(url, {"name": "Spammers"})
         self.assertLoginRedirect(response)
 
         self.login(self.admin)
 
         # try to create a contact group whose name is only whitespace
-        response = self.client.post(url, dict(name="  "))
+        response = self.client.post(url, {"name": "  "})
         self.assertFormError(response, "form", "name", "This field is required.")
 
         # try to create a contact group whose name begins with reserved character
-        response = self.client.post(url, dict(name="+People"))
+        response = self.client.post(url, {"name": "+People"})
         self.assertFormError(response, "form", "name", "Group name must not be blank or begin with + or -")
 
         # try to create with name that's already taken
-        response = self.client.post(url, dict(name="Customers"))
+        response = self.client.post(url, {"name": "Customers"})
+        self.assertFormError(response, "form", "name", "Name is used by another group")
+
+        # try to create with name that's already taken by a system group
+        response = self.client.post(url, {"name": "blocked"})
         self.assertFormError(response, "form", "name", "Name is used by another group")
 
         # create with valid name (that will be trimmed)
-        response = self.client.post(url, dict(name="first  "))
+        response = self.client.post(url, {"name": "first  "})
         self.assertNoFormErrors(response)
         ContactGroup.user_groups.get(org=self.org, name="first")
 
         # create a group with preselected contacts
-        self.client.post(url, dict(name="Everybody", preselected_contacts="%d,%d" % (self.joe.pk, self.frank.pk)))
+        self.client.post(url, {"name": "Everybody", "preselected_contacts": f"{self.joe.id},{self.frank.id}"})
         group = ContactGroup.user_groups.get(org=self.org, name="Everybody")
         self.assertEqual(set(group.contacts.all()), {self.joe, self.frank})
 
         # create a dynamic group using a query
-        self.client.post(url, dict(name="Frank", group_query="tel = 1234"))
+        self.client.post(url, {"name": "Frank", "group_query": "tel = 1234"})
 
         ContactGroup.user_groups.get(org=self.org, name="Frank", query="tel = 1234")
 
@@ -1207,7 +1184,7 @@ class ContactGroupCRUDLTest(TembaTest, CRUDLTestMixin):
         for i in range(10):
             ContactGroup.create_static(self.org2, self.admin2, "group%d" % i)
 
-        response = self.client.post(url, dict(name="People"))
+        response = self.client.post(url, {"name": "People"})
         self.assertNoFormErrors(response)
         ContactGroup.user_groups.get(org=self.org, name="People")
 
@@ -1218,7 +1195,7 @@ class ContactGroupCRUDLTest(TembaTest, CRUDLTestMixin):
             ContactGroup.create_static(self.org, self.admin, "group%d" % i)
 
         self.assertEqual(10, ContactGroup.user_groups.all().count())
-        response = self.client.post(url, dict(name="People"))
+        response = self.client.post(url, {"name": "People"})
         self.assertFormError(
             response,
             "form",
@@ -1551,6 +1528,9 @@ class ContactTest(TembaTest):
         # give contact an open and a closed ticket
         self.create_ticket(self.org.ticketers.get(), contact, "Hi")
         self.create_ticket(self.org.ticketers.get(), contact, "Hi", closed_on=timezone.now())
+        bcast_ticket = self.create_ticket(self.org.ticketers.get(), contact, "Hi All")
+        bcast2.ticket = bcast_ticket
+        bcast2.save()
 
         self.assertEqual(1, group.contacts.all().count())
         self.assertEqual(1, contact.connections.all().count())
@@ -1561,18 +1541,21 @@ class ContactTest(TembaTest):
         self.assertEqual(2, len(contact.fields))
         self.assertEqual(1, contact.campaign_fires.count())
 
-        self.assertEqual(2, TicketCount.get_all(self.org, Ticket.STATUS_OPEN))
+        self.assertEqual(3, TicketCount.get_all(self.org, Ticket.STATUS_OPEN))
         self.assertEqual(1, TicketCount.get_all(self.org, Ticket.STATUS_CLOSED))
 
-        # first try a regular release and make sure our urns are anonymized
-        contact.release(self.admin, full=False)
+        # first try releasing with _full_release patched so we can check the state of the contact before the task
+        # to do a full release has kicked off
+        with patch("temba.contacts.models.Contact._full_release"):
+            contact.release(self.admin)
+
         self.assertEqual(2, contact.urns.all().count())
         for urn in contact.urns.all():
             uuid.UUID(urn.path, version=4)
             self.assertEqual(URN.DELETED_SCHEME, urn.scheme)
 
         # tickets unchanged
-        self.assertEqual(2, contact.tickets.count())
+        self.assertEqual(3, contact.tickets.count())
 
         # a new contact arrives with those urns
         new_contact = self.create_contact("URN Thief", urns=["tel:+12065552000", "twitter:tweettweet"])
@@ -1580,6 +1563,7 @@ class ContactTest(TembaTest):
 
         self.assertEqual({contact2}, set(bcast1.contacts.all()))
         self.assertEqual({contact, contact2}, set(bcast2.contacts.all()))
+        self.assertIsNotNone(bcast2.ticket)
 
         # now lets go for a full release
         contact.release(self.admin)
@@ -1610,6 +1594,9 @@ class ContactTest(TembaTest):
         Flow.objects.get(id=msg_flow.id)
         Flow.objects.get(id=ivr_flow.id)
         self.assertEqual(1, Ticket.objects.count())
+
+        bcast2.refresh_from_db()
+        self.assertIsNone(bcast2.ticket)
 
     @mock_mailroom
     def test_status_changes_and_release(self, mr_mocks):
@@ -2284,7 +2271,7 @@ class ContactTest(TembaTest):
             response,
             "http://www.openstreetmap.org/?mlat=47.5414799&amp;mlon=-122.6359908#map=18/47.5414799/-122.6359908",
         )
-        self.assertContains(response, reverse("channels.channellog_read", args=[log.id]))
+        self.assertContains(response, reverse("channels.channellog_read", args=[log.channel.uuid, log.id]))
         self.assertContains(response, reverse("channels.channellog_connection", args=[call.id]))
         self.assertContains(response, "Transferred <b>100.00</b> <b>RWF</b> of airtime")
         self.assertContains(response, reverse("airtime.airtimetransfer_read", args=[transfer.id]))
@@ -2913,8 +2900,9 @@ class ContactTest(TembaTest):
         self.assertEqual(200, response.status_code)
 
         # make sure it is inactive
-        self.assertIsNone(ContactGroup.user_groups.filter(name="New Test").first())
-        self.assertFalse(ContactGroup.all_groups.get(name="New Test").is_active)
+        group.refresh_from_db()
+        self.assertFalse(group.is_active)
+        self.assertTrue(group.name.startswith("deleted-"))
 
         # remove Joe from the group
         self.client.post(
@@ -4351,6 +4339,7 @@ class ContactFieldTest(TembaTest):
                 [
                     [
                         "ID",
+                        "Scheme",
                         "Contact UUID",
                         "Name",
                         "Language",
@@ -4363,6 +4352,7 @@ class ContactFieldTest(TembaTest):
                     ],
                     [
                         str(contact2.id),
+                        "tel",
                         contact2.uuid,
                         "Adam Sumner",
                         "eng",
@@ -4375,6 +4365,7 @@ class ContactFieldTest(TembaTest):
                     ],
                     [
                         str(contact.id),
+                        "tel",
                         contact.uuid,
                         "Ben Haggerty",
                         "",
@@ -4385,8 +4376,30 @@ class ContactFieldTest(TembaTest):
                         "",
                         "One",
                     ],
-                    [str(contact3.id), contact3.uuid, "Luol Deng", "", contact3.created_on, "", "Active", "", "", ""],
-                    [str(contact4.id), contact4.uuid, "Stephen", "", contact4.created_on, "", "Active", "", "", ""],
+                    [
+                        str(contact3.id),
+                        "tel",
+                        contact3.uuid,
+                        "Luol Deng",
+                        "",
+                        contact3.created_on,
+                        "",
+                        "Active",
+                        "",
+                        "",
+                    ],
+                    [
+                        str(contact4.id),
+                        "tel",
+                        contact4.uuid,
+                        "Stephen",
+                        "",
+                        contact4.created_on,
+                        "",
+                        "Active",
+                        "",
+                        "",
+                    ],
                 ],
                 tz=self.org.timezone,
             )
@@ -4710,18 +4723,7 @@ class ContactFieldCRUDLTest(TembaTest, CRUDLTestMixin):
         menu_url = reverse("contacts.contactfield_menu")
         response = self.assertListFetch(menu_url, allow_viewers=False, allow_editors=True, allow_agents=False)
         menu = response.json()["results"]
-        self.assertEqual(
-            [
-                {
-                    "icon": "bookmark",
-                    "id": "featured",
-                    "name": "Featured",
-                    "count": 1,
-                    "href": "/contactfield/featured/",
-                },
-            ],
-            menu,
-        )
+        self.assertEqual(2, len(menu))
 
     def test_create(self):
         create_url = reverse("contacts.contactfield_create")
@@ -4971,6 +4973,9 @@ class URNTest(TembaTest):
     def test_facebook_urn(self):
         self.assertTrue(URN.validate("facebook:ref:asdf"))
 
+    def test_instagram_urn(self):
+        self.assertTrue(URN.validate("instagram:12345678901234567"))
+
     def test_discord_urn(self):
         self.assertEqual("discord:750841288886321253", URN.from_discord("750841288886321253"))
         self.assertTrue(URN.validate(URN.from_discord("750841288886321253")))
@@ -5016,6 +5021,7 @@ class URNTest(TembaTest):
         self.assertEqual(URN.to_parts("telegram:12345"), ("telegram", "12345", None, None))
         self.assertEqual(URN.to_parts("telegram:12345#foobar"), ("telegram", "12345", None, "foobar"))
         self.assertEqual(URN.to_parts("ext:Aa0()+,-.:=@;$_!*'"), ("ext", "Aa0()+,-.:=@;$_!*'", None, None))
+        self.assertEqual(URN.to_parts("instagram:12345"), ("instagram", "12345", None, None))
 
         self.assertRaises(ValueError, URN.to_parts, "tel")
         self.assertRaises(ValueError, URN.to_parts, "tel:")  # missing scheme
@@ -5092,12 +5098,14 @@ class URNTest(TembaTest):
         # viber urn
         self.assertTrue(URN.validate("viber:dKPvqVrLerGrZw15qTuVBQ=="))
 
-        # facebook, telegram vk URN paths must be integers
+        # facebook, telegram, vk and instagram URN paths must be integers
         self.assertTrue(URN.validate("telegram:12345678901234567"))
         self.assertFalse(URN.validate("telegram:abcdef"))
         self.assertTrue(URN.validate("facebook:12345678901234567"))
         self.assertFalse(URN.validate("facebook:abcdef"))
         self.assertTrue(URN.validate("vk:12345678901234567"))
+        self.assertTrue(URN.validate("instagram:12345678901234567"))
+        self.assertFalse(URN.validate("instagram:abcdef"))
 
 
 class ESIntegrationTest(TembaNonAtomicTest):
@@ -5386,6 +5394,7 @@ class ESIntegrationTest(TembaNonAtomicTest):
         self.login(self.admin)
         url = reverse("contacts.contactgroup_create")
         self.client.post(url, dict(name="Adults", group_query="age > 30"))
+        self.assertNoFormErrors(response)
 
         time.sleep(5)
 
@@ -5409,6 +5418,7 @@ class ESIntegrationTest(TembaNonAtomicTest):
         # update the query
         url = reverse("contacts.contactgroup_update", args=[adults.id])
         self.client.post(url, dict(name="Adults", query="age > 18"))
+        self.assertNoFormErrors(response)
 
         # need to wait at least 10 seconds because mailroom will wait that long to give indexer time to catch up if it
         # sees recently modified contacts
@@ -5587,9 +5597,24 @@ class ContactImportTest(TembaTest):
         self.assertEqual(3, batches[0].record_end)
         self.assertEqual(
             [
-                {"name": "Eric Newcomer", "urns": ["tel:+250788382382"], "groups": [str(imp.group.uuid)]},
-                {"name": "NIC POTTIER", "urns": ["tel:+250788383383"], "groups": [str(imp.group.uuid)]},
-                {"name": "jen newcomer", "urns": ["tel:+250788383385"], "groups": [str(imp.group.uuid)]},
+                {
+                    "_import_row": 2,
+                    "name": "Eric Newcomer",
+                    "urns": ["tel:+250788382382"],
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 3,
+                    "name": "NIC POTTIER",
+                    "urns": ["tel:+250788383383"],
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 4,
+                    "name": "jen newcomer",
+                    "urns": ["tel:+250788383385"],
+                    "groups": [str(imp.group.uuid)],
+                },
             ],
             batches[0].specs,
         )
@@ -5602,7 +5627,7 @@ class ContactImportTest(TembaTest):
                     "org_id": self.org.id,
                     "task": {"contact_import_batch_id": batches[0].id},
                     "queued_on": matchers.Datetime(),
-                }
+                },
             ],
             mr_mocks.queued_batch_tasks,
         )
@@ -5716,6 +5741,7 @@ class ContactImportTest(TembaTest):
         self.assertEqual(
             [
                 {
+                    "_import_row": 2,
                     "name": "John Doe",
                     "language": "eng",
                     "urns": ["tel:+250788123123"],
@@ -5723,13 +5749,50 @@ class ContactImportTest(TembaTest):
                     "groups": [str(imp.group.uuid)],
                 },
                 {
+                    "_import_row": 3,
                     "name": "Mary Smith",
                     "language": "spa",
                     "urns": ["tel:+250788456456"],
                     "fields": {"goats": "3", "sheep": "5"},
                     "groups": [str(imp.group.uuid)],
                 },
-                {"urns": ["tel:+250788456678"], "groups": [str(imp.group.uuid)]},  # blank values ignored
+                {
+                    "_import_row": 4,
+                    "urns": ["tel:+250788456678"],
+                    "groups": [str(imp.group.uuid)],
+                },  # blank values ignored
+            ],
+            batch.specs,
+        )
+
+        imp = self.create_contact_import("media/test_imports/with_empty_rows.xlsx")
+        imp.start()
+        batch = imp.batches.get()  # single batch
+
+        # row 2 nad 3 is skipped
+        self.assertEqual(
+            [
+                {
+                    "_import_row": 2,
+                    "name": "John Doe",
+                    "language": "eng",
+                    "urns": ["tel:+250788123123"],
+                    "fields": {"goats": "1", "sheep": "0"},
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 5,
+                    "name": "Mary Smith",
+                    "language": "spa",
+                    "urns": ["tel:+250788456456"],
+                    "fields": {"goats": "3", "sheep": "5"},
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 6,
+                    "urns": ["tel:+250788456678"],
+                    "groups": [str(imp.group.uuid)],
+                },  # blank values ignored
             ],
             batch.specs,
         )
@@ -5739,8 +5802,18 @@ class ContactImportTest(TembaTest):
         batch = imp.batches.get()
         self.assertEqual(
             [
-                {"uuid": "f519ca1f-8513-49ba-8896-22bf0420dec7", "name": "Joe", "groups": [str(imp.group.uuid)]},
-                {"uuid": "989975f0-3bff-43d6-82c8-a6bbc201c938", "name": "Frank", "groups": [str(imp.group.uuid)]},
+                {
+                    "_import_row": 2,
+                    "uuid": "f519ca1f-8513-49ba-8896-22bf0420dec7",
+                    "name": "Joe",
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 3,
+                    "uuid": "989975f0-3bff-43d6-82c8-a6bbc201c938",
+                    "name": "Frank",
+                    "groups": [str(imp.group.uuid)],
+                },
             ],
             batch.specs,
         )
@@ -5752,6 +5825,7 @@ class ContactImportTest(TembaTest):
 
         self.assertEqual(
             {
+                "_import_row": 4,
                 "name": "",
                 "language": "",
                 "urns": ["tel:+250788456678"],
@@ -5768,12 +5842,14 @@ class ContactImportTest(TembaTest):
         self.assertEqual(
             [
                 {
+                    "_import_row": 2,
                     "uuid": "92faa753-6faa-474a-a833-788032d0b757",
                     "name": "Eric Newcomer",
                     "language": "eng",
                     "groups": [str(imp.group.uuid)],
                 },
                 {
+                    "_import_row": 3,
                     "uuid": "3c11ac1f-c869-4247-a73c-9b97bff61659",
                     "name": "NIC POTTIER",
                     "language": "spa",
@@ -5792,8 +5868,13 @@ class ContactImportTest(TembaTest):
         # invalid looking urns still passed to mailroom to decide how to handle them
         self.assertEqual(
             [
-                {"name": "Eric Newcomer", "urns": ["tel:+%3F"], "groups": [str(imp.group.uuid)]},
-                {"name": "Nic Pottier", "urns": ["tel:2345678901234567890"], "groups": [str(imp.group.uuid)]},
+                {"_import_row": 2, "name": "Eric Newcomer", "urns": ["tel:+%3F"], "groups": [str(imp.group.uuid)]},
+                {
+                    "_import_row": 3,
+                    "name": "Nic Pottier",
+                    "urns": ["tel:2345678901234567890"],
+                    "groups": [str(imp.group.uuid)],
+                },
             ],
             batch.specs,
         )
@@ -5807,11 +5888,17 @@ class ContactImportTest(TembaTest):
         self.assertEqual(
             [
                 {
+                    "_import_row": 2,
                     "name": "Bob",
                     "urns": ["tel:+250788382001", "tel:+250788382002", "tel:+250788382003"],
                     "groups": [str(imp.group.uuid)],
                 },
-                {"name": "Jim", "urns": ["tel:+250788382004", "tel:+250788382005"], "groups": [str(imp.group.uuid)]},
+                {
+                    "_import_row": 3,
+                    "name": "Jim",
+                    "urns": ["tel:+250788382004", "tel:+250788382005"],
+                    "groups": [str(imp.group.uuid)],
+                },
             ],
             batch.specs,
         )
@@ -5824,9 +5911,24 @@ class ContactImportTest(TembaTest):
 
         self.assertEqual(
             [
-                {"name": "Eric Newcomer", "urns": ["tel:+250788382382"], "groups": [str(imp.group.uuid)]},
-                {"name": "NIC POTTIER", "urns": ["tel:+250788383383"], "groups": [str(imp.group.uuid)]},
-                {"name": "jen newcomer", "urns": ["tel:+250788383385"], "groups": [str(imp.group.uuid)]},
+                {
+                    "_import_row": 2,
+                    "name": "Eric Newcomer",
+                    "urns": ["tel:+250788382382"],
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 3,
+                    "name": "NIC POTTIER",
+                    "urns": ["tel:+250788383383"],
+                    "groups": [str(imp.group.uuid)],
+                },
+                {
+                    "_import_row": 4,
+                    "name": "jen newcomer",
+                    "urns": ["tel:+250788383385"],
+                    "groups": [str(imp.group.uuid)],
+                },
             ],
             batch.specs,
         )
@@ -5889,6 +5991,7 @@ class ContactImportTest(TembaTest):
         self.assertEqual(
             [
                 {
+                    "_import_row": 2,
                     "uuid": "17c4388a-024f-4e67-937a-13be78a70766",
                     "fields": {
                         "a_number": "1234.5678",

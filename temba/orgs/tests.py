@@ -57,12 +57,13 @@ from temba.tests import (
     mock_mailroom,
 )
 from temba.tests.engine import MockSessionWriter
+from temba.tests.requests import mock_object
 from temba.tests.s3 import MockS3Client, jsonlgz_encode
 from temba.tests.twilio import MockRequestValidator, MockTwilioClient
 from temba.tickets.models import Ticketer
 from temba.tickets.types.mailgun import MailgunType
 from temba.triggers.models import Trigger
-from temba.utils import dict_to_struct, json, languages
+from temba.utils import json, languages
 
 from .context_processors import GroupPermWrapper
 from .models import CreditAlert, Invitation, Org, OrgRole, TopUp, TopUpCredits
@@ -290,6 +291,11 @@ class UserTest(TembaTest):
 
         response = self.client.post(backup_url, {"token": self.admin.backup_tokens.first()})
         self.assertRedirect(response, reverse("orgs.org_choose"))
+
+    def test_account(self):
+        self.login(self.admin)
+        response = self.client.get(reverse("orgs.user_account"))
+        self.assertEqual(1, len(response.context["formax"].sections))
 
     def test_two_factor(self):
         self.assertFalse(self.admin.get_settings().two_factor_enabled)
@@ -651,10 +657,24 @@ class OrgDeleteTest(TembaNonAtomicTest):
 
         # make some exports with logs
         export = ExportFlowResultsTask.create(
-            self.parent_org, self.admin, [parent_flow], [parent_field], True, True, (), (), {}
+            self.parent_org,
+            self.admin,
+            [parent_flow],
+            [parent_field],
+            responded_only=True,
+            extra_urns=(),
+            group_memberships=(),
         )
         Notification.export_finished(export)
-        ExportFlowResultsTask.create(self.child_org, self.admin, [child_flow], [child_field], True, True, (), (), {})
+        ExportFlowResultsTask.create(
+            self.child_org,
+            self.admin,
+            [child_flow],
+            [child_field],
+            responded_only=True,
+            extra_urns=(),
+            group_memberships=(),
+        )
 
         export = ExportContactsTask.create(self.parent_org, self.admin, group=parent_group)
         Notification.export_finished(export)
@@ -1037,7 +1057,8 @@ class OrgTest(TembaTest):
         self.assertEqual("pt-br", user_settings.language)
 
     @patch("temba.flows.models.FlowStart.async_start")
-    def test_org_flagging_and_suspending(self, mock_async_start):
+    @mock_mailroom
+    def test_org_flagging_and_suspending(self, mr_mocks, mock_async_start):
         self.login(self.admin)
 
         mark = self.create_contact("Mark", phone="+12065551212")
@@ -1110,8 +1131,7 @@ class OrgTest(TembaTest):
         self.org.save(update_fields=("is_suspended",))
 
         self.client.post(
-            reverse("flows.flow_broadcast", args=[flow.id]),
-            {"mode": "select", "omnibox": json.dumps({"id": mark.uuid, "name": mark.name, "type": "contact"})},
+            reverse("flows.flow_broadcast", args=[flow.id]), {"query": f'uuid="{mark.uuid}"', "type": "contact"}
         )
 
         mock_async_start.assert_called_once()
@@ -1207,9 +1227,6 @@ class OrgTest(TembaTest):
 
         # can access as admin
         self.login(self.admin)
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
@@ -2762,6 +2779,14 @@ class OrgTest(TembaTest):
         self.assertEqual(self.org.get_limit(Org.LIMIT_GROUPS), 500)
         self.assertEqual(self.org.get_limit(Org.LIMIT_GLOBALS), 255)
 
+    def test_org_api_rates(self):
+        self.assertEqual(self.org.api_rates, {})
+
+        self.org.api_rates = {"v2.contacts": "10000/hour"}
+        self.org.save()
+
+        self.assertEqual(self.org.api_rates, {"v2.contacts": "10000/hour"})
+
     def test_sub_orgs_management(self):
         settings.BRANDING[settings.DEFAULT_BRAND]["tiers"] = dict(multi_org=1_000_000)
         self.org.reset_capabilities()
@@ -2985,6 +3010,10 @@ class OrgTest(TembaTest):
         response = self.client.get("%s?org=%d" % (reverse("orgs.org_manage_accounts_sub_org"), sub_org.id))
         self.assertEqual(200, response.status_code)
 
+        headers = {"HTTP_TEMBA_SPA": 1}
+        response = self.client.get("%s?org=%d" % (reverse("orgs.org_manage_accounts_sub_org"), sub_org.id), **headers)
+        self.assertContains(response, "Edit Workspace")
+
         # edit our sub org's details
         response = self.client.post(
             f"{reverse('orgs.org_edit_sub_org')}?org={sub_org.id}",
@@ -2993,6 +3022,20 @@ class OrgTest(TembaTest):
 
         sub_org.refresh_from_db()
         self.assertEqual("New Sub Org Name", sub_org.name)
+
+        self.assertEqual(response.url, "/org/sub_orgs/")
+
+        # edit our sub org's details in a spa view
+        response = self.client.post(
+            f"{reverse('orgs.org_edit_sub_org')}?org={sub_org.id}",
+            {"name": "Spa Sub Org Name", "timezone": "Africa/Nairobi", "date_format": "Y", "language": "es"},
+            **headers,
+        )
+
+        self.assertEqual(response.url, f"/org/manage_accounts_sub_org/?org={sub_org.id}")
+
+        sub_org.refresh_from_db()
+        self.assertEqual("Spa Sub Org Name", sub_org.name)
         self.assertEqual("Africa/Nairobi", str(sub_org.timezone))
         self.assertEqual("Y", sub_org.date_format)
         self.assertEqual("es", sub_org.language)
@@ -3136,44 +3179,53 @@ class OrgCRUDLTest(TembaTest, CRUDLTestMixin):
         response = self.client.get(deep_link)
         self.assertEqual(200, response.status_code)
 
+    def assertMenu(self, url, count):
+        response = self.assertListFetch(url, allow_viewers=True, allow_editors=True, allow_agents=True)
+        menu = response.json()["results"]
+        self.assertEqual(count, len(menu))
+
     def test_menu(self):
+        self.login(self.admin)
+        self.assertMenu(reverse("orgs.org_menu"), 7)
+        self.assertMenu(f"{reverse('orgs.org_menu')}settings/", 14)
+
         menu_url = reverse("orgs.org_menu")
         response = self.assertListFetch(menu_url, allow_viewers=True, allow_editors=True, allow_agents=True)
         menu = response.json()["results"]
-        self.assertEqual(
-            [
-                {"endpoint": "/msg/menu/", "icon": "message-square", "id": "messages", "name": "Messages"},
-                {"id": "contacts", "name": "Contacts", "icon": "contact", "endpoint": "/contact/menu/"},
-                {"id": "tickets", "name": "Tickets", "icon": "agent", "href": "/ticket/", "endpoint": "/ticket/menu/"},
-                {"endpoint": "/channels/channel/menu/", "icon": "zap", "id": "channels", "name": "Channels"},
-                {
-                    "id": "support",
-                    "name": "Support",
-                    "icon": "help-circle",
-                    "bottom": True,
-                    "trigger": "showSupportWidget",
-                },
-            ],
-            menu,
-        )
+        self.assertEqual(7, len(menu))
 
-        # agents should only see tickets and support
+        # agents should only see tickets and settings
         self.login(self.agent)
         response = self.client.get(menu_url)
         menu = response.json()["results"]
-        self.assertEqual(
-            [
-                {"id": "tickets", "name": "Tickets", "icon": "agent", "href": "/ticket/", "endpoint": "/ticket/menu/"},
-                {
-                    "id": "support",
-                    "name": "Support",
-                    "icon": "help-circle",
-                    "bottom": True,
-                    "trigger": "showSupportWidget",
-                },
-            ],
-            menu,
+        self.assertEqual(2, len(menu))
+
+    def test_workspace(self):
+        response = self.assertListFetch(
+            reverse("orgs.org_workspace"), allow_viewers=True, allow_editors=True, allow_agents=False
         )
+
+        # make sure we have the appropriate number of sections
+        self.assertEqual(7, len(response.context["formax"].sections))
+
+        # create a child org
+        self.child_org = Org.objects.create(
+            name="Child Org",
+            timezone=pytz.timezone("Africa/Kigali"),
+            country=self.org.country,
+            brand=settings.DEFAULT_BRAND,
+            created_by=self.user,
+            modified_by=self.user,
+            parent=self.org,
+        )
+
+        response = self.client.get(reverse("orgs.org_workspace"))
+
+        # make sure we have the appropriate number of sections
+        self.assertContains(response, "Transfer Credits")
+
+        # should have an extra menu option for our child (and section header)
+        self.assertMenu(f"{reverse('orgs.org_menu')}settings/", 16)
 
     def test_org_grant(self):
         grant_url = reverse("orgs.org_grant")
@@ -4293,13 +4345,13 @@ class BulkExportTest(TembaTest):
         self.assertIn("Child Flow", group)
 
     def test_import_voice_flows_expiration_time(self):
-        # all imported voice flows should have a max expiration time of 15 min
+        # import file has invalid expires for an IVR flow so it should get the default (5)
         self.get_flow("ivr")
 
         self.assertEqual(Flow.objects.filter(flow_type=Flow.TYPE_VOICE).count(), 1)
         voice_flow = Flow.objects.get(flow_type=Flow.TYPE_VOICE)
         self.assertEqual(voice_flow.name, "IVR Flow")
-        self.assertEqual(voice_flow.expires_after_minutes, 15)
+        self.assertEqual(voice_flow.expires_after_minutes, 5)
 
     def test_import(self):
 
@@ -4807,7 +4859,10 @@ class BulkExportTest(TembaTest):
         # and our objects should have the same names as before
         self.assertEqual("Confirm Appointment", Flow.objects.get(pk=flow.pk).name)
         self.assertEqual("Appointment Schedule", Campaign.objects.filter(is_active=True).first().name)
-        self.assertEqual("Pending Appointments", ContactGroup.user_groups.get(pk=group.pk).name)
+
+        # except the group.. we don't mess with their names
+        self.assertFalse(ContactGroup.user_groups.filter(name="Pending Appointments").exists())
+        self.assertTrue(ContactGroup.user_groups.filter(name="A new group").exists())
 
         # let's rename our objects again
         flow.name = "A new name"
@@ -4819,7 +4874,7 @@ class BulkExportTest(TembaTest):
         group.name = "A new group"
         group.save(update_fields=("name",))
 
-        # now import the same import but pretend its from a different site
+        # now import the same import but pretend it's from a different site
         self.org.import_app(exported, self.admin, site="http://temba.io")
 
         # the newly named objects won't get updated in this case and we'll create new ones instead
@@ -5005,10 +5060,11 @@ class StripeCreditsTest(TembaTest):
     @patch("stripe.Charge.create")
     @override_settings(SEND_EMAILS=True)
     def test_add_credits(self, charge_create, customer_create):
-        customer_create.return_value = dict_to_struct("Customer", dict(id="stripe-cust-1"))
-        charge_create.return_value = dict_to_struct(
+        customer_create.return_value = mock_object("Customer", id="stripe-cust-1")
+        charge_create.return_value = mock_object(
             "Charge",
-            dict(id="stripe-charge-1", card=dict_to_struct("Card", dict(last4="1234", type="Visa", name="Rudolph"))),
+            id="stripe-charge-1",
+            card=mock_object("Card", last4="1234", type="Visa", name="Rudolph"),
         )
 
         settings.BRANDING[settings.DEFAULT_BRAND]["bundles"] = (dict(cents="2000", credits=1000, feature=""),)
@@ -5044,14 +5100,12 @@ class StripeCreditsTest(TembaTest):
     @patch("stripe.Charge.create")
     @override_settings(SEND_EMAILS=True)
     def test_add_btc_credits(self, charge_create, customer_create):
-        customer_create.return_value = dict_to_struct("Customer", dict(id="stripe-cust-1"))
-        charge_create.return_value = dict_to_struct(
+        customer_create.return_value = mock_object("Customer", id="stripe-cust-1")
+        charge_create.return_value = mock_object(
             "Charge",
-            dict(
-                id="stripe-charge-1",
-                card=None,
-                source=dict_to_struct("Source", dict(bitcoin=dict_to_struct("Bitcoin", dict(address="abcde")))),
-            ),
+            id="stripe-charge-1",
+            card=None,
+            source=mock_object("Source", bitcoin=mock_object("Bitcoin", address="abcde")),
         )
 
         settings.BRANDING[settings.DEFAULT_BRAND]["bundles"] = (dict(cents="2000", credits=1000, feature=""),)
@@ -5112,19 +5166,19 @@ class StripeCreditsTest(TembaTest):
         self.org.stripe_customer = "stripe-cust-1"
         self.org.save()
 
-        class MockCard(object):
+        class MockCard:
             def __init__(self):
                 self.id = "stripe-card-1"
 
             def delete(self):
                 pass
 
-        class MockCards(object):
+        class MockCards:
             def __init__(self):
                 self.throw = False
 
             def list(self):
-                return dict_to_struct("MockCardData", dict(data=[MockCard(), MockCard()]))
+                return mock_object("MockCardData", data=[MockCard(), MockCard()])
 
             def create(self, card):
                 if self.throw:
@@ -5132,7 +5186,7 @@ class StripeCreditsTest(TembaTest):
                 else:
                     return MockCard()
 
-        class MockCustomer(object):
+        class MockCustomer:
             def __init__(self, id, email):
                 self.id = id
                 self.email = email
@@ -5144,9 +5198,10 @@ class StripeCreditsTest(TembaTest):
         customer_retrieve.return_value = MockCustomer(id="stripe-cust-1", email=self.admin.email)
         customer_create.return_value = MockCustomer(id="stripe-cust-2", email=self.admin2.email)
 
-        charge_create.return_value = dict_to_struct(
+        charge_create.return_value = mock_object(
             "Charge",
-            dict(id="stripe-charge-1", card=dict_to_struct("Card", dict(last4="1234", type="Visa", name="Rudolph"))),
+            id="stripe-charge-1",
+            card=mock_object("Card", last4="1234", type="Visa", name="Rudolph"),
         )
 
         settings.BRANDING[settings.DEFAULT_BRAND]["bundles"] = (dict(cents="2000", credits=1000, feature=""),)

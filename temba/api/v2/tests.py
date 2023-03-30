@@ -393,8 +393,13 @@ class APITest(TembaTest):
         campaigns_url = reverse("api.v2.campaigns")
         fields_url = reverse("api.v2.fields")
 
+        self.customer_support.is_staff = True
+        self.customer_support.save(update_fields=("is_staff",))
+
         token1 = APIToken.get_or_create(self.org, self.admin, Group.objects.get(name="Administrators"))
         token2 = APIToken.get_or_create(self.org, self.admin, Group.objects.get(name="Surveyors"))
+        token3 = APIToken.get_or_create(self.org, self.editor, Group.objects.get(name="Editors"))
+        token4 = APIToken.get_or_create(self.org, self.customer_support, Group.objects.get(name="Administrators"))
 
         # can request fields endpoint using all 3 methods
         response = request_by_token(fields_url, token1.key)
@@ -435,7 +440,7 @@ class APITest(TembaTest):
         self.assertEqual(response.status_code, 200)
 
         # simulate the admin user exceeding the rate limit for the v2 scope
-        cache.set(f"throttle_v2_{self.org.id}-{self.admin.id}", [time.time() for r in range(10000)])
+        cache.set(f"throttle_v2_{self.org.id}", [time.time() for r in range(10000)])
 
         # next request they make using a token will be rejected
         response = request_by_token(fields_url, token1.key)
@@ -445,9 +450,30 @@ class APITest(TembaTest):
         response = request_by_basic_auth(fields_url, self.admin.username, token1.key)
         self.assertEqual(response.status_code, 429)
 
+        # or if another user in same org makes a request
+        response = request_by_token(fields_url, token3.key)
+        self.assertEqual(response.status_code, 429)
+
         # but they can still make a request if they have a session
         response = request_by_session(fields_url, self.admin)
         self.assertEqual(response.status_code, 200)
+
+        # or if they're a staff user because they are user-scoped
+        response = request_by_token(fields_url, token4.key)
+        self.assertEqual(response.status_code, 200)
+
+        # are allowed to access if we have not reached the configured org api rates
+        self.org.api_rates = {"v2": "15000/hour"}
+        self.org.save(update_fields=("api_rates",))
+
+        response = request_by_basic_auth(fields_url, self.admin.username, token1.key)
+        self.assertEqual(response.status_code, 200)
+
+        cache.set(f"throttle_v2_{self.org.id}", [time.time() for r in range(15000)])
+
+        # next request they make using a token will be rejected
+        response = request_by_token(fields_url, token1.key)
+        self.assertEqual(response.status_code, 429)
 
         # if user loses access to the token's role, don't allow the request
         self.org.administrators.remove(self.admin)
@@ -1663,9 +1689,12 @@ class APITest(TembaTest):
         # tweak modified_on so we get the order we want
         self.joe.modified_on = timezone.now()
         self.joe.save(update_fields=("modified_on",))
+
+        survey = self.create_flow("Survey")
         contact4.modified_on = timezone.now()
         contact4.last_seen_on = datetime(2020, 8, 12, 13, 30, 45, 123456, pytz.UTC)
-        contact4.save(update_fields=("modified_on", "last_seen_on"))
+        contact4.current_flow = survey
+        contact4.save(update_fields=("modified_on", "last_seen_on", "current_flow"))
 
         contact1.refresh_from_db()
         contact4.refresh_from_db()
@@ -1675,7 +1704,7 @@ class APITest(TembaTest):
         hans = self.create_contact("Hans", phone="0788000004", org=self.org2)
 
         # no filtering
-        with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 5):
+        with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 6):
             response = self.fetchJSON(url, readonly_models={Contact})
 
         resp_json = response.json()
@@ -1683,7 +1712,6 @@ class APITest(TembaTest):
         self.assertEqual(resp_json["next"], None)
         self.assertResultsByUUID(response, [contact4, self.joe, contact2, contact1, self.frank])
         self.assertEqual(
-            resp_json["results"][0],
             {
                 "uuid": contact4.uuid,
                 "name": "Don",
@@ -1691,16 +1719,18 @@ class APITest(TembaTest):
                 "urns": ["tel:+250788000004"],
                 "groups": [{"uuid": group.uuid, "name": group.name}],
                 "fields": {"nickname": "Donnie", "gender": "male"},
+                "flow": {"uuid": str(survey.uuid), "name": "Survey"},
                 "blocked": False,
                 "stopped": False,
                 "created_on": format_datetime(contact4.created_on),
                 "modified_on": format_datetime(contact4.modified_on),
                 "last_seen_on": "2020-08-12T13:30:45.123456Z",
             },
+            resp_json["results"][0],
         )
 
         # reversed
-        with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 5):
+        with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 6):
             response = self.fetchJSON(url, "reverse=true")
 
         resp_json = response.json()
@@ -1709,7 +1739,7 @@ class APITest(TembaTest):
         self.assertResultsByUUID(response, [self.frank, contact1, contact2, self.joe, contact4])
 
         with AnonymousOrg(self.org):
-            with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 5):
+            with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 6):
                 response = self.fetchJSON(url)
 
             resp_json = response.json()
@@ -1717,7 +1747,6 @@ class APITest(TembaTest):
             self.assertEqual(resp_json["next"], None)
             self.assertResultsByUUID(response, [contact4, self.joe, contact2, contact1, self.frank])
             self.assertEqual(
-                resp_json["results"][0],
                 {
                     "uuid": contact4.uuid,
                     "name": "Don",
@@ -1725,12 +1754,14 @@ class APITest(TembaTest):
                     "urns": ["tel:********"],
                     "groups": [{"uuid": group.uuid, "name": group.name}],
                     "fields": {"nickname": "Donnie", "gender": "male"},
+                    "flow": {"uuid": str(survey.uuid), "name": "Survey"},
                     "blocked": False,
                     "stopped": False,
                     "created_on": format_datetime(contact4.created_on),
                     "modified_on": format_datetime(contact4.modified_on),
                     "last_seen_on": "2020-08-12T13:30:45.123456Z",
                 },
+                resp_json["results"][0],
             )
 
         # filter by UUID
@@ -1769,7 +1800,6 @@ class APITest(TembaTest):
         response = self.fetchJSON(url, "deleted=true")
         self.assertResultsByUUID(response, [contact3])
         self.assertEqual(
-            response.json()["results"][0],
             {
                 "uuid": contact3.uuid,
                 "name": None,
@@ -1777,12 +1807,14 @@ class APITest(TembaTest):
                 "urns": [],
                 "groups": [],
                 "fields": {},
+                "flow": None,
                 "blocked": None,
                 "stopped": None,
                 "created_on": format_datetime(contact3.created_on),
                 "modified_on": format_datetime(contact3.modified_on),
                 "last_seen_on": None,
             },
+            response.json()["results"][0],
         )
 
         # try to post something other than an object
@@ -1796,7 +1828,6 @@ class APITest(TembaTest):
         empty = Contact.objects.get(name=None, is_active=True)
 
         self.assertEqual(
-            response.json(),
             {
                 "uuid": empty.uuid,
                 "name": None,
@@ -1804,12 +1835,14 @@ class APITest(TembaTest):
                 "urns": [],
                 "groups": [],
                 "fields": {"nickname": None, "gender": None},
+                "flow": None,
                 "blocked": False,
                 "stopped": False,
                 "created_on": format_datetime(empty.created_on),
                 "modified_on": format_datetime(empty.modified_on),
                 "last_seen_on": None,
             },
+            response.json(),
         )
 
         # create with all fields but empty
@@ -2609,12 +2642,11 @@ class APITest(TembaTest):
         reporting = FlowLabel.objects.create(org=self.org, name="Reporting")
         color.labels.add(reporting)
 
-        # make it look like joe completed a the color flow
+        # make it look like joe completed the color flow
         run = FlowRun.objects.create(org=self.org, flow=color, contact=self.joe)
-        run.exit_type = FlowRun.EXIT_TYPE_COMPLETED
+        run.status = FlowRun.STATUS_COMPLETED
         run.exited_on = timezone.now()
-        run.is_active = False
-        run.save(update_fields=("exit_type", "exited_on", "modified_on", "is_active"))
+        run.save(update_fields=("status", "exited_on", "modified_on"))
 
         # flow belong to other org
         self.create_flow(org=self.org2, name="Other")
@@ -2976,6 +3008,10 @@ class APITest(TembaTest):
         response = self.postJSON(url, None, {"name": "reporters"})
         self.assertResponseError(response, "name", "This field must be unique.")
 
+        # try to create another group with same name as a system group..
+        response = self.postJSON(url, "uuid=%s" % reporters.uuid, {"name": "blocked"})
+        self.assertResponseError(response, "name", "This field must be unique.")
+
         # it's fine if a group in another org has that name
         response = self.postJSON(url, None, {"name": "Spammers"})
         self.assertEqual(response.status_code, 201)
@@ -3222,7 +3258,7 @@ class APITest(TembaTest):
                 "archived": msg.visibility == "A",
                 "visibility": msg_visibility,
                 "text": msg.text,
-                "labels": [dict(name=l.name, uuid=l.uuid) for l in msg.labels.all()],
+                "labels": [{"name": lb.name, "uuid": lb.uuid} for lb in msg.labels.all()],
                 "attachments": [{"content_type": a.content_type, "url": a.url} for a in msg.get_attachments()],
                 "created_on": format_datetime(msg.created_on),
                 "sent_on": format_datetime(msg.sent_on),
@@ -3831,7 +3867,7 @@ class APITest(TembaTest):
         self.assertEqual(response.status_code, 204)
         self.assertEqual(set(Msg.objects.filter(visibility=Msg.VISIBILITY_VISIBLE)), {msg1})
         self.assertEqual(set(Msg.objects.filter(visibility=Msg.VISIBILITY_ARCHIVED)), {msg3})
-        self.assertFalse(Msg.objects.filter(id=msg2.id).exists())
+        self.assertEqual(set(Msg.objects.filter(visibility=Msg.VISIBILITY_DELETED_BY_USER)), {msg2})
 
         # try to act on a a valid message and a deleted message
         response = self.postJSON(url, None, {"messages": [msg2.id, msg3.id], "action": "restore"})
@@ -4060,7 +4096,7 @@ class APITest(TembaTest):
         self.assertEqual({self.joe}, set(start2.contacts.all()))
         self.assertEqual({hans_group}, set(start2.groups.all()))
         self.assertFalse(start2.restart_participants)
-        self.assertTrue(start2.extra, {"first_name": "Ryan", "last_name": "Lewis"})
+        self.assertEqual(start2.extra, {"first_name": "Ryan", "last_name": "Lewis"})
 
         # check we tried to start the new flow start
         mock_async_start.assert_called_once()
@@ -4090,7 +4126,7 @@ class APITest(TembaTest):
         self.assertEqual({hans_group}, set(start3.groups.all()))
         self.assertFalse(start3.restart_participants)
         self.assertTrue(start3.include_active)
-        self.assertTrue(start3.extra, {"first_name": "Bob", "last_name": "Marley"})
+        self.assertEqual(start3.extra, {"first_name": "Bob", "last_name": "Marley"})
 
         # check we tried to start the new flow start
         mock_async_start.assert_called_once()

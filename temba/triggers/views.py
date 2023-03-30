@@ -8,7 +8,7 @@ from django import forms
 from django.db.models import Min
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.utils.translation import ngettext_lazy, ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext_lazy
 from django.utils import timezone
 
 from temba.channels.models import Channel
@@ -17,7 +17,7 @@ from temba.contacts.search.omnibox import omnibox_serialize, omnibox_deserialize
 from temba.flows.models import Flow
 from temba.formax import FormaxMixin
 from temba.msgs.views import ModalMixin
-from temba.orgs.views import OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
+from temba.orgs.views import MenuMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
 from temba.schedules.models import Schedule
 from temba.utils.fields import (
     InputWidget,
@@ -26,7 +26,7 @@ from temba.utils.fields import (
     TembaChoiceField,
     TembaMultipleChoiceField,
 )
-from temba.utils.views import BulkActionMixin, ComponentFormMixin
+from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 from temba.utils import build_flow_parameters, analytics, flow_params_context, chunk_list
 from temba.utils.fields import CompletionTextarea, JSONField, OmniboxChoice
 
@@ -461,13 +461,64 @@ class TriggerCRUDL(SmartCRUDL):
         "create_closed_ticket",
         "update",
         "list",
+        "menu",
         "archived",
         "type",
         "create_large_send",
         "large_send_schedule_summary",
     )
 
-    class Create(FormaxMixin, OrgFilterMixin, OrgPermsMixin, SmartTemplateView):
+    class Menu(MenuMixin, SmartTemplateView):
+        @classmethod
+        def derive_url_pattern(cls, path, action):
+            return r"^%s/%s/((?P<submenu>[A-z]+)/)?$" % (path, action)
+
+        def derive_menu(self):
+
+            org = self.request.user.get_org()
+            menu = []
+
+            from .types import TYPES_BY_SLUG
+
+            org_triggers = org.triggers.filter(is_active=True, is_archived=False)
+
+            menu.append(
+                self.create_menu_item(
+                    name=_("Active"),
+                    count=org_triggers.count(),
+                    href=reverse("triggers.trigger_list"),
+                    icon="radio",
+                )
+            )
+
+            menu.append(
+                self.create_menu_item(
+                    menu_id="archived-triggers",
+                    name=_("Archived"),
+                    icon="archive",
+                    count=org_triggers.filter(is_archived=True).count(),
+                    href=reverse("triggers.trigger_archived"),
+                )
+            )
+
+            menu.append(self.create_menu_item(name=_("Create Trigger"), icon="plus", href="triggers.trigger_create"))
+
+            menu.append(self.create_divider())
+
+            for slug, trigger_type in TYPES_BY_SLUG.items():
+                count = org_triggers.filter(trigger_type=trigger_type.code).count()
+                if count:
+                    menu.append(
+                        self.create_menu_item(
+                            name=trigger_type.name,
+                            count=count,
+                            href=reverse("triggers.trigger_type", kwargs={"type": slug}),
+                        )
+                    )
+
+            return menu
+
+    class Create(SpaMixin, FormaxMixin, OrgFilterMixin, OrgPermsMixin, SmartTemplateView):
         title = _("Create Trigger")
 
         def derive_formax_sections(self, formax, context):
@@ -709,7 +760,7 @@ class TriggerCRUDL(SmartCRUDL):
             response["REDIRECT"] = self.get_success_url()
             return response
 
-    class BaseList(OrgFilterMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
+    class BaseList(SpaMixin, OrgFilterMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
         """
         Base class for list views
         """
@@ -776,7 +827,7 @@ class TriggerCRUDL(SmartCRUDL):
         """
 
         bulk_actions = ("archive",)
-        title = _("Triggers")
+        title = _("Active Triggers")
 
         def pre_process(self, request, *args, **kwargs):
             # if they have no triggers and no search performed, send them to create page

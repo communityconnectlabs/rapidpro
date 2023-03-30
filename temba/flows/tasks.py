@@ -4,21 +4,20 @@ import re
 import time
 import boto3
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-import iso8601
 import pytz
 import requests
 from django_redis import get_redis_connection
 
 from django.conf import settings
+from django.db.models import F
 from django.utils import timezone
 from django.utils.timesince import timesince
 
 from celery import shared_task
 from sorl.thumbnail import get_thumbnail
 
-from temba.orgs.models import Org
 from temba.utils import chunk_list
 from temba.utils.celery import nonoverlapping_task
 
@@ -29,7 +28,6 @@ from .models import (
     FlowCategoryCount,
     FlowNodeCount,
     FlowPathCount,
-    FlowPathRecentRun,
     FlowRevision,
     FlowRun,
     FlowRunCount,
@@ -44,28 +42,18 @@ FLOW_TIMEOUT_KEY = "flow_timeouts_%y_%m_%d"
 logger = logging.getLogger(__name__)
 
 
-@shared_task(track_started=True, name="send_email_action_task")
-def send_email_action_task(org_id, recipients, subject, message):
-    org = Org.objects.filter(pk=org_id, is_active=True).first()
-    if org:
-        org.email_action_send(recipients, subject, message)
-
-
-@shared_task(track_started=True, name="update_run_expirations_task")
-def update_run_expirations_task(flow_id):
+@shared_task(track_started=True, name="update_session_wait_expires")
+def update_session_wait_expires(flow_id):
     """
-    Update all of our current run expirations according to our new expiration period
+    Update the wait_expires_on of any session currently waiting in the given flow
     """
-    for run in FlowRun.objects.filter(flow_id=flow_id, is_active=True):
-        if run.path:
-            last_arrived_on = iso8601.parse_date(run.path[-1]["arrived_on"])
-            run.update_expiration(last_arrived_on)
 
+    flow = Flow.objects.get(id=flow_id)
+    session_ids = flow.sessions.filter(status=FlowSession.STATUS_WAITING).values_list("id", flat=True)
 
-@shared_task(track_started=True, name="interrupt_flow_runs_task")
-def interrupt_flow_runs_task(flow_id):
-    runs = FlowRun.objects.filter(is_active=True, exit_type=None, flow_id=flow_id)
-    FlowRun.bulk_exit(runs, FlowRun.EXIT_TYPE_INTERRUPTED)
+    for id_batch in chunk_list(session_ids, 1000):
+        batch = FlowSession.objects.filter(id__in=id_batch)
+        batch.update(wait_expires_on=F("wait_started_on") + timedelta(minutes=flow.expires_after_minutes))
 
 
 @shared_task(track_started=True, name="export_flow_results_task")
@@ -91,7 +79,6 @@ def squash_flowcounts():
     FlowNodeCount.squash()
     FlowRunCount.squash()
     FlowCategoryCount.squash()
-    FlowPathRecentRun.prune()
     FlowStartCount.squash()
     FlowPathCount.squash()
 

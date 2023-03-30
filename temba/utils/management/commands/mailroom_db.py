@@ -37,12 +37,14 @@ RESET_SEQUENCES = (
     "contacts_contacturn_id_seq",
     "contacts_contactgroup_id_seq",
     "flows_flow_id_seq",
+    "flows_flowrevision_id_seq",
     "channels_channel_id_seq",
     "campaigns_campaign_id_seq",
     "campaigns_campaignevent_id_seq",
     "msgs_label_id_seq",
     "templates_template_id_seq",
     "templates_templatetranslation_id_seq",
+    "triggers_trigger_id_seq",
 )
 
 
@@ -57,11 +59,11 @@ class Command(BaseCommand):
 
         result = subprocess.run(["pg_dump", "--version"], stdout=subprocess.PIPE)
         version = result.stdout.decode("utf8")
-        if version.split(" ")[-1].find("11.") == 0:
+        if version.split(" ")[-1].find("12.") == 0:
             self._log(self.style.SUCCESS("OK") + "\n")
         else:
             self._log(
-                "\n" + self.style.ERROR("Incorrect pg_dump version, needs version 11.*, found: " + version) + "\n"
+                "\n" + self.style.ERROR("Incorrect pg_dump version, needs version 12.*, found: " + version) + "\n"
             )
             sys.exit(1)
 
@@ -302,8 +304,8 @@ class Command(BaseCommand):
     def create_labels(self, spec, org, user):
         self._log(f"Creating {len(spec['labels'])} labels... ")
 
-        for l in spec["labels"]:
-            Label.label_objects.create(org=org, name=l["name"], uuid=l["uuid"], created_by=user, modified_by=user)
+        for lb in spec["labels"]:
+            Label.label_objects.create(org=org, name=lb["name"], uuid=lb["uuid"], created_by=user, modified_by=user)
 
         self._log(self.style.SUCCESS("OK") + "\n")
 
@@ -348,6 +350,7 @@ class Command(BaseCommand):
                         e["offset_unit"],
                         flow,
                         delivery_hour=e.get("delivery_hour", -1),
+                        start_mode=e["start_mode"],
                     )
                 else:
                     evt = CampaignEvent.create_message_event(
@@ -360,6 +363,7 @@ class Command(BaseCommand):
                         e["message"],
                         delivery_hour=e.get("delivery_hour", -1),
                         base_language=e["base_language"],
+                        start_mode=e["start_mode"],
                     )
                     evt.flow.uuid = e["uuid"]
                     evt.flow.save()
@@ -404,7 +408,7 @@ class Command(BaseCommand):
         self._log(self.style.SUCCESS("OK") + "\n")
 
     def create_group_contacts(self, spec, org, user):
-        self._log(f"Generating group contacts...")
+        self._log("Generating group contacts...")
 
         for g in spec["groups"]:
             size = int(g.get("size", 0))
