@@ -1,7 +1,7 @@
 import sqlparse
 
 from django.db.models import Q, QuerySet
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from sqlparse.exceptions import SQLParseError
 
 from temba.utils.text import slugify_with

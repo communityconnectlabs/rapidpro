@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 
 from django.contrib.postgres.aggregates import ArrayAgg
-from django.contrib.postgres.fields.jsonb import KeyTextTransform
+from django.db.models.fields.json import KeyTextTransform
 from django.db import models
 from django.db.models.functions import Cast, Greatest
 

@@ -7,7 +7,7 @@ from django.db import models
 from django.template import Engine
 from django.urls import re_path
 from django.utils import timezone
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import on_transaction_commit

@@ -1,4 +1,4 @@
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from temba.tickets.models import TicketerType
 from temba.tickets.types.twilioflex.views import ConnectView
@@ -21,7 +21,7 @@ class TwilioFlexType(TicketerType):
 
     connect_view = ConnectView
     connect_blurb = _(
-        f"%(link)s is the world’s most flexible contact center platform and can be connected as ticket service."
+        "%(link)s is the world’s most flexible contact center platform and can be connected as ticket service."
     ) % {"link": '<a href="https://www.twilio.com/flex">Twilio Flex</a>'}
 
     def is_available_to(self, user):

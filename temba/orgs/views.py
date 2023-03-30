@@ -53,7 +53,7 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse, Http40
 from django.shortcuts import resolve_url
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.utils.encoding import DjangoUnicodeDecodeError, force_str, force_text
+from django.utils.encoding import DjangoUnicodeDecodeError, force_str
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
@@ -1396,7 +1396,7 @@ class OrgCRUDL(SmartCRUDL):
                     # handling exception for ISO-8859-1 encoding
                     try:
                         data = data.decode("ISO-8859-1")
-                        json_data = json.loads(force_text(data))
+                        json_data = json.loads(force_str(data))
                     except (DjangoUnicodeDecodeError, ValueError):
                         raise ValidationError(_("This file is not a valid flow definition file."))
                 except (DjangoUnicodeDecodeError, ValueError):

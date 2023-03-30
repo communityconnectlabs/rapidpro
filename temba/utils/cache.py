@@ -1,6 +1,6 @@
 from django_redis import get_redis_connection
 
-from django.utils.encoding import force_str, force_text
+from django.utils.encoding import force_str
 
 from temba.utils import json
 
@@ -75,7 +75,7 @@ class redis_cached_property:
         cache_key = f"{owner.__name__}__{self.callable.__name__}__{hash(instance)}".lower()
         cached = r.get(cache_key)
         if cached is not None:
-            return json.loads(force_text(cached), object_hook=json.decode_datetime)
+            return json.loads(force_str(cached), object_hook=json.decode_datetime)
 
         result = self.callable(instance)
         r.set(cache_key, json.dumps(result), ex=4000)
