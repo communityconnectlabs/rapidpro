@@ -5006,7 +5006,7 @@ class ContactsReportEndpoint(BaseAPIView, ReportEndpointMixin):
     @csv_response_wrapper
     def get(self, request, *args, **kwargs):
         try:
-            contacts = self.get_contacts_qs().only("modified_on").using("read_only_db")
+            contacts = self.get_contacts_qs().only("modified_on").using("readonly")
             current_page, next_page = self.get_paginated_queryset(contacts)
             next_page = self.update_next_page_with_cache_uuid(next_page)
             count = len(current_page)
@@ -5159,7 +5159,7 @@ class ContactVariablesReportEndpoint(BaseAPIView, ReportEndpointMixin):
         org = self.request.user.get_org()
         counts = defaultdict(lambda: Counter())
         try:
-            contacts = self.get_contacts_qs().using("read_only_db")
+            contacts = self.get_contacts_qs().using("readonly")
         except SearchException as e:
             return Response({"error": e.message}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -5167,7 +5167,7 @@ class ContactVariablesReportEndpoint(BaseAPIView, ReportEndpointMixin):
 
         requested_variables = self.request.GET.get("variables", self.request.data.get("variables"))
         existing_variables = dict(
-            ContactField.user_fields.using("read_only_db").filter(org=org).values_list("key", "uuid")
+            ContactField.user_fields.using("readonly").filter(org=org).values_list("key", "uuid")
         )
         variable_filters = {}
         top_ordering = {}
@@ -5323,7 +5323,7 @@ class MessagesReportEndpoint(BaseAPIView, ReportEndpointMixin):
             FlowRun.objects.filter(self.get_datetime_filters("", "exited_on", org), flow_id=flow.id)
             .exclude(status__in=[FlowRun.STATUS_ACTIVE, FlowRun.STATUS_WAITING])
             .only("events", "modified_on")
-            .using("read_only_db")
+            .using("readonly")
         )
         self.configure_paginator_for_flow_runs(flow)
         runs, next_page = self.get_paginated_queryset(runs)
@@ -5338,7 +5338,7 @@ class MessagesReportEndpoint(BaseAPIView, ReportEndpointMixin):
 
         # filter messages by uuids
         qs = qs.filter(uuid__in=messages_uuids) if messages_uuids else Msg.objects.none()
-        qs = qs.only("created_on", "direction", "status").using("read_only_db")
+        qs = qs.only("created_on", "direction", "status").using("readonly")
         qs = qs[: len(messages_uuids)]
         return qs, next_page
 
@@ -5374,7 +5374,7 @@ class MessagesReportEndpoint(BaseAPIView, ReportEndpointMixin):
     @csv_response_wrapper
     def get(self, request, *args, **kwargs):
         org = self.request.user.get_org()
-        queryset = Msg.objects.filter(org__id=org.id).using("read_only_db").order_by("-created_on", "-id")
+        queryset = Msg.objects.filter(org__id=org.id).using("readonly").order_by("-created_on", "-id")
         self.applied_filters, arg_filters = {}, []
 
         arg_filters.append(self.get_name_uuid_filters("exclude", "contact__all_groups", exclude=True))
@@ -5386,7 +5386,7 @@ class MessagesReportEndpoint(BaseAPIView, ReportEndpointMixin):
         try:
             flow__uuid = self.get_query_parameter("flow")
             if flow__uuid:
-                flow = Flow.objects.using("read_only_db").get(org__id=org.id, uuid=flow__uuid)
+                flow = Flow.objects.using("readonly").get(org__id=org.id, uuid=flow__uuid)
                 current_page, next_page = self.filter_and_paginate_qs_by_flow(org, flow, queryset)
             else:
                 current_page, next_page = self.get_paginated_queryset(queryset)
@@ -5449,10 +5449,10 @@ class FlowReportFiltersMixin(ReportEndpointMixin):
 
     def get_runs(self, with_flow=False) -> QuerySet:
         org = self.request.user.get_org()
-        flow = Flow.objects.using("read_only_db").get(org__id=org.id, uuid=self.get_query_parameter("flow"))
+        flow = Flow.objects.using("readonly").get(org__id=org.id, uuid=self.get_query_parameter("flow"))
 
         self.applied_filters = {"flow": flow.uuid}
-        queryset = FlowRun.objects.filter(flow_id=flow.id).using("read_only_db")
+        queryset = FlowRun.objects.filter(flow_id=flow.id).using("readonly")
 
         if {"channel", "exclude", "group"}.intersection(
             [*self.request.query_params.keys(), *self.request.data.keys()]
@@ -5883,7 +5883,7 @@ class TrackableLinkReportEndpoint(BaseAPIView, ReportEndpointMixin):
         self.applied_filters = {}
         org = self.request.user.get_org()
         link_filter = self.get_name_uuid_filters("link", key="")
-        link = Link.objects.using("read_only_db").filter(link_filter, org__id=org.id).first()
+        link = Link.objects.using("readonly").filter(link_filter, org__id=org.id).first()
         if link is None:
             errors = {
                 status.HTTP_400_BAD_REQUEST: _("Parameter 'link_name' is not provider."),
@@ -5898,7 +5898,7 @@ class TrackableLinkReportEndpoint(BaseAPIView, ReportEndpointMixin):
         time_filters = self.get_datetime_filters("", "modified_on", org)
 
         total_clicks_query = (
-            LinkContacts.objects.using("read_only_db")
+            LinkContacts.objects.using("readonly")
             .only("id")
             .filter(link_id=link.id)
             .filter(time_filters)
