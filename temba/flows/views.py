@@ -427,7 +427,7 @@ class FlowImageCRUDL(SmartCRUDL):
                 export = ExportFlowImagesTask.create(org, user, files=objects_list)
                 on_transaction_commit(lambda: download_flow_images_task.delay(export.pk))
 
-                if not getattr(settings, "CELERY_ALWAYS_EAGER", False):  # pragma: needs cover
+                if not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):  # pragma: needs cover
                     messages.info(
                         self.request,
                         _("We are preparing your download file. We will e-mail you at %s when it is ready.")

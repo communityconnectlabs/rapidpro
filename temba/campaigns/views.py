@@ -165,14 +165,6 @@ class CampaignCRUDL(SmartCRUDL):
                         )
                     )
 
-                if self.has_org_perm("orgs.org_export"):
-                    links.append(
-                        dict(
-                            title=_("Export"),
-                            href=f"{reverse('orgs.org_export')}?campaign={self.object.id}&archived=1",
-                        )
-                    )
-
             else:
                 if self.has_org_perm("campaigns.campaignevent_create"):
                     links.append(

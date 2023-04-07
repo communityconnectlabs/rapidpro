@@ -280,7 +280,7 @@ class LinkCRUDL(SmartCRUDL):
 
                 on_transaction_commit(lambda: export_link_task.delay(export.pk))
 
-                if not getattr(settings, "CELERY_ALWAYS_EAGER", False):  # pragma: no cover
+                if not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):  # pragma: no cover
                     messages.info(
                         self.request,
                         _(

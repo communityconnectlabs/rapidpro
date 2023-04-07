@@ -664,6 +664,7 @@ class OrgDeleteTest(TembaNonAtomicTest):
             responded_only=True,
             extra_urns=(),
             group_memberships=(),
+            extra_queries={},
         )
         Notification.export_finished(export)
         ExportFlowResultsTask.create(
@@ -674,6 +675,7 @@ class OrgDeleteTest(TembaNonAtomicTest):
             responded_only=True,
             extra_urns=(),
             group_memberships=(),
+            extra_queries={},
         )
 
         export = ExportContactsTask.create(self.parent_org, self.admin, group=parent_group)

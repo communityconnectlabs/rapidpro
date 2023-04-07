@@ -126,7 +126,6 @@ _readonly_database_config["DISABLE_SERVER_SIDE_CURSORS"] = True
 DATABASES = {
     "default": _default_database_config,
     "direct": _direct_database_config,
-    "read_only_db": _readonly_database_config,
     "readonly": _readonly_database_config,
 }
 
@@ -134,7 +133,7 @@ INTERNAL_IPS = ("*",)
 
 MIDDLEWARE = ("temba.middleware.ExceptionMiddleware",) + MIDDLEWARE
 
-CELERY_ALWAYS_EAGER = False
+CELERY_TASK_ALWAYS_EAGER = False
 CELERY_EAGER_PROPAGATES_EXCEPTIONS = True
 BROKER_BACKEND = "redis"
 

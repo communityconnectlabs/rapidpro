@@ -18,5 +18,4 @@ _default_database_config = {
 DATABASES = {
     "default": _default_database_config,
     "readonly": _default_database_config.copy(),
-    "read_only_db": _default_database_config.copy(),
 }

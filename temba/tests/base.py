@@ -37,7 +37,7 @@ def add_testing_flag_to_context(*args):
 
 
 class TembaTestMixin:
-    databases = ("default", "readonly", "read_only_db")
+    databases = ("default", "readonly")
 
     @override_settings(CREDITS_EXPIRATION=True)
     def setUpOrgs(self):

@@ -819,6 +819,7 @@ class ContactGroupTest(TembaTest):
         # start with no contacts
         for contact in Contact.objects.all():
             contact.release(self.admin)
+            contact.urns.all().delete()
             contact.delete()
 
         counts = ContactGroup.get_system_group_counts(self.org)

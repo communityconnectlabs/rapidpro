@@ -314,5 +314,5 @@ class Migration(migrations.Migration):
             ],
             options={"abstract": False},
         ),
-        migrations.RunPython(code=recheck_origin_uuids_and_update_path_counts),
+        # migrations.RunPython(code=recheck_origin_uuids_and_update_path_counts),
     ]
