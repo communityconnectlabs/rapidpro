@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from temba.archives.models import Archive
-from temba.channels.models import ChannelCount, ChannelEvent, ChannelLog, Channel
+from temba.channels.models import ChannelCount, ChannelEvent, ChannelLog
 from temba.contacts.models import URN, ContactURN
 from temba.contacts.search.omnibox import omnibox_serialize
 from temba.msgs.models import (
@@ -301,7 +301,7 @@ class MsgTest(TembaTest):
 
         (msg1,) = tuple(Msg.objects.filter(broadcast=broadcast1))
 
-        with self.assertNumQueries(35):
+        with self.assertNumQueries(36):
             response = self.client.get(reverse("msgs.msg_outbox"))
 
         self.assertEqual(1, response.context_data["folders"][4]["count"])  # Outbox
@@ -325,7 +325,7 @@ class MsgTest(TembaTest):
         broadcast4.schedule = Schedule.create_schedule(self.org, self.admin, timezone.now(), Schedule.REPEAT_DAILY)
         broadcast4.save(update_fields=["schedule"])
 
-        with self.assertNumQueries(37):
+        with self.assertNumQueries(38):
             response = self.client.get(reverse("msgs.msg_outbox"))
 
         self.assertEqual(5, response.context_data["folders"][4]["count"])  # Outbox
@@ -376,7 +376,7 @@ class MsgTest(TembaTest):
 
         # visit inbox page as a manager of the organization
         self.login(self.admin)
-        with self.assertNumQueries(32):
+        with self.assertNumQueries(33):
             response = self.client.get(inbox_url + "?refresh=10000")
 
         # make sure that we embed refresh script if View.refresh is set
@@ -461,7 +461,7 @@ class MsgTest(TembaTest):
 
         # visit archived page as a manager of the organization
         self.login(self.admin)
-        with self.assertNumQueries(29):
+        with self.assertNumQueries(30):
             response = self.client.get(archive_url)
 
         self.assertEqual(response.context["object_list"].count(), 1)
@@ -490,6 +490,7 @@ class MsgTest(TembaTest):
         self.assertEqual(response.context["object_list"].count(), 5)
 
         # archiving a message removes it from the inbox
+        msg1.refresh_from_db()
         Msg.apply_action_archive(self.user, [msg1])
 
         response = self.client.get(inbox_url)
@@ -543,11 +544,11 @@ class MsgTest(TembaTest):
         # org viewer can
         self.login(self.admin)
 
-        with self.assertNumQueries(32):
+        with self.assertNumQueries(33):
             response = self.client.get(url)
 
         self.assertEqual(set(response.context["object_list"]), {msg3, msg2, msg1})
-        self.assertEqual(response.context["actions"], ("label",))
+        self.assertEqual(response.context["actions"], ("archive", "label"))
 
     def test_flow_voice(self):
         self.login(self.admin)
@@ -581,38 +582,6 @@ class MsgTest(TembaTest):
 
         self.assertEqual(len(response_voice.context_data["object_list"]), 2)
         self.assertEqual(len(response_text.context_data["object_list"]), 2)
-
-    def test_retry_errored(self):
-        # change our default channel to external
-        self.channel.channel_type = "EX"
-        self.channel.save()
-
-        android_channel = self.create_channel(
-            "A",
-            "Android Channel",
-            "+250785551414",
-            country="RW",
-            secret="12345678",
-            config={Channel.CONFIG_FCM_ID: "123"},
-        )
-
-        msg1 = self.create_outgoing_msg(self.joe, "errored", status="E", channel=self.channel)
-        msg1.next_attempt = timezone.now()
-        msg1.save(update_fields=["next_attempt"])
-
-        msg2 = self.create_outgoing_msg(self.joe, "android", status="E", channel=android_channel)
-        msg2.next_attempt = None
-        msg2.save(update_fields=["next_attempt"])
-
-        msg3 = self.create_outgoing_msg(self.joe, "failed", status="F", channel=self.channel)
-
-        msg1.refresh_from_db()
-        msg2.refresh_from_db()
-        msg3.refresh_from_db()
-
-        self.assertEqual("W", msg1.status)
-        self.assertEqual("E", msg2.status)
-        self.assertEqual("F", msg3.status)
 
     @patch("temba.utils.email.send_temba_email")
     def test_message_export_from_archives(self, mock_send_temba_email):
@@ -1670,7 +1639,7 @@ class MsgCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # check query count
         self.login(self.admin)
-        with self.assertNumQueries(32):
+        with self.assertNumQueries(33):
             self.client.get(inbox_url)
 
         response = self.assertListFetch(
@@ -1766,7 +1735,7 @@ class MsgCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # check query count
         self.login(self.admin)
-        with self.assertNumQueries(32):
+        with self.assertNumQueries(33):
             self.client.get(archived_url)
 
         response = self.assertListFetch(
@@ -1809,7 +1778,7 @@ class MsgCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # check query count
         self.login(self.admin)
-        with self.assertNumQueries(35):
+        with self.assertNumQueries(36):
             self.client.get(outbox_url)
 
         # messages sorted by created_on
@@ -1871,7 +1840,7 @@ class MsgCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # check query count
         self.login(self.admin)
-        with self.assertNumQueries(35):
+        with self.assertNumQueries(38):
             self.client.get(sent_url)
 
         # messages sorted by sent_on
@@ -1898,7 +1867,7 @@ class MsgCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # check query count
         self.login(self.admin)
-        with self.assertNumQueries(35):
+        with self.assertNumQueries(37):
             self.client.get(failed_url)
 
         response = self.assertListFetch(

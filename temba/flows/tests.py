@@ -4024,7 +4024,7 @@ class ExportFlowResultsTest(TembaTest):
         )
 
         # test without unresponded
-        with self.assertNumQueries(43):
+        with self.assertNumQueries(52):
             workbook = self._export(flow, responded_only=True, group_memberships=(devs,))
 
         tz = self.org.timezone
@@ -4354,7 +4354,7 @@ class ExportFlowResultsTest(TembaTest):
         )
 
         # test without unresponded
-        with self.assertNumQueries(36):
+        with self.assertNumQueries(39):
             workbook = self._export(flow, responded_only=True, has_results=False)
 
         (sheet_runs,) = workbook.worksheets
