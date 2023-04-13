@@ -1,13 +1,13 @@
 from django.conf import settings
 from django.conf.urls import include
 from django.conf.urls.static import static
+from django.shortcuts import render
 from django.urls import re_path
 from django.views.generic import RedirectView
 from django.views.i18n import JavaScriptCatalog
 
 from temba.channels.views import register, sync
 from temba.utils.s3.views import PrivateFileCallbackView
-from django.shortcuts import render
 
 # javascript translation packages
 js_info_dict = {"packages": ()}  # this is empty due to the fact that all translation are in one folder
