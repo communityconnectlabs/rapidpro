@@ -698,15 +698,15 @@ class CampaignEventCRUDL(SmartCRUDL):
                     )
                 )
 
-                if self.has_org_perm("campaigns.campaignevent_delete"):
-                    links.append(
-                        dict(
-                            id="event-delete",
-                            title="Delete",
-                            href=reverse("campaigns.campaignevent_delete", args=[campaign_event.id]),
-                            modax=_("Delete Event"),
-                        )
+            if self.has_org_perm("campaigns.campaignevent_delete"):
+                links.append(
+                    dict(
+                        id="event-delete",
+                        title="Delete",
+                        href=reverse("campaigns.campaignevent_delete", args=[campaign_event.id]),
+                        modax=_("Delete Event"),
                     )
+                )
 
             return links
 
