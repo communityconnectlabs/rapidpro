@@ -1,12 +1,12 @@
 # flake8: noqa
+from .helpers import serialized_test_data
 from .merging import Graph, GraphDifferenceMap, Node
 from .serializers import (
-    NodeSerializer,
-    GraphSerializer,
-    DiffNodeSerializer,
     DiffGraphSerializer,
-    serialize_difference_graph,
-    deserialize_difference_graph,
+    DiffNodeSerializer,
+    GraphSerializer,
+    NodeSerializer,
     deserialize_dict_param_from_request,
+    deserialize_difference_graph,
+    serialize_difference_graph,
 )
-from .helpers import serialized_test_data

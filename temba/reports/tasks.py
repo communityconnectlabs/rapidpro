@@ -1,14 +1,16 @@
 import logging
+
 import psycopg2
-from celery import shared_task
 
 from django import db
-from django.db.models import Max, F, Q
+from django.db.models import F, Max, Q
 from django.db.models.functions import Greatest
 from django.utils.timezone import now as tz_now
 
-from .models import DataCollectionProcess, CollectedFlowResultsData
+from celery import shared_task
+
 from ..orgs.models import Org
+from .models import CollectedFlowResultsData, DataCollectionProcess
 
 logger = logging.getLogger(__name__)
 

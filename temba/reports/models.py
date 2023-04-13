@@ -1,17 +1,17 @@
 import json
 from collections import defaultdict
 
-from django.contrib.postgres.aggregates import ArrayAgg
-from django.db.models.fields.json import KeyTextTransform
-from django.db import models
-from django.db.models.functions import Cast, Greatest
-
 from smartmin.models import SmartModel
 
 from django.conf import settings
+from django.contrib.postgres.aggregates import ArrayAgg
+from django.db import models
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Cast, Greatest
+
 from temba.flows.models import Flow, FlowRun
-from temba.utils.models import JSONField
 from temba.orgs.models import Org
+from temba.utils.models import JSONField
 
 
 class Report(SmartModel):

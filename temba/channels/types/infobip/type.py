@@ -1,7 +1,7 @@
 from django.utils.translation import gettext_lazy as _
 
-from temba.contacts.models import URN
 from temba.channels.types.infobip.views import ClaimView
+from temba.contacts.models import URN
 
 from ...models import ChannelType
 

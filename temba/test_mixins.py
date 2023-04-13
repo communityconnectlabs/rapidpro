@@ -1,5 +1,5 @@
-from django.views.generic import TemplateView
 from django.test.client import RequestFactory
+from django.views.generic import TemplateView
 
 from temba.contacts.models import ContactGroup
 from temba.mixins import NotFoundRedirectMixin

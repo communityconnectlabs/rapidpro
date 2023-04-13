@@ -1,7 +1,7 @@
 import pickle
 
-from temba.flows.merging import Node, Graph
-from temba.flows.merging.helpers import get_flow_step_name, actions_names, get_flow_step_type
+from temba.flows.merging import Graph, Node
+from temba.flows.merging.helpers import actions_names, get_flow_step_name, get_flow_step_type
 from temba.flows.merging.merging import GraphDifferenceNode
 from temba.tests import TembaTest
 

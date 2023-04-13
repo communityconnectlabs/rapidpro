@@ -176,8 +176,9 @@ def flow_params_context(request):
 
 
 def get_image_size(logo_img):
-    from temba.orgs.models import Org
     from PIL import Image
+
+    from temba.orgs.models import Org
 
     try:
         # if using S3 as file storage

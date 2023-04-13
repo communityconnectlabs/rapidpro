@@ -4,9 +4,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from temba.tests import TembaTest
-from .models import Report, DataCollectionProcess, CollectedFlowResultsData, DataCollectionProcessConfig
-from .tasks import automatically_collect_flow_results_data, manually_collect_flow_results_data
+
 from ..flows.models import Flow
+from .models import CollectedFlowResultsData, DataCollectionProcess, DataCollectionProcessConfig, Report
+from .tasks import automatically_collect_flow_results_data, manually_collect_flow_results_data
 
 
 class ReportTest(TembaTest):

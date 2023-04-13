@@ -7,8 +7,8 @@ from .views import (
     FlowRunCRUDL,
     FlowSessionCRUDL,
     FlowStartCRUDL,
-    PartialTemplate,
     FlowTemplateCRUDL,
+    PartialTemplate,
 )
 
 urlpatterns = FlowCRUDL().as_urlpatterns()

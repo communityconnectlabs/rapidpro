@@ -5,9 +5,9 @@ import boto3
 from botocore.client import Config
 from storages.backends.s3boto3 import S3Boto3Storage
 
-from django.urls import reverse
 from django.conf import settings
 from django.core.files.storage import DefaultStorage
+from django.urls import reverse
 
 from temba.utils import json
 

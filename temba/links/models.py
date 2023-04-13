@@ -1,16 +1,15 @@
 import re
 import time
-
 from itertools import chain
+
+from jellyfish import jaro_distance
+from smartmin.models import SmartModel
 
 from django.conf import settings
 from django.db import models
 from django.db.models.functions import Length
-from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
-
-from jellyfish import jaro_distance
-from smartmin.models import SmartModel
+from django.utils.translation import gettext_lazy as _
 
 from temba.assets.models import register_asset_store
 from temba.contacts.models import Contact
@@ -18,10 +17,9 @@ from temba.contacts.search import SearchException
 from temba.orgs.models import Org
 from temba.utils import chunk_list
 from temba.utils.dates import datetime_to_str
-from temba.utils.models import TembaModel, URLTextField
 from temba.utils.export import BaseExportAssetStore, BaseExportTask, TableExporter
+from temba.utils.models import TembaModel, URLTextField
 from temba.utils.text import clean_string
-
 
 MAX_HISTORY = 50
 

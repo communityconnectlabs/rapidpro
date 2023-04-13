@@ -1,29 +1,28 @@
 import logging
 import socket
-
 from datetime import timedelta
+
+from smartmin.views import SmartCreateView, SmartCRUDL, SmartListView, SmartReadView, SmartUpdateView
 
 from django import forms
 from django.conf import settings
-from django.urls import reverse
 from django.contrib import messages
-from django.views.generic import RedirectView
+from django.http import HttpResponseRedirect, JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.http import JsonResponse, HttpResponseRedirect
+from django.views.generic import RedirectView
 
-from smartmin.views import SmartCRUDL, SmartCreateView, SmartListView, SmartUpdateView, SmartReadView
-
-from temba.utils import analytics, on_transaction_commit
-from temba.utils.dates import datetime_to_timestamp, timestamp_to_datetime
-from temba.orgs.views import OrgPermsMixin, OrgObjPermsMixin, ModalMixin
 from temba.contacts.models import Contact
 from temba.flows.models import Flow
+from temba.orgs.views import ModalMixin, OrgObjPermsMixin, OrgPermsMixin
+from temba.utils import analytics, on_transaction_commit
+from temba.utils.dates import datetime_to_timestamp, timestamp_to_datetime
 
-from .models import Link, ExportLinksTask
-from .tasks import export_link_task
-from ..utils.fields import SelectWidget, InputWidget
+from ..utils.fields import InputWidget, SelectWidget
 from ..utils.views import BulkActionMixin
+from .models import ExportLinksTask, Link
+from .tasks import export_link_task
 
 logger = logging.getLogger(__name__)
 
@@ -363,6 +362,7 @@ class LinkCRUDL(SmartCRUDL):
 class LinkHandler(RedirectView):
     def get_redirect_url(self, *args, **kwargs):
         from user_agents import parse
+
         from .tasks import handle_link_task
 
         link = Link.objects.filter(uuid=self.kwargs.get("uuid")).only("id", "destination").first()

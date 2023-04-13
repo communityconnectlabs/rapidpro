@@ -42,10 +42,10 @@ from temba.tickets.types.zendesk import ZendeskType
 from temba.triggers.models import Trigger
 from temba.utils import json
 
+from ...tests.twilio import MockTwilioClient
 from . import fields
 from .serializers import format_datetime, normalize_extra
 from .validators import is_uuid_valid
-from ...tests.twilio import MockTwilioClient
 
 NUM_BASE_REQUEST_QUERIES = 6  # number of db queries required for any API request
 

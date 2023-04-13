@@ -1,13 +1,13 @@
 import logging
 
-from django.db.models import IntegerField, Case, Count, When, Q
+from django.db.models import Case, Count, IntegerField, Q, When
 
 from celery import shared_task
 
 from temba.utils import analytics
 from temba.utils.celery import nonoverlapping_task
 
-from .models import Broadcast, BroadcastMsgCount, ExportMessagesTask, LabelCount, Msg, SystemLabelCount, SystemLabel
+from .models import Broadcast, BroadcastMsgCount, ExportMessagesTask, LabelCount, Msg, SystemLabel, SystemLabelCount
 
 logger = logging.getLogger(__name__)
 

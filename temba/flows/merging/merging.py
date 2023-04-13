@@ -1,6 +1,6 @@
 import math
+from collections import Counter, OrderedDict, defaultdict
 
-from collections import OrderedDict, Counter, defaultdict
 from jellyfish import jaro_similarity
 
 from .helpers import get_flow_step_name, get_flow_step_type

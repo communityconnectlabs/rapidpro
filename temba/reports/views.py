@@ -3,19 +3,22 @@ import traceback
 from itertools import groupby
 
 import requests
+from rest_framework import status
+from rest_framework.response import Response as APIResponse
+from rest_framework.views import APIView
+from smartmin.views import SmartCRUDL, SmartTemplateView
+
+from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.exceptions import ObjectDoesNotExist
-from django.conf import settings
 from django.db.models import F
 from django.utils.timezone import now as tz_now
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response as APIResponse
-from smartmin.views import SmartCRUDL, SmartTemplateView
+
 from temba.orgs.views import OrgPermsMixin
-from .models import Report, DataCollectionProcess, DataCollectionProcessConfig
+
 from ..contacts.models import ContactGroup
 from ..flows.models import Flow, FlowRunCount
+from .models import DataCollectionProcess, DataCollectionProcessConfig, Report
 
 
 class ReportCRUDL(SmartCRUDL):

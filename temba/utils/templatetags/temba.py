@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 import iso8601
 import pytz
@@ -10,7 +10,7 @@ from django.template import TemplateSyntaxError
 from django.template.defaultfilters import register
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escapejs, escape, strip_tags
+from django.utils.html import escape, escapejs, strip_tags
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _, ngettext_lazy
 

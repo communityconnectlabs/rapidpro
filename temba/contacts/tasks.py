@@ -1,12 +1,12 @@
 import io
 import json
 import logging
-import requests
-import pandas as pd
 from datetime import timedelta
 
 import iso8601
+import pandas as pd
 import pytz
+import requests
 
 from django.conf import settings
 from django.contrib.auth.models import User

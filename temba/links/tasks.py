@@ -3,7 +3,8 @@ import logging
 from celery import shared_task
 
 from temba.flows.models import Flow
-from .models import Link, LinkContacts, ExportLinksTask
+
+from .models import ExportLinksTask, Link, LinkContacts
 
 logger = logging.getLogger(__name__)
 

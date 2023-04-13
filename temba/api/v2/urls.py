@@ -2,7 +2,7 @@ from rest_framework.urlpatterns import format_suffix_patterns
 
 from django.urls import re_path
 
-from .views import (
+from .views import (  # reporting endpoints
     ArchivesEndpoint,
     AuthenticateView,
     BoundariesEndpoint,
@@ -14,17 +14,26 @@ from .views import (
     ClassifiersEndpoint,
     ContactActionsEndpoint,
     ContactsEndpoint,
+    ContactsReportEndpoint,
+    ContactVariablesReportEndpoint,
     DefinitionsEndpoint,
     ExplorerView,
     FieldsEndpoint,
+    FlowReportEndpoint,
     FlowsEndpoint,
     FlowStartsEndpoint,
+    FlowVariableReportEndpoint,
     GlobalsEndpoint,
     GroupsEndpoint,
     LabelsEndpoint,
     MediaEndpoint,
     MessageActionsEndpoint,
     MessagesEndpoint,
+    MessagesReportEndpoint,
+    ParseDatabaseEndpoint,
+    ParseDatabaseRecordsEndpoint,
+    PhoneValidationEndpoint,
+    ReplaceAccentedCharsEndpoint,
     ResthookEventsEndpoint,
     ResthooksEndpoint,
     ResthookSubscribersEndpoint,
@@ -35,21 +44,11 @@ from .views import (
     TicketersEndpoint,
     TicketsEndpoint,
     TopicsEndpoint,
-    UsersEndpoint,
-    WorkspaceEndpoint,
-    ParseDatabaseEndpoint,
-    ParseDatabaseRecordsEndpoint,
-    # reporting endpoints
-    ContactsReportEndpoint,
-    MessagesReportEndpoint,
-    FlowReportEndpoint,
-    FlowVariableReportEndpoint,
-    ContactVariablesReportEndpoint,
     TrackableLinkReportEndpoint,
-    PhoneValidationEndpoint,
-    ReplaceAccentedCharsEndpoint,
-    ValidateUrlAttachmentEndpoint,
+    UsersEndpoint,
     ValidateFlowLinks,
+    ValidateUrlAttachmentEndpoint,
+    WorkspaceEndpoint,
 )
 
 urlpatterns = [

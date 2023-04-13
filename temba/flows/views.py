@@ -5,7 +5,6 @@ from urllib.parse import urlencode
 import iso8601
 import regex
 import requests
-
 from django_redis import get_redis_connection
 from packaging.version import Version
 from simplejson import JSONDecodeError
@@ -24,7 +23,7 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.core.exceptions import ValidationError, PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db.models import Count, Max, Min, Sum
 from django.db.models.functions import Lower
@@ -41,9 +40,9 @@ from django.views.generic import FormView
 
 from temba import mailroom
 from temba.archives.models import Archive
+from temba.channels.models import Channel
 from temba.classifiers.models import Classifier
 from temba.classifiers.types.dialogflow.type import DialogflowType
-from temba.channels.models import Channel
 from temba.contacts.models import URN, ContactField, ContactGroup
 from temba.contacts.search import SearchException, parse_query
 from temba.contacts.search.elastic import query_contact_ids
@@ -55,41 +54,42 @@ from temba.flows.models import (
     FlowRunCount,
     FlowSession,
     FlowStart,
-    StudioFlowStart,
     FlowTemplate,
     FlowTemplateGroup,
+    StudioFlowStart,
 )
-from temba.flows.tasks import export_flow_results_task, download_flow_images_task, update_session_wait_expires
+from temba.flows.tasks import download_flow_images_task, export_flow_results_task, update_session_wait_expires
 from temba.ivr.models import IVRCall
 from temba.links.models import Link, LinkContacts
 from temba.mailroom import FlowValidationException
 from temba.msgs.models import Attachment
-from temba.orgs.models import IntegrationType, Org, LOOKUPS, GIFTCARDS
+from temba.orgs.models import GIFTCARDS, LOOKUPS, IntegrationType, Org
 from temba.orgs.views import MenuMixin, ModalMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
 from temba.triggers.models import Trigger
-from temba.utils import analytics, gettext, json, languages, on_transaction_commit, str_to_bool, build_flow_parameters
+from temba.utils import analytics, build_flow_parameters, gettext, json, languages, on_transaction_commit, str_to_bool
 from temba.utils.fields import (
     CheckboxWidget,
+    CompletionTextarea,
     ContactSearchWidget,
     InputWidget,
     OmniboxChoice,
     OmniboxField,
     SelectMultipleWidget,
     SelectWidget,
-    CompletionTextarea,
 )
 from temba.utils.s3 import private_file_storage
 from temba.utils.text import slugify_with
 from temba.utils.uuid import uuid4
 from temba.utils.views import BulkActionMixin, SpaMixin
-from . import legacy
 
+from ..templates.models import Template
+from . import legacy
 from .merging import (
     Graph,
     GraphDifferenceMap,
-    serialize_difference_graph,
-    deserialize_difference_graph,
     deserialize_dict_param_from_request,
+    deserialize_difference_graph,
+    serialize_difference_graph,
 )
 from .models import (
     ExportFlowImagesTask,
@@ -101,7 +101,6 @@ from .models import (
     FlowVersionConflictException,
     MergeFlowsTask,
 )
-from ..templates.models import Template
 
 logger = logging.getLogger(__name__)
 

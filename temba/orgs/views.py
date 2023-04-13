@@ -1,10 +1,9 @@
 import itertools
 import logging
 import random
-import regex
 import smtplib
 import string
-from collections import OrderedDict, namedtuple, defaultdict
+from collections import OrderedDict, defaultdict, namedtuple
 from datetime import datetime, timedelta
 from decimal import Decimal
 from email.utils import parseaddr
@@ -15,9 +14,8 @@ from uuid import uuid4
 import iso8601
 import pyotp
 import pytz
+import regex
 import requests
-from django.core.paginator import Paginator
-from django.utils.functional import cached_property
 from packaging.version import Version
 from rest_framework.views import APIView
 from smartmin.users.models import FailedLogin, RecoveryToken, is_password_complex
@@ -43,17 +41,19 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import Group, User
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.views import LoginView as AuthLoginView
-from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.db.models import ExpressionWrapper, F, IntegerField, Q, Sum
 from django.forms import Form
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse, Http404
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import resolve_url
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.encoding import DjangoUnicodeDecodeError, force_str
+from django.utils.functional import cached_property
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
@@ -67,9 +67,9 @@ from temba.channels.models import Channel
 from temba.classifiers.models import Classifier
 from temba.contacts.models import ContactGroupCount
 from temba.flows.models import Flow
+from temba.formax import FormaxMixin
 from temba.links.models import Link
 from temba.triggers.models import Trigger
-from temba.formax import FormaxMixin
 from temba.utils import analytics, get_anonymous_user, json, languages, str_to_bool
 from temba.utils.email import is_valid_address, send_template_email
 from temba.utils.fields import (
@@ -85,19 +85,25 @@ from temba.utils.http import http_headers
 from temba.utils.timezones import TimeZoneFormField
 from temba.utils.views import ComponentFormMixin, NonAtomicMixin, RequireRecentAuthMixin, SpaMixin
 
+# session key for storing a two-factor enabled user's id once we've checked their password
+from ..utils.text import random_string
 from .models import (
-    GIFTCARDS,
-    LOOKUPS,
     DEFAULT_FIELDS_PAYLOAD_GIFTCARDS,
     DEFAULT_FIELDS_PAYLOAD_LOOKUPS,
     DEFAULT_INDEXES_FIELDS_PAYLOAD_GIFTCARDS,
     DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS,
+    GIFTCARDS,
+    LOOKUPS,
+    BackupToken,
+    IntegrationType,
+    Invitation,
+    Org,
+    OrgCache,
+    OrgRole,
+    TopUp,
+    get_stripe_credentials,
 )
-from .models import BackupToken, IntegrationType, Invitation, Org, OrgCache, OrgRole, TopUp, get_stripe_credentials
 from .tasks import apply_topups_task
-
-# session key for storing a two-factor enabled user's id once we've checked their password
-from ..utils.text import random_string
 
 TWO_FACTOR_USER_SESSION_KEY = "_two_factor_user_id"
 TWO_FACTOR_STARTED_SESSION_KEY = "_two_factor_started_on"
@@ -3650,6 +3656,7 @@ class OrgCRUDL(SmartCRUDL):
 
         def form_valid(self, form):
             from pandas import read_csv, read_excel
+
             from .tasks import import_data_to_parse
 
             org = self.request.user.get_org()

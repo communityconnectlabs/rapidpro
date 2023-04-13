@@ -1,14 +1,14 @@
-import os
 import logging
+import os
 import re
 import time
-import boto3
-
 from datetime import datetime, timedelta
 
+import boto3
 import pytz
 import requests
 from django_redis import get_redis_connection
+from sorl.thumbnail import get_thumbnail
 
 from django.conf import settings
 from django.db.models import F
@@ -16,16 +16,16 @@ from django.utils import timezone
 from django.utils.timesince import timesince
 
 from celery import shared_task
-from sorl.thumbnail import get_thumbnail
 
 from temba.utils import chunk_list
 from temba.utils.celery import nonoverlapping_task
 
 from .models import (
-    Flow,
     ExportFlowImagesTask,
     ExportFlowResultsTask,
+    Flow,
     FlowCategoryCount,
+    FlowImage,
     FlowNodeCount,
     FlowPathCount,
     FlowRevision,
@@ -34,7 +34,6 @@ from .models import (
     FlowSession,
     FlowStart,
     FlowStartCount,
-    FlowImage,
     MergeFlowsTask,
 )
 

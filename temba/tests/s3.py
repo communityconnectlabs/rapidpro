@@ -1,11 +1,11 @@
 import gzip
 import io
-import iso8601
-import regex
-
 from collections import defaultdict
 from datetime import datetime
 from unittest.mock import call
+
+import iso8601
+import regex
 
 from temba.archives.models import FileAndHash, jsonlgz_iterate
 from temba.utils import chunk_list, json

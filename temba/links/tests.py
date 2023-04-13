@@ -3,8 +3,8 @@ from unittest.mock import patch
 from django.urls import reverse
 from django.utils import timezone
 
-from temba.links.models import Link, LinkContacts, ExportLinksTask
-from temba.links.tasks import handle_link_task, export_link_task
+from temba.links.models import ExportLinksTask, Link, LinkContacts
+from temba.links.tasks import export_link_task, handle_link_task
 from temba.tests import TembaTest
 from temba.utils.dates import datetime_to_timestamp
 from temba.utils.uuid import uuid4

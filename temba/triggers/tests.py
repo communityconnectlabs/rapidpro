@@ -14,9 +14,9 @@ from temba.flows.models import Flow
 from temba.schedules.models import Schedule
 from temba.tests import CRUDLTestMixin, TembaTest
 
+from ..utils.dates import datetime_to_str
 from .models import Trigger
 from .types import KeywordTriggerType
-from ..utils.dates import datetime_to_str
 
 
 class TriggerTest(TembaTest):

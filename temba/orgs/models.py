@@ -5,7 +5,6 @@ import operator
 import os
 import re
 import time
-
 from abc import ABCMeta
 from collections import defaultdict
 from datetime import timedelta
@@ -550,8 +549,9 @@ class Org(SmartModel):
         csv_file.open()
 
         # this file isn't good enough, lets write it to local disk
-        from django.conf import settings
         from uuid import uuid4
+
+        from django.conf import settings
 
         # make sure our tmp directory is present (throws if already present)
         try:
@@ -756,8 +756,8 @@ class Org(SmartModel):
         from temba.campaigns.models import Campaign
         from temba.contacts.models import ContactField, ContactGroup
         from temba.flows.models import Flow
-        from temba.triggers.models import Trigger
         from temba.links.models import Link
+        from temba.triggers.models import Trigger
 
         # only required field is version
         if "version" not in export_json:
@@ -821,8 +821,8 @@ class Org(SmartModel):
         from temba.campaigns.models import Campaign
         from temba.contacts.models import ContactField
         from temba.flows.models import Flow
-        from temba.triggers.models import Trigger
         from temba.links.models import Link
+        from temba.triggers.models import Trigger
 
         exported_flows = []
         exported_campaigns = []

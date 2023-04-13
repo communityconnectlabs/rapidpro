@@ -1,25 +1,24 @@
-import io
 import csv
-import pandas as pd
-
+import io
 from functools import reduce
 
-from django.core.validators import FileExtensionValidator
-from django import forms
-from django.template.loader import render_to_string
+import pandas as pd
 from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTemplateView, SmartUpdateView
 
+from django import forms
 from django.contrib import messages
+from django.core.validators import FileExtensionValidator
 from django.http import HttpResponseRedirect, JsonResponse
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from temba.orgs.views import DependencyDeleteModal, MenuMixin, OrgObjPermsMixin, OrgPermsMixin
-from temba.utils.views import ComponentFormMixin, SpaMixin
 from temba.utils import languages
-from temba.utils.fields import SelectMultipleWidget, CheckboxWidget
+from temba.utils.fields import CheckboxWidget, SelectMultipleWidget
+from temba.utils.gsm7 import calculate_num_segments, is_gsm7, replace_accented_chars
 from temba.utils.languages import alpha3_to_alpha2
-from temba.utils.gsm7 import is_gsm7, calculate_num_segments, replace_accented_chars
+from temba.utils.views import ComponentFormMixin, SpaMixin
 
 from .models import Classifier, ClassifierTrainingTask
 

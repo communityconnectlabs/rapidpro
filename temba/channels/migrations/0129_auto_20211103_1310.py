@@ -6,7 +6,6 @@ from urllib.parse import parse_qs
 from django.db import migrations, models
 from django.db.models import Q
 
-
 logger = logging.getLogger(__name__)
 add_trigger = """
 CREATE OR REPLACE FUNCTION temba_update_channel_segments_count() RETURNS TRIGGER AS $$

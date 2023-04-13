@@ -1,8 +1,10 @@
 from django.utils.translation import gettext_lazy as _
+
 from temba.contacts.models import URN
-from .views import ClaimView
+
 from ...models import ChannelType
 from ...views import UpdateWebChatForm
+from .views import ClaimView
 
 
 class WebChatType(ChannelType):

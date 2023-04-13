@@ -27,17 +27,17 @@ from temba.flows.models import Flow, FlowRun
 from temba.tests import TembaTest, matchers
 from temba.triggers.models import Trigger
 from temba.utils import json, uuid
-from temba.utils.templatetags.temba import format_datetime, icon
 from temba.utils.json import JsonResponse
+from temba.utils.templatetags.temba import format_datetime, icon
 
 from . import chunk_list, countries, format_number, languages, percentage, redact, sizeof_fmt, str_to_bool
 from .cache import get_cacheable_attr, get_cacheable_result, incrby_existing
 from .celery import nonoverlapping_task
 from .dates import datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
-from .email import is_valid_address, send_simple_email, send_email_with_attachments
+from .email import is_valid_address, send_email_with_attachments, send_simple_email
 from .export import TableExporter
 from .fields import validate_external_url
-from .gsm7 import calculate_num_segments, is_gsm7, replace_non_gsm7_accents, replace_accented_chars
+from .gsm7 import calculate_num_segments, is_gsm7, replace_accented_chars, replace_non_gsm7_accents
 from .http import http_headers
 from .locks import LockNotAcquiredException, NonBlockingLock
 from .models import IDSliceQuerySet, JSONAsTextField, patch_queryset_count

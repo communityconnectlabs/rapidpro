@@ -1,9 +1,8 @@
 import itertools
-import os
 import logging
+import os
 import time
 import zipfile
-
 from array import array
 from collections import defaultdict
 from datetime import datetime
@@ -11,11 +10,10 @@ from io import BytesIO
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+import boto3
 import iso8601
 import pytz
 import regex
-import boto3
-
 from django_redis import get_redis_connection
 from packaging.version import Version
 from smartmin.models import SmartModel
@@ -26,7 +24,7 @@ from django.contrib.auth.models import Group, User
 from django.contrib.postgres.fields import ArrayField
 from django.core.files.temp import NamedTemporaryFile
 from django.db import models, transaction
-from django.db.models import Max, Q, Sum, Count
+from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import TruncDate
 from django.dispatch import receiver
 from django.urls import reverse
@@ -36,10 +34,10 @@ from django.utils.translation import gettext_lazy as _
 from temba import mailroom
 from temba.assets.models import register_asset_store
 from temba.channels.models import Channel, ChannelConnection
-from temba.links.models import LinkContacts
 from temba.classifiers.models import Classifier
 from temba.contacts.models import Contact, ContactField, ContactGroup
 from temba.globals.models import Global
+from temba.links.models import LinkContacts
 from temba.msgs.models import Label
 from temba.orgs.models import Org
 from temba.templates.models import Template
@@ -56,7 +54,7 @@ from temba.utils.models import (
     TembaModel,
     generate_uuid,
 )
-from temba.utils.uuid import uuid4, is_valid_uuid
+from temba.utils.uuid import is_valid_uuid, uuid4
 
 from . import legacy
 

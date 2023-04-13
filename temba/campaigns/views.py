@@ -1,7 +1,5 @@
 import json
 
-from django.db.models import Sum
-from django.utils import timezone
 from smartmin.views import (
     SmartCreateView,
     SmartCRUDL,
@@ -15,17 +13,19 @@ from smartmin.views import (
 from django import forms
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from temba.contacts.models import ContactField, ContactGroup
 from temba.flows.models import Flow
 from temba.msgs.models import Msg
 from temba.orgs.views import MenuMixin, ModalMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
-from temba.utils import languages, build_flow_parameters, flow_params_context
-from temba.utils.gsm7 import GSM_REPLACEMENTS
+from temba.utils import build_flow_parameters, flow_params_context, languages
 from temba.utils.fields import CompletionTextarea, InputWidget, SelectWidget, TembaChoiceField
+from temba.utils.gsm7 import GSM_REPLACEMENTS
 from temba.utils.views import BulkActionMixin, SpaMixin
 
 from .models import Campaign, CampaignEvent

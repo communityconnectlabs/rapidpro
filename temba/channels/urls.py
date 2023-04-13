@@ -4,8 +4,8 @@ from django.urls import re_path
 from temba.utils.views import CourierURLHandler
 
 from .models import Channel
-from .views import ChannelCRUDL, ChannelEventCRUDL, ChannelLogCRUDL
 from .types.webchat.views import RenderDownloadImage
+from .views import ChannelCRUDL, ChannelEventCRUDL, ChannelLogCRUDL
 
 # we iterate all our channel types, finding all the URLs they want to wire in
 courier_urls = []

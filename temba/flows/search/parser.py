@@ -1,8 +1,8 @@
 import sqlparse
+from sqlparse.exceptions import SQLParseError
 
 from django.db.models import Q, QuerySet
 from django.utils.translation import gettext_lazy as _
-from sqlparse.exceptions import SQLParseError
 
 from temba.utils.text import slugify_with
 
@@ -15,8 +15,8 @@ class FlowRunSearch(object):
         self.base_queryset = base_queryset
 
     def search(self) -> (QuerySet, str):
-        from django.db.models.functions import Cast
         from django.contrib.postgres.fields import JSONField
+        from django.db.models.functions import Cast
 
         queryset = self.base_queryset.annotate(results_json=Cast("results", JSONField()))
 

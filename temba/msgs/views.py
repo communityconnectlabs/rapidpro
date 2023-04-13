@@ -17,7 +17,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.db.models.functions.text import Upper
 from django.forms import Form
-from django.http import HttpResponse, HttpResponseRedirect, Http404
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme

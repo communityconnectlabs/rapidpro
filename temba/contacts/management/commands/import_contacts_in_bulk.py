@@ -1,12 +1,12 @@
-import os
 import csv
+import os
 
-from django.utils import timezone
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
+from temba.contacts.models import URN, Contact, ContactField, ContactGroup, ContactURN
 from temba.orgs.models import Org
-from temba.contacts.models import Contact, URN, ContactURN, ContactField, ContactGroup
 
 
 class Command(BaseCommand):  # pragma: no cover

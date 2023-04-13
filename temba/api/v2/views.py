@@ -1,17 +1,13 @@
 import itertools
 import json
 import re
-
-import regex
-import requests
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
 from enum import Enum
 from mimetypes import guess_extension
 from uuid import uuid4
 
-from django.conf import settings
-from django.template.defaultfilters import slugify
-from django.utils import timezone
+import regex
+import requests
 from django_redis import get_redis_connection
 from parse_rest.datatypes import Date
 from rest_framework import generics, status, views
@@ -23,15 +19,18 @@ from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.utils.urls import replace_query_param
 from smartmin.views import SmartFormView, SmartTemplateView
+from twilio.base.exceptions import TwilioRestException
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
-from django.db.models import Prefetch, Q, Count, QuerySet
-from django.http import HttpResponse, JsonResponse, Http404
+from django.db.models import Count, Prefetch, Q, QuerySet
+from django.http import Http404, HttpResponse, JsonResponse
+from django.template.defaultfilters import slugify
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
-from twilio.base.exceptions import TwilioRestException
 
 from temba.api.models import APIToken, Resthook, ResthookSubscriber, WebHookEvent
 from temba.api.v2.views_base import (
@@ -51,8 +50,8 @@ from temba.classifiers.models import Classifier
 from temba.contacts.models import Contact, ContactField, ContactGroup, ContactGroupCount, ContactURN
 from temba.contacts.search import SearchException, parse_query
 from temba.contacts.search.elastic import query_contact_ids_from_elasticsearch
-from temba.flows.models import Flow, FlowRun, FlowStart
 from temba.flows.merging.helpers import get_flow_step_type
+from temba.flows.models import Flow, FlowRun, FlowStart
 from temba.flows.search.parser import FlowRunSearch
 from temba.globals.models import Global
 from temba.locations.models import AdminBoundary, BoundaryAlias
@@ -60,9 +59,11 @@ from temba.msgs.models import Broadcast, Label, LabelCount, Msg, SystemLabel
 from temba.orgs.models import OrgRole
 from temba.templates.models import Template, TemplateTranslation
 from temba.tickets.models import Ticket, Ticketer, Topic
-from temba.utils import splitting_getlist, str_to_bool, dates
-from .validators import is_uuid_valid
+from temba.utils import dates, splitting_getlist, str_to_bool
 
+from ...links.models import Link, LinkContacts
+from ...orgs.models import DEFAULT_FIELDS_PAYLOAD_LOOKUPS, DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS, LOOKUPS
+from ...utils.gsm7 import replace_accented_chars
 from ..models import SSLPermission
 from ..support import InvalidQueryError, csv_response_wrapper
 from .serializers import (
@@ -95,6 +96,7 @@ from .serializers import (
     LabelWriteSerializer,
     MsgBulkActionSerializer,
     MsgReadSerializer,
+    ReplaceAccentedCharsSerializer,
     ResthookReadSerializer,
     ResthookSubscriberReadSerializer,
     ResthookSubscriberWriteSerializer,
@@ -104,16 +106,13 @@ from .serializers import (
     TicketReadSerializer,
     TopicReadSerializer,
     TopicWriteSerializer,
-    UserReadSerializer,
     TwilioNumberValidationSerializer,
     UrlAttachmentValidationSerializer,
+    UserReadSerializer,
     WebHookEventReadSerializer,
     WorkspaceReadSerializer,
-    ReplaceAccentedCharsSerializer,
 )
-from ...links.models import Link, LinkContacts
-from ...orgs.models import LOOKUPS, DEFAULT_FIELDS_PAYLOAD_LOOKUPS, DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS
-from ...utils.gsm7 import replace_accented_chars
+from .validators import is_uuid_valid
 
 
 class RootView(views.APIView):

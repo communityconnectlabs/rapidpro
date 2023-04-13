@@ -2,10 +2,10 @@ import base64
 import csv
 import logging
 import pickle
-from typing import Union, Any
+from typing import Any, Union
 
-from google.cloud import dialogflow_v2
 from google.api_core import exceptions
+from google.cloud import dialogflow_v2
 from google.cloud.dialogflow_v2.services.intents import pagers
 
 from temba.utils.languages import alpha2_to_alpha3

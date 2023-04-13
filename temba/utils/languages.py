@@ -1,6 +1,8 @@
 import json
-import pycountry
 from collections import OrderedDict
+
+import pycountry
+
 from django.conf import settings
 
 # tweak standard ISO-639-3 names to steer users toward using languages with ISO-639-1 equivalents if possible

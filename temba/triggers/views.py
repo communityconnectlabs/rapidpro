@@ -8,30 +8,32 @@ from django import forms
 from django.db.models import Min
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.utils.translation import gettext_lazy as _, ngettext_lazy
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _, ngettext_lazy
 
 from temba.channels.models import Channel
 from temba.contacts.models import ContactGroup, ContactURN
-from temba.contacts.search.omnibox import omnibox_serialize, omnibox_deserialize
+from temba.contacts.search.omnibox import omnibox_deserialize, omnibox_serialize
 from temba.flows.models import Flow
 from temba.formax import FormaxMixin
 from temba.msgs.views import ModalMixin
 from temba.orgs.views import MenuMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
 from temba.schedules.models import Schedule
+from temba.utils import analytics, build_flow_parameters, chunk_list, flow_params_context
 from temba.utils.fields import (
+    CompletionTextarea,
     InputWidget,
+    JSONField,
+    OmniboxChoice,
     SelectMultipleWidget,
     SelectWidget,
     TembaChoiceField,
     TembaMultipleChoiceField,
 )
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
-from temba.utils import build_flow_parameters, analytics, flow_params_context, chunk_list
-from temba.utils.fields import CompletionTextarea, JSONField, OmniboxChoice
 
-from .models import Trigger
 from ..utils.json import JsonResponse
+from .models import Trigger
 
 
 class FlowParamsMixin:

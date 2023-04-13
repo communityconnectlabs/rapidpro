@@ -10,6 +10,7 @@ import stripe
 import stripe.error
 from bs4 import BeautifulSoup
 from dateutil.relativedelta import relativedelta
+from smartmin.users.models import FailedLogin, RecoveryToken
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
@@ -18,7 +19,6 @@ from django.core.exceptions import ValidationError
 from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
-from smartmin.users.models import FailedLogin, RecoveryToken
 
 from temba import mailroom
 from temba.airtime.models import AirtimeTransfer

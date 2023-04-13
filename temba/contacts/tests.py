@@ -37,19 +37,19 @@ from temba.tests import (
     AnonymousOrg,
     CRUDLTestMixin,
     ESMockWithScroll,
+    MockResponse,
     TembaNonAtomicTest,
     TembaTest,
     matchers,
     mock_mailroom,
-    MockResponse,
 )
 from temba.tests.engine import MockSessionWriter
-from temba.tests.twilio import MockTwilioClient
 from temba.tests.s3 import MockS3Client
+from temba.tests.twilio import MockTwilioClient
 from temba.tickets.models import Ticket, TicketCount, Ticketer
 from temba.triggers.models import Trigger
 from temba.utils import json
-from temba.utils.dates import datetime_to_timestamp, datetime_to_str
+from temba.utils.dates import datetime_to_str, datetime_to_timestamp
 
 from .models import (
     URN,
@@ -62,7 +62,7 @@ from .models import (
     ContactURN,
     ExportContactsTask,
 )
-from .tasks import check_elasticsearch_lag, squash_contactgroupcounts, block_deactivated_contacts_task
+from .tasks import block_deactivated_contacts_task, check_elasticsearch_lag, squash_contactgroupcounts
 from .templatetags.contacts import contact_field, history_class, history_icon
 
 

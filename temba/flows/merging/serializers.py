@@ -1,8 +1,11 @@
-import re
 import json
-from django.core.exceptions import ValidationError
+import re
+
 from rest_framework import serializers
-from .merging import Node, Graph, GraphDifferenceNode, GraphDifferenceMap
+
+from django.core.exceptions import ValidationError
+
+from .merging import Graph, GraphDifferenceMap, GraphDifferenceNode, Node
 
 
 class NodeSerializer(serializers.Serializer):
