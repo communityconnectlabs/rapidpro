@@ -3554,6 +3554,7 @@ class APITest(TembaTest):
         self.assertEqual(None, response.json()["next"])
         self.assertResultsById(response, [joe_run3, joe_run2, frank_run2, frank_run1, joe_run1])
 
+        self.maxDiff = None
         resp_json = response.json()
         self.assertEqual(
             {
@@ -3578,6 +3579,7 @@ class APITest(TembaTest):
                 "modified_on": format_datetime(frank_run2.modified_on),
                 "exited_on": None,
                 "exit_type": None,
+                "messages": [],
             },
             resp_json["results"][2],
         )
@@ -3622,6 +3624,7 @@ class APITest(TembaTest):
                 "modified_on": format_datetime(joe_run1.modified_on),
                 "exited_on": format_datetime(joe_run1.exited_on),
                 "exit_type": "completed",
+                "messages": [],
             },
             response_json_4,
         )
@@ -3665,6 +3668,7 @@ class APITest(TembaTest):
                     "modified_on": format_datetime(frank_run2.modified_on),
                     "exited_on": None,
                     "exit_type": None,
+                    "messages": [],
                 },
                 response.json()["results"][0],
             )
