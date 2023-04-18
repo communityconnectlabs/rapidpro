@@ -25,7 +25,7 @@
 
     #rp-flow-editor #simulator {
       top: 20px;
-      margin-left: 20px;
+      right: 1em;
     }
 
     #header *, #top-menu *, .org-header * {
@@ -185,7 +185,12 @@
     }
 
     [class*="components_printButton"] {
-      right: -78px;
+      right: -77px !important;
+
+      &:hover {
+        right: -5px !important;
+      }
+
     }
 
     [class*="Canvas_canvas_background"] {
