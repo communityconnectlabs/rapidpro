@@ -1227,6 +1227,7 @@ class MsgReadSerializer(ReadSerializer):
     status = serializers.SerializerMethodField()
     archived = serializers.SerializerMethodField()
     visibility = serializers.SerializerMethodField()
+    flow = serializers.SerializerMethodField()
     labels = fields.LabelField(many=True)
     media = serializers.SerializerMethodField()  # deprecated
     created_on = serializers.DateTimeField(default_timezone=pytz.UTC)
@@ -1257,6 +1258,9 @@ class MsgReadSerializer(ReadSerializer):
     def get_visibility(self, obj):
         return self.VISIBILITIES.get(obj.visibility)
 
+    def get_flow(self, obj):
+        return dict(uuid=obj.flow.uuid, name=obj.flow.name) if obj.flow else dict()
+
     class Meta:
         model = Msg
         fields = (
@@ -1271,6 +1275,7 @@ class MsgReadSerializer(ReadSerializer):
             "archived",
             "visibility",
             "text",
+            "flow",
             "labels",
             "attachments",
             "created_on",

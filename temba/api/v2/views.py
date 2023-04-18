@@ -2517,6 +2517,7 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
      * **status** - the status of the message (one of "initializing", "queued", "wired", "sent", "delivered", "handled", "errored", "failed", "resent").
      * **visibility** - the visibility of the message (one of "visible", "archived" or "deleted")
      * **text** - the text of the message received (string). Note this is the logical view and the message may have been received as multiple physical messages.
+     * **flow** - the UUID and name of the flow that handled this message (object).
      * **attachments** - the attachments on the message (array of objects).
      * **labels** - any labels set on this message (array of objects), filterable as `label` with label name or UUID.
      * **created_on** - when this message was either received by the channel or created (datetime) (filterable as `before` and `after`).
@@ -2553,6 +2554,10 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
                 "status": "wired",
                 "visibility": "visible",
                 "text": "How are you?",
+                "flow": {
+                    "uuid": "34c8e665-a1d8-4bbc-ac95-e446b3f88b3b",
+                    "name": "Sample Flow - Simple Poll"
+                }
                 "attachments": [{"content_type": "audio/wav" "url": "http://domain.com/recording.wav"}],
                 "labels": [{"name": "Important", "uuid": "5a4eb79e-1b1f-4ae3-8700-09384cca385f"}],
                 "created_on": "2016-01-06T15:33:00.813162Z",
