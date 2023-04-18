@@ -3257,6 +3257,7 @@ class APITest(TembaTest):
                 "type": msg_type,
                 "status": msg_status,
                 "archived": msg.visibility == "A",
+                "flow": {},
                 "visibility": msg_visibility,
                 "text": msg.text,
                 "labels": [{"name": lb.name, "uuid": lb.uuid} for lb in msg.labels.all()],
