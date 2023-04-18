@@ -767,131 +767,131 @@
       #analytics.tab-pane
         #category-charts
 
-    #runs.tab-pane
-      .bg-white.p-4.rounded-lg.mt-5
-        .page-subtitle
-          -trans "Filter"
+      #runs.tab-pane
+        .bg-white.p-4.rounded-lg.mt-5
+          .page-subtitle
+            -trans "Filter"
 
-        %form#search-form.max-w-full.mt-2.flex(method="get")
-          %input#runs-responded.hidden(type="text" value="true" name="responded")
-          %div{class: "w-1/4 flex"}
-            %div{class: "w-1/2 flex flex-col pr-3"}
-              %label.control-label.flex.m-0
-                -trans "Start Date"
-              -include "includes/flatpickr_field.haml" with parent_classes="start flex justify-center items-center datepicker relative" field_name="after" field_placeholder="Select a date" field_value=request.GET.after
-            %div{class: "w-1/2 flex flex-col pr-3"}
-              %label.control-label.flex.m-0
-                -trans "End Date"
-              -include "includes/flatpickr_field.haml" with parent_classes="end flex justify-center items-center datepicker relative" field_name="before" field_placeholder="Select a date" field_value=request.GET.before
-          %div{class: "w-3/4 flex flex-grow"}
-            %div{class: "w-6/12 mr-2", "data-toggle":"tooltip", title:"{{ request.GET.contact_query }}"}
-              %label.control-label.flex.m-0
-                -trans "Search by Contact Fields"
-              %temba-textinput(type='text' placeholder='{% trans "Search" %}' name="contact_query" value="{% if contact_query %}{{contact_query}}{% else %}{{ request.GET.contact_query }}{% endif %}" clearable)
-            %div{class: "w-6/12", "data-toggle":"tooltip", title:"{{ request.GET.q }}"}
-              %label.control-label.flex.m-0
-                -trans "Search by Responses"
-              %temba-textinput(type='text' placeholder='{% trans "Search" %}' name="q" value="{{ request.GET.q }}" clearable)
-            %div.flex.flex-col.justify-end{class: "w-1/10"}
-              %button.button-primary.filter-btn(type='submit')
-                -trans "Filter"
+          %form#search-form.max-w-full.mt-2.flex(method="get")
+            %input#runs-responded.hidden(type="text" value="true" name="responded")
+            %div{class: "w-1/4 flex"}
+              %div{class: "w-1/2 flex flex-col pr-3"}
+                %label.control-label.flex.m-0
+                  -trans "Start Date"
+                -include "includes/flatpickr_field.haml" with parent_classes="start flex justify-center items-center datepicker relative" field_name="after" field_placeholder="Select a date" field_value=request.GET.after
+              %div{class: "w-1/2 flex flex-col pr-3"}
+                %label.control-label.flex.m-0
+                  -trans "End Date"
+                -include "includes/flatpickr_field.haml" with parent_classes="end flex justify-center items-center datepicker relative" field_name="before" field_placeholder="Select a date" field_value=request.GET.before
+            %div{class: "w-3/4 flex flex-grow"}
+              %div{class: "w-6/12 mr-2", "data-toggle":"tooltip", title:"{{ request.GET.contact_query }}"}
+                %label.control-label.flex.m-0
+                  -trans "Search by Contact Fields"
+                %temba-textinput(type='text' placeholder='{% trans "Search" %}' name="contact_query" value="{% if contact_query %}{{contact_query}}{% else %}{{ request.GET.contact_query }}{% endif %}" clearable)
+              %div{class: "w-6/12", "data-toggle":"tooltip", title:"{{ request.GET.q }}"}
+                %label.control-label.flex.m-0
+                  -trans "Search by Responses"
+                %temba-textinput(type='text' placeholder='{% trans "Search" %}' name="q" value="{{ request.GET.q }}" clearable)
+              %div.flex.flex-col.justify-end{class: "w-1/10"}
+                %button.button-primary.filter-btn(type='submit')
+                  -trans "Filter"
 
-      .scroll-x
-        .responded-checkbox.items-center.py-3.w-full
-          .runs-show#show-all-runs{
-            ic-get-from:"/flow/run_table/{{object.id}}/?after={{request.GET.after}}&before={{request.GET.before}}&q={{request.GET.q}}&contact_query={{request.GET.contact_query}}",
-            ic-on-beforeSend:'$("#results_run_table").empty();',
-            ic-on-beforeTrigger: 'configToShowResponded("false");setLoadTotalRuns();',
-            ic-trigger-on:"click",
-            ic-target:"#results_run_table",
-            ic-on-success: 'setTotalRuns();',
-            ic-indicator:"#indicator"}
-            -trans "All"
-          .runs-show-sep
-            |
-          .runs-show.active{
+        .scroll-x
+          .responded-checkbox.items-center.py-3.w-full
+            .runs-show#show-all-runs{
               ic-get-from:"/flow/run_table/{{object.id}}/?after={{request.GET.after}}&before={{request.GET.before}}&q={{request.GET.q}}&contact_query={{request.GET.contact_query}}",
               ic-on-beforeSend:'$("#results_run_table").empty();',
-              ic-on-beforeTrigger: 'configToShowResponded("true");setLoadTotalRuns();',
+              ic-on-beforeTrigger: 'configToShowResponded("false");setLoadTotalRuns();',
               ic-trigger-on:"click",
               ic-target:"#results_run_table",
               ic-on-success: 'setTotalRuns();',
               ic-indicator:"#indicator"}
-              -trans "Responded"
+              -trans "All"
+            .runs-show-sep
+              |
+            .runs-show.active{
+                ic-get-from:"/flow/run_table/{{object.id}}/?after={{request.GET.after}}&before={{request.GET.before}}&q={{request.GET.q}}&contact_query={{request.GET.contact_query}}",
+                ic-on-beforeSend:'$("#results_run_table").empty();',
+                ic-on-beforeTrigger: 'configToShowResponded("true");setLoadTotalRuns();',
+                ic-trigger-on:"click",
+                ic-target:"#results_run_table",
+                ic-on-success: 'setTotalRuns();',
+                ic-indicator:"#indicator"}
+                -trans "Responded"
 
-          .flex-grow
-            .add-columns.select.flex-grow.pl-12.pr-4
-              .selection
-                %temba-select#select-columns(searchable="true" onchange="handleColumnSelection(this)" placeholder='{{_("More Columns")|escapejs}}')
+            .flex-grow
+              .add-columns.select.flex-grow.pl-12.pr-4
+                .selection
+                  %temba-select#select-columns(searchable="true" onchange="handleColumnSelection(this)" placeholder='{{_("More Columns")|escapejs}}')
 
-          #total-runs-text
-            -trans "Total matching: "
-            %span
+            #total-runs-text
+              -trans "Total matching: "
+              %span
 
-          %table
-            %thead
-              %tr
-                %td.header.started
-                  .details
-                    .text{style:"margin-left:10px;"}
-                      -trans "Last Activity"
-                %td.header
-                  .details
-                    .text
-                      -trans "Contact"
-
-                -for result_field in result_fields
+            %table
+              %thead
+                %tr
+                  %td.header.started
+                    .details
+                      .text{style:"margin-left:10px;"}
+                        -trans "Last Activity"
                   %td.header
-                    .details{ onclick: 'toggleValue({{forloop.counter0}});'}
-                      .icons
-                        .icon-flow.category
-                        .icon-bubble-2.text
-                      {{result_field.name}}
-                    .remove.icon-close{ onclick: 'hideColumn({{forloop.counter0}});' }
+                    .details
+                      .text
+                        -trans "Contact"
 
-            %tbody(id="results_run_table")
-              %tr(ic-append-from="/flow/run_table/{{object.id}}/" ic-trigger-on="load" ic-target="#results_run_table" ic-indicator="#indicator")
+                  -for result_field in result_fields
+                    %td.header
+                      .details{ onclick: 'toggleValue({{forloop.counter0}});'}
+                        .icons
+                          .icon-flow.category
+                          .icon-bubble-2.text
+                        {{result_field.name}}
+                      .remove.icon-close{ onclick: 'hideColumn({{forloop.counter0}});' }
 
-    #links.tab-pane
-      - if trackable_links
-        %table
-          %tr
-            %td.header
-              .details
-                .text
-                  -trans "Contact"
-            %td.header
-              .details
-                .text
-                  -trans "Link"
-            %td.header
+              %tbody(id="results_run_table")
+                %tr(ic-append-from="/flow/run_table/{{object.id}}/" ic-trigger-on="load" ic-target="#results_run_table" ic-indicator="#indicator")
 
-          %tbody{id:"trackable_links_table"}
-            %tr{ic-append-from:"/flow/links_table/{{object.id}}", ic-trigger-on:"load", ic-target:"#trackable_links_table", ic-indicator:"#indicator"}
-      - else
-        .text-center
-          -trans "No clicked links yet"
+      #links.tab-pane
+        - if trackable_links
+          %table
+            %tr
+              %td.header
+                .details
+                  .text
+                    -trans "Contact"
+              %td.header
+                .details
+                  .text
+                    -trans "Link"
+              %td.header
 
-    - if flow.merge_sources.all
-      #flows.tab-pane
-        %table
-          %tr
-            %td.header
-              .details
-                .text
-                  -trans "Flow"
-            %td.header
-              .details
-                .text
-                  -trans "Task Status"
-            %td.header
-              .details
-                %div(style="min-width: 152px;")
-                  -trans "Last Modified"
-            %td.header
+            %tbody{id:"trackable_links_table"}
+              %tr{ic-append-from:"/flow/links_table/{{object.id}}", ic-trigger-on:"load", ic-target:"#trackable_links_table", ic-indicator:"#indicator"}
+        - else
+          .text-center
+            -trans "No clicked links yet"
 
-          %tbody{id:"transfered_flows"}
-            %tr{ic-append-from:"/flow/merging_flows_table/{{object.id}}", ic-trigger-on:"load", ic-target:"#transfered_flows", ic-indicator:"#indicator"}
+      - if flow.merge_sources.all
+        #flows.tab-pane
+          %table
+            %tr
+              %td.header
+                .details
+                  .text
+                    -trans "Flow"
+              %td.header
+                .details
+                  .text
+                    -trans "Task Status"
+              %td.header
+                .details
+                  %div(style="min-width: 152px;")
+                    -trans "Last Modified"
+              %td.header
+
+            %tbody{id:"transfered_flows"}
+              %tr{ic-append-from:"/flow/merging_flows_table/{{object.id}}", ic-trigger-on:"load", ic-target:"#transfered_flows", ic-indicator:"#indicator"}
 
 
   #indicator{style:"display:none"}
