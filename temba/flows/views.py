@@ -1552,9 +1552,6 @@ class FlowCRUDL(SmartCRUDL):
             if self.has_org_perm("orgs.org_lookups") and flow.flow_type in [Flow.TYPE_MESSAGE, Flow.TYPE_VOICE]:
                 links.append(dict(title=_("Import Database"), href=reverse("orgs.org_lookups")))
 
-            if self.has_org_perm("flows.flow_merge_flows") and self.get_mergeable_flows():
-                links.append(dict(title=_("Combine Flows"), js_class="merge-flows-trigger", href="#"))
-
             if self.has_org_perm("flows.flow_delete"):
                 links.append(
                     dict(
