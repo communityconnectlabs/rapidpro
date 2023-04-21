@@ -17,8 +17,6 @@ class MGageType(ChannelType):
     name = "mGage Channel"
     show_config_page = False
 
-    beta_only = True
-
     claim_blurb = _("Add a mGage phone number.")
     claim_view = ClaimView
 
