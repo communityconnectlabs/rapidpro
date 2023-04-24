@@ -704,7 +704,7 @@ class CampaignEventCRUDL(SmartCRUDL):
                         id="event-delete",
                         title="Delete",
                         href=reverse("campaigns.campaignevent_delete", args=[campaign_event.id]),
-                        modax=_("Delete Event"),
+                        js_class="event-delete",
                     )
                 )
 

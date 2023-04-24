@@ -120,13 +120,9 @@
                 {{fired_event_fires_count}} more
 
   -if org_perms.campaigns.campaignevent_delete
-    .deletion.hide
-      .title
-        Remove
-
-      .body
-        %p Are you sure you want to remove this event? Once the event is removed, it will be gone forever. This cannot be undone.
-      %a#delete-form.posterize{}
+    %temba-dialog#confirm-event-delete(header='{{ _("Delete Event")|escapejs }}' primaryButtonName='{{ _("Delete")|escapejs }}' destructive='true')
+      .p-6
+        -trans "Are you sure you want to remove this event? Once the event is removed, it will be gone forever. This cannot be undone."
 
 
 -block extra-script
@@ -136,6 +132,26 @@
   -if gsm_replacements
     :javascript
       GSM7_REPLACEMENTS = JSON.parse('{{ gsm_replacements | escapejs }}');
+
+      const element = document.getElementsByClassName("event-delete");
+      element[0].addEventListener("click", function() {
+        var dialog = document.getElementById("confirm-event-delete");
+        dialog.open = true;
+      });
+
+      document.addEventListener("DOMContentLoaded", function() {
+        var dialog = document.getElementById("confirm-event-delete");
+        dialog.addEventListener("temba-button-clicked", function(event){
+          var id = '{{ object.pk }}';
+          var locationHref = '/campaign/read/{{ object.campaign.pk }}'
+          if (!event.detail.button.secondary) {
+            $.post('/campaignevent/delete/' + id + '/').success(function() {
+              window.location.href = locationHref;
+            });
+          }
+          dialog.open = false;
+        });
+      });
 
 -block extra-less
   -compress css

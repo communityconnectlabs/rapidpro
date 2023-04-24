@@ -191,7 +191,7 @@
 
     $(".campaign-event").on('click', function() {
       var id = $(this).data('event-id');
-      document.location.href = '/campaignevent/read/' + id;
+      document.location.href = '/campaignevent/read/' + '{{ object.uuid }}/' + id;
     });
 
     {% if org_perms.campaigns.campaignevent_create %}
