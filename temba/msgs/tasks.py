@@ -138,7 +138,11 @@ def backfill_msg_flow(org_id):
         flow_runs = FlowRun.objects.filter(id__in=run_ids).order_by("created_on")
 
         for run in flow_runs:
-            msgs_uuids = [item.get("msg", {}).get("uuid") for item in run.events if item.get("type") in ["msg_created", "msg_received"]]
+            msgs_uuids = [
+                item.get("msg", {}).get("uuid")
+                for item in run.events
+                if item.get("type") in ["msg_created", "msg_received"]
+            ]
             Msg.objects.filter(uuid__in=msgs_uuids).update(flow=run.flow)
 
         num_updated += len(run_ids)
