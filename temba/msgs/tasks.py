@@ -4,7 +4,8 @@ from django.db.models import Case, Count, IntegerField, Q, When
 
 from celery import shared_task
 
-from temba.utils import analytics
+from temba.flows.models import FlowRun
+from temba.utils import analytics, chunk_list
 from temba.utils.celery import nonoverlapping_task
 
 from .models import Broadcast, BroadcastMsgCount, ExportMessagesTask, LabelCount, Msg, SystemLabel, SystemLabelCount
@@ -124,3 +125,23 @@ def update_system_label_counts(count, org_id, label_type):  # pragma: no cover
         if count > 0:
             obj = SystemLabelCount(org_id=org_id, label_type=label_type, count=count)
             obj.save()
+
+
+@shared_task(track_started=True, name="backfill_msg_flow")
+def backfill_msg_flow(org_id):
+    flow_run_ids = FlowRun.objects.filter(org__pk=org_id).exclude(events__isnull=True).values_list("id", flat=True)
+    logger.warning(f"Process 'backfill_msg_flow' started for {len(flow_run_ids)} runs; Org ID: {org_id}")
+
+    num_updated = 0
+
+    for run_ids in chunk_list(list(flow_run_ids), 1000):
+        flow_runs = FlowRun.objects.filter(id__in=run_ids).order_by("created_on")
+
+        for run in flow_runs:
+            msgs_uuids = [item.get("msg", {}).get("uuid") for item in run.events if item.get("type") in ["msg_created", "msg_received"]]
+            Msg.objects.filter(uuid__in=msgs_uuids).update(flow=run.flow)
+
+        num_updated += len(run_ids)
+        logger.warning(f"Updated {num_updated}/{len(flow_run_ids)}")
+
+    logger.warning(f"Process 'backfill_msg_flow' finished for org ID: {org_id}")
