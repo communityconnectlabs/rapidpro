@@ -1749,3 +1749,35 @@ class ChannelConnection(models.Model):
                 condition=Q(connection_type="V", status__in=("Q", "E"), next_attempt__isnull=False),
             )
         ]
+
+
+class SMPPLog(models.Model):
+    """
+    A log from an SMPP channel
+    """
+
+    STATUS_WIRED = "W"  # message was handed off to the provider and credits were deducted for it
+    STATUS_ENROUTE = "U"  # acknowledgement
+    STATUS_SENT = "S"  # we have confirmation that a message was sent
+    STATUS_DELIVERED = "D"  # we have confirmation that a message was delivered
+    STATUS_HANDLED = "H"  # we were able to handle the message from the aggregator
+    STATUS_ERRORED = "E"  # there was an error during delivery
+    STATUS_FAILED = "F"  # we gave up on sending this message
+
+    STATUS_CHOICES = (
+        (STATUS_WIRED, _("Wired")),
+        (STATUS_ENROUTE, _("En Route")),
+        (STATUS_SENT, _("Sent")),
+        (STATUS_DELIVERED, _("Delivered")),
+        (STATUS_HANDLED, _("Handled")),
+        (STATUS_ERRORED, _("Error")),
+        (STATUS_FAILED, _("Failed")),
+    )
+
+    channel = models.ForeignKey(Channel, on_delete=models.PROTECT, related_name="smpp_channel_logs")
+    msg = models.ForeignKey("msgs.Msg", on_delete=models.PROTECT, related_name="smpp_msg_logs", null=True)
+    status = models.CharField(max_length=1, choices=STATUS_CHOICES, db_index=True, default=STATUS_WIRED)
+    created_on = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):  # pragma: needs cover
+        return self.channel.name

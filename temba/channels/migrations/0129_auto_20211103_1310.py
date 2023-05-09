@@ -174,5 +174,5 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunSQL(add_trigger, remove_trigger),
-        migrations.RunPython(get_existing_messages_segments, remove_segments_count),
+        # migrations.RunPython(get_existing_messages_segments, remove_segments_count),
     ]
