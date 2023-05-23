@@ -70,7 +70,7 @@ jobs:
         npm install
         sudo npm install -g less
         ln -s ${{ github.workspace }}/temba/settings.py.dev ${{ github.workspace }}/temba/settings.py
-        poetry run ./manage.py migrate
+        poetry run python manage.py migrate
 
     - name: Run RP-Indexer
       run: |
@@ -87,7 +87,7 @@ jobs:
 
     - name: Run RapidPro
       run: |
-        poetry run ./manage.py runserver > rapidpro.log &
+        poetry run python manage.py runserver > rapidpro.log &
 
     - name: ZAP Scan
       uses: zaproxy/action-full-scan@v0.4.0
