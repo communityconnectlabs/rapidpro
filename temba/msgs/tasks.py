@@ -138,6 +138,8 @@ def backfill_msg_flow(org_id):
         flow_runs = FlowRun.objects.filter(id__in=run_ids).order_by("created_on")
 
         for run in flow_runs:
+            logger.warning(f"Running for run ID {run.id}")
+
             msgs_uuids = [
                 item.get("msg", {}).get("uuid")
                 for item in run.events
