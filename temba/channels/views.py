@@ -1060,7 +1060,7 @@ class UpdateWebChatForm(UpdateChannelForm):
             "store_history",
             forms.BooleanField(
                 label=_("Store History"),
-                help_text=_("Keeps chat identifier in cookies so the chat can be accessible after the page refresh"),
+                help_text=_("Keeps chat identifier in cookies so the history can be accessible after the page refresh"),
                 required=False,
             ),
             default=False,
