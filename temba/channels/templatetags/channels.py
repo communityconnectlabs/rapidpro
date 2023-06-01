@@ -35,6 +35,8 @@ def adapt_for_widget(text):
 
 @register.filter
 def adapt_for_widget_bool(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
     return str(bool(value and value == "true")).lower()
 
 
