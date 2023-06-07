@@ -348,3 +348,35 @@ class ClassifierTrainingTask(SmartModel):
                 )
 
         return reschedule_task
+
+
+class ClassifierDuplicatesCheckTask(SmartModel):
+    PENDING = "P"
+    IN_PROGRESS = "I"
+    COMPLETED = "C"
+    FAILED = "F"
+
+    STATUS = (
+        (PENDING, _("Pending")),
+        (IN_PROGRESS, _("In Progress")),
+        (COMPLETED, _("Completed")),
+        (FAILED, _("Failed")),
+    )
+
+    origin_file = models.FileField(upload_to="duplicates_check")
+    result_file = models.FileField(upload_to="duplicates_check", null=True, blank=True)
+    status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
+    metadata = models.JSONField(default=dict)
+
+    @classmethod
+    def create(cls, file, user):
+        return cls.objects.create(origin_file=file, created_by=user, modified_by=user)
+
+    def start(self):
+        from .tasks import check_duplicates
+
+        check_duplicates.delay(self.id)
+
+    def perform(self):
+        self.status = ClassifierDuplicatesCheckTask.IN_PROGRESS
+        self.save(update_fields=["status"])
