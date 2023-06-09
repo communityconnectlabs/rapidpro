@@ -31,7 +31,7 @@
           -render_field 'columns'
         - else
           #file-upload
-            %input(type="file" name="file" id="import-file" onchange='onFileChange()')
+            %input(type="file" name="file" id="import-file" onchange='onFileChange()' accept="text/csv")
           #real-button.flex.mb-4
             %input(type="text" id="file-field")
             .button-light.ml-4(style="margin-top:-1px")

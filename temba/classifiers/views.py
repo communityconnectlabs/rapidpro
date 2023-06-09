@@ -392,7 +392,7 @@ class ClassifierCRUDL(SmartCRUDL):
                 if task:
                     columns = form.cleaned_data.get("columns", [])
                     if columns:
-                        task.metadata["selected_fields"] = columns
+                        task.metadata["selected_columns"] = columns
                         task.save(update_fields=["metadata"])
                         task.start()
                         messages.info(

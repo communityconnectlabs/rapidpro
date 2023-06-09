@@ -1,8 +1,11 @@
 import logging
+import os
 from abc import ABCMeta
 
+import pandas as pd
 from smartmin.models import SmartModel
 
+from django.core.files.base import ContentFile
 from django.db import models
 from django.template import Engine
 from django.urls import re_path
@@ -380,3 +383,27 @@ class ClassifierDuplicatesCheckTask(SmartModel):
     def perform(self):
         self.status = ClassifierDuplicatesCheckTask.IN_PROGRESS
         self.save(update_fields=["status"])
+
+        columns = self.metadata["selected_columns"]
+        file = self.origin_file.path
+        new_filename = f"{os.path.basename(file).removesuffix('.csv')}_similarity.csv"
+        df = pd.read_csv(file)
+        df_copy = df.copy()
+
+        try:
+            for column in columns:
+                column_similarity = f"{column}_Smlr"
+                for i, value in df_copy[column].items():
+                    similar_rows = []
+                    for j, other_value in df_copy[column].items():
+                        if i != j and value == other_value:
+                            similar_rows.append(j)
+                    df_copy.at[i, column_similarity] = ";".join(map(str, similar_rows))
+
+            self.result_file.save(new_filename, ContentFile(df_copy.to_csv(index=False).encode("utf-8")))
+            self.status = ClassifierDuplicatesCheckTask.COMPLETED
+            self.save(update_fields=["status"])
+        except Exception as e:
+            logger.error("Similarity search process has failed. %s", str(e))
+            self.status = ClassifierDuplicatesCheckTask.FAILED
+            self.save(update_fields=["status"])
