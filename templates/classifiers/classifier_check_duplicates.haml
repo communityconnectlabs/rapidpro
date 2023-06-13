@@ -1,5 +1,5 @@
 -extends "smartmin/base.html"
--load smartmin i18n static
+-load smartmin i18n static humanize
 
 -block title
   -trans "Check classifier answers for duplicates."
@@ -30,6 +30,9 @@
               =task.origin_file.name
           -render_field 'columns'
         - else
+          #download-template.mb-4
+            -blocktrans trimmed with sample_url=STATIC_URL|add:"examples/sample_training_data.csv" code=explicit_clear max=max_records|intcomma
+              You can download <a href="{{ sample_url }}">this CSV template</a> as a sample
           #file-upload
             %input(type="file" name="file" id="import-file" onchange='onFileChange()' accept="text/csv")
           #real-button.flex.mb-4
@@ -42,6 +45,29 @@
         .ml-4.button-light(onclick="javascript:history.go(-1)")
           -trans "Cancel"
 
+      -if tasks
+        %table.list.lined.mt-10
+          %thead
+            %tr
+              %th
+                File
+              %th
+                Status
+              %th
+                Created By
+              %th
+                Created On
+          %tbody
+            -for task in tasks
+              %tr
+                %td
+                  =task.file_name
+                %td
+                  =task.get_status_display
+                %td
+                  =task.created_by
+                %td
+                  =task.created_on
 -block extra-script
   {{ block.super }}
   -block spa-script

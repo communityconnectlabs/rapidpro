@@ -371,6 +371,10 @@ class ClassifierDuplicatesCheckTask(SmartModel):
     status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
     metadata = models.JSONField(default=dict)
 
+    @property
+    def file_name(self):
+        return os.path.basename(self.origin_file.path)
+
     @classmethod
     def create(cls, file, user):
         return cls.objects.create(origin_file=file, created_by=user, modified_by=user)

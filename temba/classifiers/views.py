@@ -370,6 +370,11 @@ class ClassifierCRUDL(SmartCRUDL):
         def get_success_url(self):
             return reverse("orgs.org_home")
 
+        def get_context_data(self, **kwargs):
+            context_data = super().get_context_data(**kwargs)
+            context_data["tasks"] = ClassifierDuplicatesCheckTask.objects.all().order_by("-created_on")[:5]
+            return context_data
+
         def form_valid(self, form):
             context = self.get_context_data()
             context["form"] = form
