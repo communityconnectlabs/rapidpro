@@ -5,6 +5,7 @@ from abc import ABCMeta
 import pandas as pd
 from smartmin.models import SmartModel
 
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 from django.template import Engine
@@ -407,7 +408,17 @@ class ClassifierDuplicatesCheckTask(SmartModel):
             self.result_file.save(new_filename, ContentFile(df_copy.to_csv(index=False).encode("utf-8")))
             self.status = ClassifierDuplicatesCheckTask.COMPLETED
             self.save(update_fields=["status"])
+            self.send_email()
         except Exception as e:
-            logger.error("Similarity search process has failed. %s", str(e))
+            logger.error("Similarity search process has been failed. %s", str(e))
             self.status = ClassifierDuplicatesCheckTask.FAILED
             self.save(update_fields=["status"])
+
+    def send_email(self):
+        send_template_email(
+            self.created_by.email,
+            "Similarity search process has been completed.",
+            "notifications/email/duplicates_check_result",
+            {"target_url": self.result_file.url},
+            settings.BRANDING.get(settings.DEFAULT_BRAND),
+        )
