@@ -3,6 +3,7 @@ import os
 from abc import ABCMeta
 
 import pandas as pd
+from jellyfish import jaro_similarity
 from smartmin.models import SmartModel
 
 from django.conf import settings
@@ -401,8 +402,8 @@ class ClassifierDuplicatesCheckTask(SmartModel):
                 for i, value in df_copy[column].items():
                     similar_rows = []
                     for j, other_value in df_copy[column].items():
-                        if i != j and value == other_value:
-                            similar_rows.append(j)
+                        if i != j and jaro_similarity(value, other_value) >= 0.95:
+                            similar_rows.append(j + 1)
                     df_copy.at[i, column_similarity] = ";".join(map(str, similar_rows))
 
             self.result_file.save(new_filename, ContentFile(df_copy.to_csv(index=False).encode("utf-8")))
