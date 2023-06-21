@@ -8,9 +8,10 @@ from smartmin.models import SmartModel
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage as storage
 from django.db import models
 from django.template import Engine
-from django.urls import re_path
+from django.urls import re_path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -368,6 +369,7 @@ class ClassifierDuplicatesCheckTask(SmartModel):
         (FAILED, _("Failed")),
     )
 
+    org = models.ForeignKey(Org, related_name="duplicates_checks", on_delete=models.PROTECT)
     origin_file = models.FileField(upload_to="duplicates_check")
     result_file = models.FileField(upload_to="duplicates_check", null=True, blank=True)
     status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
@@ -375,7 +377,7 @@ class ClassifierDuplicatesCheckTask(SmartModel):
 
     @property
     def file_name(self):
-        return os.path.basename(self.origin_file.path)
+        return os.path.basename(self.origin_file.name)
 
     @classmethod
     def create(cls, file, user):
@@ -391,9 +393,9 @@ class ClassifierDuplicatesCheckTask(SmartModel):
         self.save(update_fields=["status"])
 
         columns = self.metadata["selected_columns"]
-        file = self.origin_file.path
-        new_filename = f"{os.path.basename(file).removesuffix('.csv')}_similarity.csv"
-        df = pd.read_csv(file)
+        file_name = self.origin_file.name
+        new_filename = f"{os.path.basename(file_name).removesuffix('.csv')}_similarity.csv"
+        df = pd.read_csv(storage.open(file_name, "r"))
         df_copy = df.copy()
 
         try:
@@ -420,6 +422,6 @@ class ClassifierDuplicatesCheckTask(SmartModel):
             self.created_by.email,
             "Similarity search process has been completed.",
             "notifications/email/duplicates_check_result",
-            {"target_url": self.result_file.url},
+            {"target_url": reverse("file_storage", kwargs={"file_path": self.result_file.name})},
             settings.BRANDING.get(settings.DEFAULT_BRAND),
         )

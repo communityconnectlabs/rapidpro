@@ -3986,7 +3986,7 @@ class OrgCRUDL(SmartCRUDL):
                     formax.add_section(
                         "duplicates_check",
                         reverse("classifiers.classifier_check_duplicates"),
-                        icon="icon-google-plus",
+                        icon="icon-checkbox-checked",
                         action="link",
                     )
 

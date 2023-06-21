@@ -8,6 +8,7 @@ from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTempla
 from django import forms
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.core.files.storage import default_storage as storage
 from django.core.validators import FileExtensionValidator
 from django.http import HttpResponseRedirect, JsonResponse
 from django.template.loader import render_to_string
@@ -368,11 +369,14 @@ class ClassifierCRUDL(SmartCRUDL):
             return context
 
         def get_success_url(self):
-            return reverse("orgs.org_home")
+            return reverse("classifiers.classifier_check_duplicates")
 
         def get_context_data(self, **kwargs):
             context_data = super().get_context_data(**kwargs)
-            context_data["tasks"] = ClassifierDuplicatesCheckTask.objects.all().order_by("-created_on")[:5]
+            current_org = self.request.org
+            tasks = ClassifierDuplicatesCheckTask.objects.filter(org=current_org).order_by("-created_on")[:5]
+            context_data["tasks"] = tasks
+
             return context_data
 
         def form_valid(self, form):
@@ -385,6 +389,7 @@ class ClassifierCRUDL(SmartCRUDL):
                 data = pd.read_csv(file)
                 available_columns = list(data.columns)
                 task = ClassifierDuplicatesCheckTask.objects.create(
+                    org=self.request.org,
                     origin_file=file,
                     created_by=self.request.user,
                     modified_by=self.request.user,
@@ -411,7 +416,7 @@ class ClassifierCRUDL(SmartCRUDL):
                     context["task"] = task
                     context["file_uploaded"] = True
                     form.add_error("columns", ValidationError(_("This field is required.")))
-                    file = task.origin_file.path
+                    file = storage.open(task.origin_file.name, "r")
                     data = pd.read_csv(file)
                     available_columns = list(data.columns)
                     form.fields["columns"].choices = ((c, c) for c in available_columns)
