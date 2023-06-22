@@ -3982,6 +3982,14 @@ class OrgCRUDL(SmartCRUDL):
                 for classifier in classifiers:
                     self.add_classifier_section(formax, classifier)
 
+                if classifiers.filter(classifier_type="dialogflow").exists():
+                    formax.add_section(
+                        "duplicates_check",
+                        reverse("classifiers.classifier_check_duplicates"),
+                        icon="icon-checkbox-checked",
+                        action="link",
+                    )
+
             if self.has_org_perm("tickets.ticketer_read"):
                 from temba.tickets.types.internal import InternalType
 

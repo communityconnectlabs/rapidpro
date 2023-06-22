@@ -7,6 +7,8 @@ from smartmin.views import SmartCRUDL, SmartFormView, SmartReadView, SmartTempla
 
 from django import forms
 from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.core.files.storage import default_storage as storage
 from django.core.validators import FileExtensionValidator
 from django.http import HttpResponseRedirect, JsonResponse
 from django.template.loader import render_to_string
@@ -20,7 +22,7 @@ from temba.utils.gsm7 import calculate_num_segments, is_gsm7, replace_accented_c
 from temba.utils.languages import alpha3_to_alpha2
 from temba.utils.views import ComponentFormMixin, SpaMixin
 
-from .models import Classifier, ClassifierTrainingTask
+from .models import Classifier, ClassifierDuplicatesCheckTask, ClassifierTrainingTask
 
 
 class BaseConnectView(ComponentFormMixin, OrgPermsMixin, SmartFormView):
@@ -51,7 +53,7 @@ class BaseConnectView(ComponentFormMixin, OrgPermsMixin, SmartFormView):
 
 class ClassifierCRUDL(SmartCRUDL):
     model = Classifier
-    actions = ("read", "connect", "delete", "sync", "menu", "train")
+    actions = ("read", "connect", "delete", "sync", "menu", "train", "check_duplicates")
 
     class Menu(MenuMixin, OrgPermsMixin, SmartTemplateView):
         def derive_menu(self):
@@ -325,3 +327,97 @@ class ClassifierCRUDL(SmartCRUDL):
                     message["file"] = ",".join(form_errors)
 
             return JsonResponse(message, status=status)
+
+    class CheckDuplicates(SpaMixin, OrgPermsMixin, SmartFormView):
+        class Form(forms.Form):
+            class ColumnsField(forms.MultipleChoiceField):
+                def validate(self, value):
+                    pass
+
+            def __init__(self, *args, columns=None, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.fields["columns"].choices = columns or []
+
+            file = forms.FileField(
+                validators=[FileExtensionValidator(allowed_extensions=("csv",))],
+                required=False,
+            )
+            task = forms.ModelChoiceField(
+                ClassifierDuplicatesCheckTask.objects.all(),
+                blank=True,
+                required=False,
+            )
+            columns = ColumnsField(
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Fields"}),
+            )
+
+            def clean_columns(self):
+                return self.cleaned_data["columns"]
+
+            def clean(self):
+                cleaned_data = super().clean()
+                if not any([cleaned_data.get("file"), cleaned_data.get("task")]):
+                    self.add_error("file", "This field is required.")
+
+                return cleaned_data
+
+        permission = "classifiers.classifier_train"
+        form_class = Form
+
+        def as_json(self, context):
+            return context
+
+        def get_success_url(self):
+            return reverse("classifiers.classifier_check_duplicates")
+
+        def get_context_data(self, **kwargs):
+            context_data = super().get_context_data(**kwargs)
+            current_org = self.request.org
+            tasks = ClassifierDuplicatesCheckTask.objects.filter(org=current_org).order_by("-created_on")[:5]
+            context_data["tasks"] = tasks
+
+            return context_data
+
+        def form_valid(self, form):
+            context = self.get_context_data()
+            context["form"] = form
+
+            file_name = form.cleaned_data.get("file")
+            if file_name:
+                file = self.request.FILES.get("file")
+                data = pd.read_csv(file)
+                available_columns = list(data.columns)
+                task = ClassifierDuplicatesCheckTask.objects.create(
+                    org=self.request.org,
+                    origin_file=file,
+                    created_by=self.request.user,
+                    modified_by=self.request.user,
+                )
+                form.fields["columns"].choices = ((c, c) for c in available_columns)
+                context["file_uploaded"] = True
+                context["task"] = task
+            else:
+                task: ClassifierDuplicatesCheckTask = form.cleaned_data.get("task")
+                if task:
+                    columns = form.cleaned_data.get("columns", [])
+                    if columns:
+                        task.metadata["selected_columns"] = columns
+                        task.save(update_fields=["metadata"])
+                        task.start()
+                        messages.info(
+                            self.request,
+                            _("We are processing your file. We will e-mail you at %s when it is ready.")
+                            % self.request.user.username,
+                        )
+                        return HttpResponseRedirect(self.get_success_url())
+
+                    # render the same page with error message
+                    context["task"] = task
+                    context["file_uploaded"] = True
+                    form.add_error("columns", ValidationError(_("This field is required.")))
+                    file = storage.open(task.origin_file.name, "r")
+                    data = pd.read_csv(file)
+                    available_columns = list(data.columns)
+                    form.fields["columns"].choices = ((c, c) for c in available_columns)
+            return self.render_to_response(context)

@@ -133,6 +133,7 @@ env_py3/
 rp-indexer/
 media/cache/
 media/flow_pdf/
+media/duplicates_check/
 temba/settings_test.py
 docker.settings.aptible-prod
 docker.settings.aptible-stage
