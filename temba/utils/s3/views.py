@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.core.files.storage import default_storage
 from django.http import FileResponse, Http404
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -17,7 +19,13 @@ class PrivateFileCallbackView(View):
 
     @staticmethod
     def get(request, *args, **kwargs):
-        try:
-            return FileResponse(private_file_storage.open(kwargs["file_path"]))
-        except FileNotFoundError:
-            raise Http404
+        if getattr(settings, "AWS_S3_ENABLED", False):
+            try:
+                return FileResponse(private_file_storage.open(kwargs["file_path"]))
+            except FileNotFoundError:
+                raise Http404
+        else:
+            try:
+                return FileResponse(default_storage.open(kwargs["file_path"]))
+            except FileNotFoundError:
+                raise Http404

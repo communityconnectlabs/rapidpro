@@ -69,6 +69,7 @@ class ClaimView(ClaimViewMixin, SmartFormView):
             "side_padding": 20,
             "bottom_padding": 20,
             "side_of_screen": "right",
+            "store_history": False,
             "width": 400,
             "height": 550,
         }
