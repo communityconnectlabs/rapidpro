@@ -69,6 +69,8 @@ class ClaimView(ClaimViewMixin, SmartFormView):
             "side_padding": 20,
             "bottom_padding": 20,
             "side_of_screen": "right",
+            "width": 400,
+            "height": 550,
         }
         for lang in org.flow_languages:
             lang_alpha = pycountry.languages.get(alpha_3=lang)
