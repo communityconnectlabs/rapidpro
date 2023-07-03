@@ -770,6 +770,8 @@ class UpdateWebChatForm(UpdateChannelForm):
             self.fields["user_chat_bg"].initial = config.get("user_chat_bg", default_theme.get("user_chat_bg"))
             self.fields["user_chat_txt"].initial = config.get("user_chat_txt", default_theme.get("user_chat_txt"))
 
+            self.fields["width"].initial = config.get("width", "400")
+            self.fields["height"].initial = config.get("height", "550")
             self.fields["chat_button_height"].initial = config.get("chat_button_height", "64")
             self.fields["side_padding"].initial = config.get("side_padding", "20")
             self.fields["bottom_padding"].initial = config.get("bottom_padding", "20")
@@ -1014,6 +1016,18 @@ class UpdateWebChatForm(UpdateChannelForm):
         self.add_config_field(
             "user_chat_txt",
             forms.CharField(label=_("User Chat Text"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "width",
+            forms.CharField(label=_("Width (in pixels)"), widget=forms.NumberInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "height",
+            forms.CharField(label=_("Height (in pixels)"), widget=forms.NumberInput()),
             default=None,
         )
 
@@ -1584,6 +1598,8 @@ class ChannelCRUDL(SmartCRUDL):
                     "#id_side_padding",
                     "#id_bottom_padding",
                     "#id_chat_button_height",
+                    "#id_width",
+                    "#id_height",
                 ]
                 context["hostname"] = settings.HOSTNAME
                 context["websocket_url"] = settings.WEBSOCKET_SERVER_URL

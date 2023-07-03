@@ -104,6 +104,8 @@
           Position and Size
         </a>
         <div class='custom-collapsed-menu-fields'>
+          {% render_field "width" %}
+          {% render_field "height" %}
           {% render_field "chat_button_height" %}
           {% render_field "side_padding" %}
           {% render_field "bottom_padding" %}
@@ -326,6 +328,8 @@
       var chatButtonHeight = parseInt($("#id_chat_button_height").val());
       var sidePadding = parseInt($("#id_side_padding").val());
       var bottomPadding = parseInt($("#id_bottom_padding").val());
+      var width = parseInt($("#id_width").val());
+      var height = parseInt($("#id_height").val());
       var sideOfScreen = sideOfScreenValue;
       var googleFont = googleFontValue;
       var welcomeMessageQuickReplies = quickRepliesForm;
@@ -369,7 +373,9 @@
           sidePadding: sidePadding,
           bottomPadding: bottomPadding,
           sideOfScreen: sideOfScreen,
-          googleFont: googleFont
+          googleFont: googleFont,
+          width: width,
+          height: height
         },
         meta: {
           icon: {
