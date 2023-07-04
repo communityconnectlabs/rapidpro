@@ -783,6 +783,8 @@ class UpdateWebChatForm(UpdateChannelForm):
 
             self.fields["inputtext_placeholder_default"].initial = config.get("inputtext_placeholder_default", "")
 
+            self.fields["store_history"].initial = config.get("store_history", False)
+
             response_fonts = requests.get(
                 f"https://www.googleapis.com/webfonts/v1/webfonts?key={settings.GOOGLE_FONT_API_KEY}"
             )
@@ -1052,6 +1054,18 @@ class UpdateWebChatForm(UpdateChannelForm):
 
         self.add_config_field(
             "action_type", forms.CharField(widget=forms.HiddenInput()), default="update_and_generate_code_snippet"
+        )
+
+        self.add_config_field(
+            "store_history",
+            forms.BooleanField(
+                label=_("Store History"),
+                help_text=_(
+                    "Keeps chat identifier in cookies so the history can be accessible after the page refresh"
+                ),
+                required=False,
+            ),
+            default=False,
         )
 
         unlisted_fields = ["name", "alert_email"]

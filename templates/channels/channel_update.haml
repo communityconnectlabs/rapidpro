@@ -43,6 +43,7 @@
           {% render_field "logo" %}
           {% render_field "logo_style" %}
           {% render_field "title" %}
+          {% render_field "store_history" %}
         </div>
       </div>
 
@@ -338,6 +339,8 @@
         welcomeMessageQuickReplies = valuesQuickReplies.join(",");
       }
 
+      var storeHistory = $("#id_store_history").val() === 1;
+
       welcomeMessageQuickReplies = (welcomeMessageQuickReplies !== "" && welcomeMessageQuickReplies !== undefined) ? welcomeMessageQuickReplies.split(",") : [];
 
       window.renderSurveyor({
@@ -352,6 +355,7 @@
         inputTextPlaceholder: inputTextPlaceholderValue,
         inputTextPlaceholderI18n: inputTextDict,
         welcomeMessageQuickReplies: welcomeMessageQuickReplies,
+        storeHistory: storeHistory,
         theme: {
           widgetBackgroundColor: widgetBackgroundColor,
           chatHeaderBackgroundColor: chatHeaderBackgroundColor,
