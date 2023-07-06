@@ -840,6 +840,7 @@ class FlowCRUDL(SmartCRUDL):
                 expires_after_minutes=Flow.EXPIRES_DEFAULTS[obj.flow_type],
                 base_language=obj.base_language,
                 create_revision=True,
+                **dict(metadata={Flow.METADATA_IVR_RETRY: -1}),
             )
 
         def post_save(self, obj):
@@ -923,7 +924,7 @@ class FlowCRUDL(SmartCRUDL):
             ivr_retry = forms.ChoiceField(
                 label=_("Retry call if unable to connect"),
                 help_text=_("Retries call three times for the chosen interval"),
-                initial=60,
+                initial=-1,
                 choices=IVRCall.RETRY_CHOICES,
                 widget=SelectWidget(attrs={"widget_only": False}),
             )
