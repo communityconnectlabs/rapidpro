@@ -832,6 +832,28 @@ class UpdateWebChatForm(UpdateChannelForm):
 
         return name
 
+    def clean_width(self):
+        width = self.cleaned_data["width"]
+
+        if str(width).endswith("px"):
+            width = str(width).replace("px", "")
+
+        if int(width) < 250:
+            raise ValidationError(_("The minimum width is 250px."))
+
+        return width
+
+    def clean_height(self):
+        height = self.cleaned_data["height"]
+
+        if str(height).endswith("px"):
+            height = str(height).replace("px", "")
+
+        if int(height) < 300:
+            raise ValidationError(_("The minimum height is 300px."))
+
+        return height
+
     def clean_title(self):
         title = self.cleaned_data["title"]
 
@@ -1021,13 +1043,21 @@ class UpdateWebChatForm(UpdateChannelForm):
 
         self.add_config_field(
             "width",
-            forms.CharField(label=_("Width (in pixels)"), widget=forms.NumberInput()),
+            forms.CharField(
+                label=_("Width (in pixels)"),
+                widget=forms.NumberInput(),
+                help_text=_("Default: 400 | Minimum: 250"),
+            ),
             default=None,
         )
 
         self.add_config_field(
             "height",
-            forms.CharField(label=_("Height (in pixels)"), widget=forms.NumberInput()),
+            forms.CharField(
+                label=_("Height (in pixels)"),
+                widget=forms.NumberInput(),
+                help_text=_("Default: 550 | Minimum: 300"),
+            ),
             default=None,
         )
 
