@@ -2320,6 +2320,8 @@ class ContactImport(SmartModel):
 
                 if attribute in ("uuid", "name", "language"):
                     mapping = {"type": "attribute", "name": attribute}
+                if attribute == "groups":
+                    mapping = {"type": "groups", "name": "groups"}
             elif header_prefix == "urn" and header_name:
                 mapping = {"type": "scheme", "scheme": header_name.lower()}
             elif header_prefix == "field" and header_name:
@@ -2667,6 +2669,16 @@ class ContactImport(SmartModel):
                     spec["fields"] = {}
                 key = mapping["key"]
                 spec["fields"][key] = value
+            elif mapping["type"] == "groups":
+                groups_names = map(lambda x: x.strip(), value.split(","))
+                for group_name in groups_names:
+                    try:
+                        group = self.org.all_groups.get(name__exact=group_name)
+                        if group.group_type == ContactGroup.TYPE_USER_DEFINED:
+                            spec["groups"] = spec.get("groups", []) + [str(group.uuid)]
+                    except ContactGroup.DoesNotExist:
+                        group = ContactGroup.create_static(self.org, self.created_by, group_name)
+                        spec["groups"] = spec.get("groups", []) + [str(group.uuid)]
 
         # Make sure the row has a UUID or URNs
         if not spec.get("uuid", "") and not spec.get("urns", []):
