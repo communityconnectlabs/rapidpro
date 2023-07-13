@@ -2732,7 +2732,7 @@ class FlowCRUDL(SmartCRUDL):
 
             def clean(self):
                 cleaned_data = super().clean()
-                mode = cleaned_data["mode"]
+                mode = cleaned_data.get("mode")
                 omnibox = cleaned_data.get("omnibox")
                 query = cleaned_data.get("query")
 
