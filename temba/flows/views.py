@@ -1833,9 +1833,10 @@ class FlowCRUDL(SmartCRUDL):
 
                 org = user.get_org()
                 lang_codes = list(org.flow_languages)
-                lang_codes.remove(instance.base_language)
+                if instance.base_language in lang_codes:
+                    lang_codes.remove(instance.base_language)
 
-                self.fields["language"].choices = languages.choices(codes=lang_codes)
+                self.fields["language"].choices = languages.choices(codes=set(lang_codes))
 
         title = _("Import Translation")
         submit_button_name = _("Import")
