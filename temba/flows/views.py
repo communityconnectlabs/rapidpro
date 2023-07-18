@@ -840,6 +840,7 @@ class FlowCRUDL(SmartCRUDL):
                 expires_after_minutes=Flow.EXPIRES_DEFAULTS[obj.flow_type],
                 base_language=obj.base_language,
                 create_revision=True,
+                **dict(metadata={Flow.METADATA_IVR_RETRY: -1}),
             )
 
         def post_save(self, obj):
@@ -923,7 +924,7 @@ class FlowCRUDL(SmartCRUDL):
             ivr_retry = forms.ChoiceField(
                 label=_("Retry call if unable to connect"),
                 help_text=_("Retries call three times for the chosen interval"),
-                initial=60,
+                initial=-1,
                 choices=IVRCall.RETRY_CHOICES,
                 widget=SelectWidget(attrs={"widget_only": False}),
             )
@@ -1832,9 +1833,10 @@ class FlowCRUDL(SmartCRUDL):
 
                 org = user.get_org()
                 lang_codes = list(org.flow_languages)
-                lang_codes.remove(instance.base_language)
+                if instance.base_language in lang_codes:
+                    lang_codes.remove(instance.base_language)
 
-                self.fields["language"].choices = languages.choices(codes=lang_codes)
+                self.fields["language"].choices = languages.choices(codes=set(lang_codes))
 
         title = _("Import Translation")
         submit_button_name = _("Import")
@@ -2731,7 +2733,7 @@ class FlowCRUDL(SmartCRUDL):
 
             def clean(self):
                 cleaned_data = super().clean()
-                mode = cleaned_data["mode"]
+                mode = cleaned_data.get("mode")
                 omnibox = cleaned_data.get("omnibox")
                 query = cleaned_data.get("query")
 

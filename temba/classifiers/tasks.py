@@ -7,7 +7,7 @@ from celery import shared_task
 
 from temba.utils.celery import nonoverlapping_task
 
-from .models import Classifier, ClassifierTrainingTask
+from .models import Classifier, ClassifierDuplicatesCheckTask, ClassifierTrainingTask
 
 logger = logging.getLogger(__name__)
 
@@ -33,3 +33,10 @@ def train_bot(self, instance_id):
         # retry after a minute and 10 seconds later
         next_retry = now() + timedelta(seconds=70)
         self.apply_async((instance_id,), eta=next_retry)
+
+
+@shared_task(name="check_duplicates")
+def check_duplicates(instance_id):
+    task = ClassifierDuplicatesCheckTask.objects.filter(id=instance_id).first()
+    if task:
+        task.perform()

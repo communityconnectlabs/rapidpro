@@ -1799,7 +1799,10 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # don't show language if workspace doesn't have languages configured
         self.assertCreateFetch(
-            create_url, allow_viewers=False, allow_editors=True, form_fields=["name", "keyword_triggers", "flow_type"]
+            create_url,
+            allow_viewers=False,
+            allow_editors=True,
+            form_fields=["name", "keyword_triggers", "flow_type"],
         )
 
         self.org.set_flow_languages(self.admin, ["eng", "spa"])
@@ -1968,6 +1971,7 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
         voice_flow = Flow.objects.get(org=self.org, name="Voice Flow")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(voice_flow.flow_type, "V")
+        self.assertEqual(voice_flow.metadata.get("ivr_retry"), -1)
 
         # default expiration for voice is shorter
         self.assertEqual(voice_flow.expires_after_minutes, 5)

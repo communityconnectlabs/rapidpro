@@ -3982,6 +3982,14 @@ class OrgCRUDL(SmartCRUDL):
                 for classifier in classifiers:
                     self.add_classifier_section(formax, classifier)
 
+                if classifiers.filter(classifier_type="dialogflow").exists():
+                    formax.add_section(
+                        "duplicates_check",
+                        reverse("classifiers.classifier_check_duplicates"),
+                        icon="icon-checkbox-checked",
+                        action="link",
+                    )
+
             if self.has_org_perm("tickets.ticketer_read"):
                 from temba.tickets.types.internal import InternalType
 
@@ -4111,12 +4119,15 @@ class OrgCRUDL(SmartCRUDL):
         permission = "channels.channel_read"
 
         def get_context_data(self, **kwargs):
+            context_data = super().get_context_data(**kwargs)
+            if self.request.META.get("HTTP_X_FORMAX", 0):
+                return context_data
+
             org = self.org
             twilio_client = org.get_twilio_client()
             if not twilio_client:
                 return Http404
 
-            context_data = super().get_context_data(**kwargs)
             origin_stats = org.twilio_stats
             types = ["sms_in", "mms_in", "calls_in", "sms_out", "mms_out", "calls_out"]
             table_stats = defaultdict(lambda: {t: 0 for t in types})

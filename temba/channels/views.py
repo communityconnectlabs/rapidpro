@@ -770,6 +770,8 @@ class UpdateWebChatForm(UpdateChannelForm):
             self.fields["user_chat_bg"].initial = config.get("user_chat_bg", default_theme.get("user_chat_bg"))
             self.fields["user_chat_txt"].initial = config.get("user_chat_txt", default_theme.get("user_chat_txt"))
 
+            self.fields["width"].initial = config.get("width", "400")
+            self.fields["height"].initial = config.get("height", "550")
             self.fields["chat_button_height"].initial = config.get("chat_button_height", "64")
             self.fields["side_padding"].initial = config.get("side_padding", "20")
             self.fields["bottom_padding"].initial = config.get("bottom_padding", "20")
@@ -829,6 +831,28 @@ class UpdateWebChatForm(UpdateChannelForm):
             raise ValidationError(_("A WebChat channel for this name already exists on your account."))
 
         return name
+
+    def clean_width(self):
+        width = self.cleaned_data["width"]
+
+        if str(width).endswith("px"):
+            width = str(width).replace("px", "")
+
+        if int(width) < 250:
+            raise ValidationError(_("The minimum width is 250px."))
+
+        return width
+
+    def clean_height(self):
+        height = self.cleaned_data["height"]
+
+        if str(height).endswith("px"):
+            height = str(height).replace("px", "")
+
+        if int(height) < 300:
+            raise ValidationError(_("The minimum height is 300px."))
+
+        return height
 
     def clean_title(self):
         title = self.cleaned_data["title"]
@@ -1014,6 +1038,26 @@ class UpdateWebChatForm(UpdateChannelForm):
         self.add_config_field(
             "user_chat_txt",
             forms.CharField(label=_("User Chat Text"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "width",
+            forms.CharField(
+                label=_("Width (in pixels)"),
+                widget=forms.NumberInput(),
+                help_text=_("Default: 400 | Minimum: 250"),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "height",
+            forms.CharField(
+                label=_("Height (in pixels)"),
+                widget=forms.NumberInput(),
+                help_text=_("Default: 550 | Minimum: 300"),
+            ),
             default=None,
         )
 
@@ -1584,6 +1628,8 @@ class ChannelCRUDL(SmartCRUDL):
                     "#id_side_padding",
                     "#id_bottom_padding",
                     "#id_chat_button_height",
+                    "#id_width",
+                    "#id_height",
                 ]
                 context["hostname"] = settings.HOSTNAME
                 context["websocket_url"] = settings.WEBSOCKET_SERVER_URL
