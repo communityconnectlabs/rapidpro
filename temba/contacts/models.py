@@ -838,6 +838,19 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             .order_by("-created_on")
             .select_related("channel")[:limit]
         )
+        retried_calls = []
+        for call in calls:
+            channel_logs = call.channel_logs.filter(
+                description__in=["Call Retry Requested", "Error Requesting Call Retry"]
+            )
+            for log in channel_logs:
+                retried_calls.append(
+                    {
+                        "type": "call_retried",
+                        "created_on": log.created_on.isoformat(),
+                        "is_error": log.is_error,
+                    }
+                )
 
         ticket_events = (
             self.ticket_events.filter(created_on__gte=after, created_on__lt=before)
@@ -871,6 +884,7 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             channel_events,
             campaign_events,
             calls,
+            retried_calls,
             transfers,
             session_events,
         )

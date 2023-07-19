@@ -30,6 +30,7 @@ ACTIVITY_ICONS = {
     Event.TYPE_AIRTIME_TRANSFERRED: "icon-cash",
     Event.TYPE_BROADCAST_CREATED: "icon-bullhorn",
     Event.TYPE_CALL_STARTED: "icon-phone",
+    Event.TYPE_CALL_RETRIED: "icon-phone",
     Event.TYPE_CAMPAIGN_FIRED: "icon-clock",
     Event.TYPE_CHANNEL_EVENT: "icon-power",
     Event.TYPE_CHANNEL_EVENT + ":missed_incoming": "icon-call-incoming",
@@ -189,6 +190,8 @@ def history_class(event: dict) -> str:
         elif event_type == Event.TYPE_WEBHOOK_CALLED and event["status"] != "success":
             classes.append("warning")
         elif event_type == Event.TYPE_CALL_STARTED and event["status"] == IVRCall.STATUS_FAILED:
+            classes.append("warning")
+        elif event_type == Event.TYPE_CALL_RETRIED and event["is_error"]:
             classes.append("warning")
         elif event_type == Event.TYPE_CAMPAIGN_FIRED and event["fired_result"] == EventFire.RESULT_SKIPPED:
             classes.append("skipped")

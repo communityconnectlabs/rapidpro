@@ -48,6 +48,7 @@ class Event:
 
     # additional events
     TYPE_CALL_STARTED = "call_started"
+    TYPE_CALL_RETRIED = "call_retried"
     TYPE_CAMPAIGN_FIRED = "campaign_fired"
     TYPE_CHANNEL_EVENT = "channel_event"
     TYPE_FLOW_EXITED = "flow_exited"
