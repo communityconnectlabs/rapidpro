@@ -1,6 +1,7 @@
 import json
 import urllib.parse
 import xml.sax.saxutils
+from collections import OrderedDict
 from urllib.parse import parse_qs, urlencode
 
 HTTP_BODY_BOUNDARY = "\r\n\r\n"
@@ -41,11 +42,36 @@ def text(s, needle, mask):
     return s
 
 
+def replace_headers(raw_data, headers_to_replace):
+    try:
+        headers = OrderedDict()
+        raw_headers, raw_body = raw_data.split(HTTP_BODY_BOUNDARY)
+
+        # parse headers
+        for line in str(raw_headers).split("\r\n")[1:]:
+            key, value = line.split(": ")
+            headers[key] = value
+
+        # replace needed
+        for key, value in headers_to_replace.items():
+            if key in headers:
+                headers[key] = value
+
+        # rebuild http message
+        raw_headers = "\r\n".join([": ".join((key, value)) for key, value in headers.items()])
+        raw_message = HTTP_BODY_BOUNDARY.join((raw_headers, raw_body))
+        return raw_message
+    except (KeyError, ValueError):
+        return raw_data
+
+
 def http_trace(trace, needle, mask, body_keys=()):
     """
     Redacts a value from the given HTTP trace by replacing it with a mask. If body_keys is specified then we also try
     to parse the body and replace those keyed values with the mask. Bodies are parsed as JSON and URL encoded.
     """
+
+    trace = replace_headers(trace, {"Authorization": "*" * 8})
 
     *rest, body = trace.split(HTTP_BODY_BOUNDARY)
 

@@ -55,3 +55,6 @@ class TwilioWhatsappType(ChannelType):
         "CalledState",
         "CalledZip",
     }
+
+    force_redact_request_keys = {"MessagingServiceSid"}
+    force_redact_response_keys = {"MessagingServiceSid"}
