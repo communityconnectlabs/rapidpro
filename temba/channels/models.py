@@ -1285,8 +1285,8 @@ class ChannelLog(models.Model):
             return result
 
         redacted = basic_reduction()
-        if force_redact_keys and self.msg_id:
-            redacted = redact.http_trace(redacted, self.msg.contact_urn.path, mask, force_redact_keys)
+        if force_redact_keys:
+            redacted = redact.http_trace(redacted, "********", mask, force_redact_keys)
 
         return redacted
 

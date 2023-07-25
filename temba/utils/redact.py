@@ -46,9 +46,10 @@ def replace_headers(raw_data, headers_to_replace):
     try:
         headers = OrderedDict()
         raw_headers, raw_body = raw_data.split(HTTP_BODY_BOUNDARY)
+        split_headers = str(raw_headers).split("\r\n")
 
         # parse headers
-        for line in str(raw_headers).split("\r\n")[1:]:
+        for line in split_headers[1:]:
             key, value = line.split(": ")
             headers[key] = value
 
@@ -58,7 +59,8 @@ def replace_headers(raw_data, headers_to_replace):
                 headers[key] = value
 
         # rebuild http message
-        raw_headers = "\r\n".join([": ".join((key, value)) for key, value in headers.items()])
+        first_header = split_headers[0].strip()
+        raw_headers = "\r\n".join([first_header] + [": ".join((key, value)) for key, value in headers.items()])
         raw_message = HTTP_BODY_BOUNDARY.join((raw_headers, raw_body))
         return raw_message
     except (KeyError, ValueError):
