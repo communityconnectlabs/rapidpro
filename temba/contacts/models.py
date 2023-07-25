@@ -840,7 +840,7 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
         )
         retried_calls = []
         for call in calls:
-            channel_logs = call.channel_logs.filter(
+            channel_logs = call.channel_logs.only("is_error", "created_on").filter(
                 description__in=["Call Retry Requested", "Error Requesting Call Retry"]
             )
             for log in channel_logs:
