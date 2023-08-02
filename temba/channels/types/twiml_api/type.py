@@ -62,3 +62,6 @@ class TwimlAPIType(ChannelType):
             description=_("Incoming messages for this channel will be sent to this endpoint."),
         ),
     )
+
+    force_redact_request_keys = {"MessagingServiceSid"}
+    force_redact_response_keys = {"MessagingServiceSid"}

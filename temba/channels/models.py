@@ -93,6 +93,8 @@ class ChannelType(metaclass=ABCMeta):
 
     redact_request_keys = set()
     redact_response_keys = set()
+    force_redact_request_keys = set()
+    force_redact_response_keys = set()
 
     def is_available_to(self, user):
         """
@@ -1243,39 +1245,48 @@ class ChannelLog(models.Model):
         Gets the request trace as it should be displayed to the given user
         """
         redact_keys = Channel.get_type_from_code(self.channel.channel_type).redact_request_keys
+        force_redact_keys = Channel.get_type_from_code(self.channel.channel_type).force_redact_request_keys
 
-        return self._get_display_value(user, self.request, anon_mask, redact_keys)
+        return self._get_display_value(user, self.request, anon_mask, redact_keys, force_redact_keys)
 
     def get_response_display(self, user, anon_mask):
         """
         Gets the response trace as it should be displayed to the given user
         """
         redact_keys = Channel.get_type_from_code(self.channel.channel_type).redact_response_keys
+        force_redact_keys = Channel.get_type_from_code(self.channel.channel_type).force_redact_response_keys
 
-        return self._get_display_value(user, self.response, anon_mask, redact_keys)
+        return self._get_display_value(user, self.response, anon_mask, redact_keys, force_redact_keys)
 
-    def _get_display_value(self, user, original, mask, redact_keys=()):
+    def _get_display_value(self, user, original, mask, redact_keys=(), force_redact_keys=()):
         """
         Get a part of the log which may or may not have to be redacted to hide sensitive information in anon orgs
         """
 
-        if not self.channel.org.is_anon or user.has_org_perm(self.channel.org, "contacts.contact_break_anon"):
-            return original
+        def basic_reduction():
+            if not self.channel.org.is_anon or user.has_org_perm(self.channel.org, "contacts.contact_break_anon"):
+                return original
 
-        # if this log doesn't have a msg then we don't know what to redact, so redact completely
-        if not self.msg_id:
-            return mask
+            # if this log doesn't have a msg then we don't know what to redact, so redact completely
+            if not self.msg_id:
+                return mask
 
-        needle = self.msg.contact_urn.path
+            needle = self.msg.contact_urn.path
 
-        if redact_keys:
-            redacted = redact.http_trace(original, needle, mask, redact_keys)
-        else:
-            redacted = redact.text(original, needle, mask)
+            if redact_keys:
+                result = redact.http_trace(original, needle, mask, redact_keys)
+            else:
+                result = redact.text(original, needle, mask)
 
-        # if nothing was redacted, don't risk returning sensitive information we didn't find
-        if original == redacted:
-            return mask
+            # if nothing was redacted, don't risk returning sensitive information we didn't find
+            if original == result:
+                return mask
+
+            return result
+
+        redacted = basic_reduction()
+        if force_redact_keys:
+            redacted = redact.http_trace(redacted, "********", mask, force_redact_keys)
 
         return redacted
 

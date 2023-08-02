@@ -47,6 +47,9 @@ class TwilioMessagingServiceType(ChannelType):
 
     attachment_support = True
 
+    force_redact_request_keys = {"MessagingServiceSid"}
+    force_redact_response_keys = {"MessagingServiceSid"}
+
     def is_recommended_to(self, user):
         org = user.get_org()
         countrycode = timezone_to_country_code(org.timezone)

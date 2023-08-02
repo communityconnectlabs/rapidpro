@@ -20,6 +20,12 @@
         -else
           {{ event.status_display }}
 
+      -elif event.type == 'call_retried'
+        -if not event.is_error
+          -trans "Call Retried"
+        -else
+          -trans "Call Retry Failed"
+
       -elif event.type == 'campaign_fired'
         %a(href='{%url "campaigns.campaign_read" event.campaign.id %}')><
           {{ event.campaign.name }}
