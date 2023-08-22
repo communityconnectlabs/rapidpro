@@ -138,4 +138,5 @@ temba/settings_test.py
 docker.settings.aptible-prod
 docker.settings.aptible-stage
 docker.settings.prod
+Dockerfile
 .env
