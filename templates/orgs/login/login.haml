@@ -26,7 +26,7 @@
         {{form.username.errors}}
 
     .mt-4
-      %input.input(type="password" name='password' placeholder='{{_("Password")|escapejs}}')
+      %input.input(type="password" name='password' placeholder='{{_("Password")|escapejs}}' value="{% if form.password.value%}{{form.password.value|escape}}{%endif%}")
 
     -if no_cellphone
       .mt-4{style:"display: table; width: 100%;"}
