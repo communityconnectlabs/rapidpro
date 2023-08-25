@@ -1948,6 +1948,7 @@ class Org(SmartModel):
         self.notifications.all().delete()
         self.exportcontactstasks.all().delete()
         self.exportmessagestasks.all().delete()
+        self.exportflowimagestasks.all().delete()
         self.exportflowresultstasks.all().delete()
 
         for label in self.msgs_labels(manager="all_objects").all():
@@ -1994,11 +1995,6 @@ class Org(SmartModel):
         # delete all our URNs
         self.urns.all().delete()
 
-        # delete our fields
-        for contactfield in self.contactfields(manager="all_fields").all():
-            contactfield.release(user)
-            contactfield.delete()
-
         # delete our groups
         from temba.contacts.models import ContactGroupCount
 
@@ -2011,11 +2007,18 @@ class Org(SmartModel):
             group.release(user)
             group.delete()
 
+        # delete our fields
+        for contactfield in self.contactfields(manager="all_fields").all():
+            contactfield.release(user)
+            contactfield.delete()
+
         # delete our channels
         for channel in self.channels.all():
             channel.counts.all().delete()
             channel.logs.all().delete()
             channel.template_translations.all().delete()
+            channel.channelevent_set.all().delete()
+            channel.connections.all().delete()
 
             channel.delete()
 
