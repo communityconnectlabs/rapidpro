@@ -99,8 +99,6 @@ class Archive(models.Model):
             archive.release()
 
         # find any remaining S3 files and remove them for this org
-        if not getattr(settings, "AWS_S3_ENABLED", False):
-            return
         s3_client = s3.client()
         archive_files = s3_client.list_objects_v2(Bucket=settings.ARCHIVE_BUCKET, Prefix=f"{org.id}/").get(
             "Contents", []

@@ -891,8 +891,9 @@ class OrgDeleteTest(TembaNonAtomicTest):
         self.assertIsNone(org_from_db.released_on)
         self.assertIsNone(org_from_db.deleted_on)
 
-        org.release(user=user, release_users=True)
-        org.delete()
+        with patch("temba.utils.s3.client", return_value=self.mock_s3):
+            org.release(user=user, release_users=True)
+            org.delete()
 
         org_from_db = Org.objects.filter(name=org_name).first()
         self.assertIsNotNone(org_from_db.released_on)
