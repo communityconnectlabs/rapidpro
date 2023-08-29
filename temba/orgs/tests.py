@@ -858,6 +858,47 @@ class OrgDeleteTest(TembaNonAtomicTest):
         with self.assertRaises(AssertionError):
             self.child_org.delete()
 
+    def test_delete_org_with_contact_field_dependency(self):
+        user = self.create_user("chihuahua")
+        org_name = "ContactsDependency"
+        org = Org.objects.create(
+            name=org_name,
+            timezone=pytz.timezone("Africa/Kigali"),
+            brand=settings.DEFAULT_BRAND,
+            created_by=user,
+            modified_by=user,
+        )
+        org.initialize(topup_size=1000)
+        user.set_org(org)
+        org.administrators.add(user)
+
+        org_from_db = Org.objects.filter(name=org_name).first()
+        self.assertIsNotNone(org_from_db)
+        self.assertEqual(org, org_from_db)
+
+        contact_field = self.create_field("test_field_group_dep", "Name", org=org)
+        group = ContactGroup.user_groups.create(
+            org=org,
+            name="Group Dependency",
+            query="test_field_group_dep=******",
+            status=ContactGroup.STATUS_INITIALIZING,
+            created_by=user,
+            modified_by=user,
+        )
+        group.query_fields.add(contact_field.id)
+
+        org_from_db = Org.objects.filter(name=org_name).first()
+        self.assertIsNone(org_from_db.released_on)
+        self.assertIsNone(org_from_db.deleted_on)
+
+        with patch("temba.utils.s3.client", return_value=self.mock_s3):
+            org.release(user=user, release_users=True)
+            org.delete()
+
+        org_from_db = Org.objects.filter(name=org_name).first()
+        self.assertIsNotNone(org_from_db.released_on)
+        self.assertIsNotNone(org_from_db.deleted_on)
+
 
 class OrgTest(TembaTest):
     def test_get_users(self):
