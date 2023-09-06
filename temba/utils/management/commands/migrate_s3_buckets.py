@@ -38,7 +38,7 @@ def migrate_s3_buckets(
 
         try:
             destination_s3.head_object(Bucket=destination_bucket_name, Key=source_key)
-            print(f"Skipped: s3://{destination_bucket_name}/{source_key} already exists.")
+            logger.info(f"Skipped: s3://{destination_bucket_name}/{source_key} already exists.")
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 # Copy the object to the destination bucket
@@ -47,17 +47,26 @@ def migrate_s3_buckets(
                     Bucket=destination_bucket_name,
                     Key=source_key,
                 )
-                print(f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}")
+                logger.info(
+                    f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
+                )
             else:
                 logger.error("Failed to access to destination s3 bucket, please, check provided credentials.")
                 return
         except Exception as e:
             logger.error("Unknown error:", e)
-    print("Migration completed.")
+    logger.info(f"Migration from {source_bucket_name} to {destination_bucket_name} completed.")
 
 
 class Command(BaseCommand):
-    help = "Verify Sentry reports with verify_sentry"
+    """
+    This script will help you to migrate files from one bucket to another.
+    To execute commant please run:
+
+        python manage.py migrate_s3_buckets "AKIAW**** cFC4VuxIgu****** src_bucket_name" "GDSDJW**** Hwdwh2TW****** dest_bucket_name"
+    """
+
+    help = "Migrate files from one s3 bucket to another."
 
     def add_arguments(self, parser):
         parser.add_argument("source_credentials", type=str)
@@ -75,4 +84,5 @@ class Command(BaseCommand):
             self.stderr.write(
                 'Credentials provided incorrectly. Plese provide each creadentials in next format: "access_key secret_key bucket_name"'
             )
+            return
         migrate_s3_buckets.delay(*src_creds, *dest_creds)
