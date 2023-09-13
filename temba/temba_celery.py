@@ -17,5 +17,6 @@ app.autodiscover_tasks(
         "temba.channels.types.twitter",
         "temba.channels.types.wechat",
         "temba.channels.types.whatsapp",
+        "temba.utils.management.commands.migrate_s3_buckets",
     )
 )
