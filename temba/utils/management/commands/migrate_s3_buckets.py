@@ -1,4 +1,5 @@
 import logging
+from io import BytesIO
 
 import boto3
 from botocore.exceptions import ClientError
@@ -42,14 +43,18 @@ def migrate_s3_buckets(
         except ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 # Copy the object to the destination bucket
-                destination_s3.copy_object(
-                    CopySource={"Bucket": source_bucket_name, "Key": source_key},
-                    Bucket=destination_bucket_name,
-                    Key=source_key,
-                )
-                logger.info(
-                    f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
-                )
+                with BytesIO() as f:
+                    try:
+                        source_s3.download_fileobj(source_bucket_name, source_key, f)
+                        f.seek(0)
+                        destination_s3.upload_fileobj(f, destination_bucket_name, source_key)
+                        logger.info(
+                            f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
+                        )
+                    except Exception:
+                        logger.info(
+                            f"Failed to copy: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
+                        )
             else:
                 logger.error("Failed to access to destination s3 bucket, please, check provided credentials.")
                 return
