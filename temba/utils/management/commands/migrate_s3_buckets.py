@@ -25,41 +25,44 @@ def migrate_s3_buckets(
         "s3", aws_access_key_id=destination_access_key, aws_secret_access_key=destination_secret_key
     )
 
-    try:
-        # List objects in the source bucket
-        response = source_s3.list_objects_v2(Bucket=source_bucket_name)
-        contents_list = response.get("Contents", [])
-    except ClientError:
-        logger.error("Failed to access to source s3 bucket, please, check provided credentials.")
-        return
+    # Generator that returns pages with list of items to be copied
+    def get_list_objects_pages():
+        try:
+            paginator = source_s3.get_paginator("list_objects_v2")
+            pages_iterator = paginator.paginate(Bucket=source_bucket_name)
+            for page in pages_iterator:
+                yield page.get("Contents", [])
+        except ClientError:
+            logger.error("Failed to access to source s3 bucket, please, check provided credentials.")
 
     # Loop through the objects and copy them to the destination bucket
-    for content_item in contents_list:
-        source_key = content_item["Key"]
-
-        try:
-            destination_s3.head_object(Bucket=destination_bucket_name, Key=source_key)
-            logger.info(f"Skipped: s3://{destination_bucket_name}/{source_key} already exists.")
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "404":
-                # Copy the object to the destination bucket
-                with BytesIO() as f:
-                    try:
-                        source_s3.download_fileobj(source_bucket_name, source_key, f)
-                        f.seek(0)
-                        destination_s3.upload_fileobj(f, destination_bucket_name, source_key)
-                        logger.info(
-                            f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
-                        )
-                    except Exception:
-                        logger.info(
-                            f"Failed to copy: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
-                        )
-            else:
-                logger.error("Failed to access to destination s3 bucket, please, check provided credentials.")
-                return
-        except Exception as e:
-            logger.error("Unknown error:", e)
+    pages = get_list_objects_pages()
+    for page in pages:
+        for content_item in page:
+            source_key = content_item["Key"]
+            try:
+                destination_s3.head_object(Bucket=destination_bucket_name, Key=source_key)
+                logger.info(f"Skipped: s3://{destination_bucket_name}/{source_key} already exists.")
+            except ClientError as e:
+                if e.response["Error"]["Code"] == "404":
+                    # Copy the object to the destination bucket
+                    with BytesIO() as f:
+                        try:
+                            source_s3.download_fileobj(source_bucket_name, source_key, f)
+                            f.seek(0)
+                            destination_s3.upload_fileobj(f, destination_bucket_name, source_key)
+                            logger.info(
+                                f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
+                            )
+                        except Exception:
+                            logger.info(
+                                f"Failed to copy: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
+                            )
+                else:
+                    logger.error("Failed to access to destination s3 bucket, please, check provided credentials.")
+                    return
+            except Exception as e:
+                logger.error("Unknown error:", e)
     logger.info(f"Migration from {source_bucket_name} to {destination_bucket_name} completed.")
 
 
