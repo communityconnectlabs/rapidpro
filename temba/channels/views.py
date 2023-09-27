@@ -786,6 +786,10 @@ class UpdateWebChatForm(UpdateChannelForm):
             self.fields["inputtext_placeholder_default"].initial = config.get("inputtext_placeholder_default", "")
 
             self.fields["store_history"].initial = config.get("store_history", False)
+            self.fields["allow_attachments"].initial = config.get("allow_attachments", False)
+            self.fields["allow_multi_language"].initial = config.get("allow_multi_language", False)
+            self.fields["allow_fab_text"].initial = config.get("allow_fab_text", False)
+            self.fields["fab_text"].initial = config.get("fab_text", "")
 
             response_fonts = requests.get(
                 f"https://www.googleapis.com/webfonts/v1/webfonts?key={settings.GOOGLE_FONT_API_KEY}"
@@ -1110,6 +1114,43 @@ class UpdateWebChatForm(UpdateChannelForm):
                 required=False,
             ),
             default=False,
+        )
+
+        self.add_config_field(
+            "allow_attachments",
+            forms.BooleanField(
+                label=_("Allow Attachments"),
+                help_text=_("Check this box whether the attachment icon is available for this WebChat"),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "allow_multi_language",
+            forms.BooleanField(
+                label=_("Allow Language Select"),
+                help_text=_("Check this box whether the language selection is available for this WebChat"),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "allow_fab_text",
+            forms.BooleanField(
+                label=_("Use a text button"),
+                help_text=_(
+                    "Whether you want to use a text button instead of icon "
+                    "(you can specify text you want once you checking this box)"
+                ),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "fab_text", forms.CharField(label=_("Text for the button"), max_length=64, required=False), default=False
         )
 
         unlisted_fields = ["name", "alert_email"]

@@ -72,6 +72,10 @@ class ClaimView(ClaimViewMixin, SmartFormView):
             "store_history": False,
             "width": 400,
             "height": 550,
+            "allow_attachments": True,
+            "allow_multi_language": True,
+            "allow_fab_text": False,
+            "fab_text": "",
         }
         for lang in org.flow_languages:
             lang_alpha = pycountry.languages.get(alpha_3=lang)
