@@ -189,6 +189,10 @@ if AWS_S3_ENABLED:
     AWS_S3_FILE_OVERWRITE = os.environ.get("AWS_S3_FILE_OVERWRITE", "false") == "true"
     AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME", "")
 
+    AWS_ACCOUNT_ID = os.environ.get("AWS_ACCOUNT_ID", "414016607728")
+    AWS_QUICKSIGHT_NAMESPACE = os.environ.get("AWS_QUICKSIGHT_NAMESPACE", "default")
+    AWS_QUICKSIGHT_ALLOWED_URLS = str(os.environ.get("AWS_QUICKSIGHT_ALLOWED_URLS", "https://app.communityconnectlabs.com,https://dev.communityconnectlabs.com")).split(",")
+
     # bucket where archives files are stored
     ARCHIVE_BUCKET = os.environ.get("ARCHIVE_BUCKET", "")
 

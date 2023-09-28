@@ -111,7 +111,8 @@ class Home(OrgPermsMixin, SmartTemplateView):
             }],
         )
 
-        print(quicksight_response)
+        if quicksight_response and quicksight_response.get("Status") == 200:
+            context["quicksight_embed_url"] = quicksight_response.get("EmbedUrl")
 
         return context
 
