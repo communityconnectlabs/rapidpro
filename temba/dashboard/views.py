@@ -1,7 +1,11 @@
+import logging
 import time
+import boto3
+import json
 from datetime import datetime, timedelta
 
 import jwt
+from botocore.exceptions import ClientError
 from smartmin.views import SmartTemplateView
 
 from django.conf import settings
@@ -22,6 +26,39 @@ class Home(OrgPermsMixin, SmartTemplateView):
 
     permission = "orgs.org_dashboard"
     template_name = "dashboard/home.haml"
+
+    @classmethod
+    def generate_embed_url_for_anonymous_user(
+            cls,
+            account_id,
+            quicksight_namespace,
+            authorized_resource_arns,
+            allowed_domains,
+            experience_configuration,
+            session_tags=None
+    ):
+        try:
+            quicksight_client = boto3.client(
+                "quicksight",
+                region_name=settings.AWS_S3_REGION_NAME,
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            )
+
+            response = quicksight_client.generate_embed_url_for_anonymous_user(
+                AwsAccountId=account_id,
+                Namespace=quicksight_namespace,
+                AuthorizedResourceArns=authorized_resource_arns,
+                AllowedDomains=allowed_domains,
+                ExperienceConfiguration=experience_configuration,
+                SessionTags=session_tags,
+                SessionLifetimeInMinutes=600
+            )
+
+            return response
+        except ClientError as e:
+            logging.error(f"Error generating embeddedURL: {str(e)}")
+            return None
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -57,6 +94,24 @@ class Home(OrgPermsMixin, SmartTemplateView):
             dashboard_url = f"{settings.METABASE_SITE_URL}/embed/dashboard/{token}#bordered=false&titled=false"
             context["dashboard_url"] = dashboard_url
             context["title"] = dashboard.metabase_dashboard_title
+
+        quicksight_response = self.generate_embed_url_for_anonymous_user(
+            account_id=settings.AWS_ACCOUNT_ID,
+            quicksight_namespace=settings.AWS_QUICKSIGHT_NAMESPACE,
+            authorized_resource_arns=["arn:aws:quicksight:us-east-1:414016607728:dashboard/cd52fd5e-ffdd-482f-ba92-bafcda75a6fc"],
+            allowed_domains=settings.AWS_QUICKSIGHT_ALLOWED_URLS,
+            experience_configuration={
+                "Dashboard": {
+                    "InitialDashboardId": "cd52fd5e-ffdd-482f-ba92-bafcda75a6fc"
+                }
+            },
+            session_tags=[{
+                "Key": "Agent",
+                "Value": "CommunityConnect Labs"
+            }],
+        )
+
+        print(quicksight_response)
 
         return context
 
