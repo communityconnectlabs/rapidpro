@@ -1,0 +1,5 @@
+User-Agent: Googlebot
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /

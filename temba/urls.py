@@ -4,6 +4,7 @@ from django.conf.urls.static import static
 from django.shortcuts import render
 from django.urls import re_path
 from django.views.generic import RedirectView
+from django.views.generic.base import TemplateView
 from django.views.i18n import JavaScriptCatalog
 
 from temba.channels.views import register, sync
@@ -45,6 +46,7 @@ urlpatterns = [
     re_path(r"^assets/", include("temba.assets.urls")),
     re_path(r"^jsi18n/$", JavaScriptCatalog.as_view(), js_info_dict, name="django.views.i18n.javascript_catalog"),
     re_path(r"^storage/(?P<file_path>.+)$", PrivateFileCallbackView.as_view(), name="file_storage"),
+    re_path("^robots.txt", TemplateView.as_view(template_name="robots.txt", content_type="text/plain"))
 ]
 
 if settings.DEBUG:
