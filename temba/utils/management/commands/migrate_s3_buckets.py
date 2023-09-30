@@ -4,9 +4,12 @@ from io import BytesIO
 import boto3
 from botocore.exceptions import ClientError
 
+from django.conf import settings
 from django.core.management import BaseCommand
 
 from celery import shared_task
+
+from temba.utils.email import send_temba_email
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,7 @@ def migrate_s3_buckets(
     destination_access_key,
     destination_secret_key,
     destination_bucket_name,
+    email_address=None,
 ):
     source_s3 = boto3.client("s3", aws_access_key_id=source_access_key, aws_secret_access_key=source_secret_key)
     destination_s3 = boto3.client(
@@ -54,16 +58,26 @@ def migrate_s3_buckets(
                             logger.info(
                                 f"Copied: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
                             )
-                        except Exception:
+                        except Exception as e:
                             logger.info(
-                                f"Failed to copy: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}"
+                                f"Failed to copy: s3://{source_bucket_name}/{source_key} to s3://{destination_bucket_name}/{source_key}: {str(e)}"
                             )
                 else:
                     logger.error("Failed to access to destination s3 bucket, please, check provided credentials.")
                     return
             except Exception as e:
                 logger.error("Unknown error:", e)
+
     logger.info(f"Migration from {source_bucket_name} to {destination_bucket_name} completed.")
+
+    if email_address:
+        send_temba_email(
+            subject="S3 migration finished",
+            text="Your S3 bucket migration got finished",
+            html=None,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email_address],
+        )
 
 
 class Command(BaseCommand):
@@ -71,7 +85,7 @@ class Command(BaseCommand):
     This script will help you to migrate files from one bucket to another.
     To execute commant please run:
 
-        python manage.py migrate_s3_buckets "AKIAW**** cFC4VuxIgu****** src_bucket_name" "GDSDJW**** Hwdwh2TW****** dest_bucket_name"
+        python manage.py migrate_s3_buckets "AKIAW**** cFC4VuxIgu****** src_bucket_name" "GDSDJW**** Hwdwh2TW****** dest_bucket_name" "info@communityconnectlabs.com"
     """
 
     help = "Migrate files from one s3 bucket to another."
@@ -79,6 +93,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("source_credentials", type=str)
         parser.add_argument("destination_credentials", type=str)
+        parser.add_argument("email_address", type=str)
 
     @staticmethod
     def prepare_credentials(creds_string: str):
@@ -88,9 +103,10 @@ class Command(BaseCommand):
     def handle(self, *_, **options):
         src_creds, src_valid = self.prepare_credentials(options.get("source_credentials", ""))
         dest_creds, dest_valid = self.prepare_credentials(options.get("destination_credentials", ""))
+        email_address = options.get("email_address", None)
         if not all([src_valid, dest_valid]):
             self.stderr.write(
-                'Credentials provided incorrectly. Plese provide each creadentials in next format: "access_key secret_key bucket_name"'
+                'Credentials provided incorrectly. Please provide each credentials in next format: "access_key secret_key bucket_name"'
             )
             return
-        migrate_s3_buckets.delay(*src_creds, *dest_creds)
+        migrate_s3_buckets.delay(*src_creds, *dest_creds, email_address)
