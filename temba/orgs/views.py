@@ -1231,6 +1231,7 @@ class OrgCRUDL(SmartCRUDL):
         "parse_data_import",
         "send_invite",
         "translations",
+        "channels_mapping",
         "translate",
         "opt_out_message",
         "dashboard_setup",
@@ -4010,6 +4011,7 @@ class OrgCRUDL(SmartCRUDL):
 
             if self.has_org_perm("orgs.org_edit"):
                 formax.add_section("org", reverse("orgs.org_edit"), icon="icon-office")
+                formax.add_section("channels_mapping", reverse("orgs.org_channels_mapping"), icon="icon-feed")
 
             # only pro orgs get multiple users
             if self.has_org_perm("orgs.org_manage_accounts") and org.is_multi_user:
@@ -4481,6 +4483,131 @@ class OrgCRUDL(SmartCRUDL):
                     current_config.pop("translator_service")
                 except KeyError:
                     pass
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class ChannelsMapping(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class ChannelsMappingForm(forms.ModelForm):
+            voice_channel = forms.ChoiceField(
+                choices=[],
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+                label=_("IVR/Voice"),
+                help_text=_("The preferred channel for IVR/Voice."),
+                required=False,
+            )
+
+            sms_channel = forms.ChoiceField(
+                choices=[],
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+                label=_("SMS/MMS"),
+                help_text=_("The preferred channel for SMS/MMS."),
+                required=False,
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+                self.fields["voice_channel"].choices = [("", "")] + list(
+                    self.org.channels.filter(
+                        Q(role__contains=Channel.ROLE_CALL) | Q(role__contains=Channel.ROLE_ANSWER),
+                        schemes=["tel"],
+                        is_active=True,
+                    )
+                    .order_by("name")
+                    .values_list("uuid", "name")
+                )
+
+                self.fields["sms_channel"].choices = [("", "")] + list(
+                    self.org.channels.filter(
+                        Q(role__contains=Channel.ROLE_SEND) | Q(role__contains=Channel.ROLE_RECEIVE),
+                        schemes=["tel"],
+                        is_active=True,
+                    )
+                    .order_by("name")
+                    .values_list("uuid", "name")
+                )
+
+            def clean(self):
+                cleaned_data = super().clean()
+                voice_channel = cleaned_data.get("voice_channel")
+                sms_channel = cleaned_data.get("sms_channel")
+
+                is_voice_valid_channel = True
+                is_sms_valid_channel = True
+
+                if voice_channel:
+                    is_voice_valid_channel = self.org.channels.filter(uuid=voice_channel).first() is not None
+
+                if sms_channel:
+                    is_sms_valid_channel = self.org.channels.filter(uuid=sms_channel).first() is not None
+
+                if not is_voice_valid_channel:
+                    self.add_error("voice_channel", "Voice channel is not valid or is not on the organization anymore")
+
+                if not is_sms_valid_channel:
+                    self.add_error("sms_channel", "SMS channel is not validor is not on the organization anymore")
+
+            class Meta:
+                model = Org
+                fields = ("voice_channel", "sms_channel")
+
+        success_message = ""
+        form_class = ChannelsMappingForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["voice_channel"] = (org.config or {}).get("voice_preferred_channel", "")
+            initial["sms_channel"] = (org.config or {}).get("sms_preferred_channel", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            voice_channel = (org.config or {}).get("voice_preferred_channel", None)
+            if voice_channel:
+                channel = self.org.channels.filter(uuid=voice_channel).first()
+                context["voice_preferred_channel"] = channel.name
+
+            sms_channel = (org.config or {}).get("sms_preferred_channel", None)
+            if sms_channel:
+                channel = self.org.channels.filter(uuid=sms_channel).first()
+                context["sms_preferred_channel"] = channel.name
+
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            voice_channel = form.cleaned_data.get("voice_channel")
+            sms_channel = form.cleaned_data.get("sms_channel")
+
+            if not voice_channel:
+                try:
+                    current_config.pop("voice_preferred_channel")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"voice_preferred_channel": voice_channel})
+
+            if not sms_channel:
+                try:
+                    current_config.pop("sms_preferred_channel")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"sms_preferred_channel": sms_channel})
+
             org.config = current_config
             org.save(update_fields=["config"])
             return super().form_valid(form)
