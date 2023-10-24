@@ -43,6 +43,8 @@
           googleFont: '{{ channel.config.google_font }}',
           width: '{{channel.config.width}}px',
           height: '{{channel.config.height}}px',
+          fabTextColor: '{{ "#"|add:channel.config.chat_header_text_color }}',
+          fabBackgroundColor: '{{ "#"|add:channel.config.chat_header_bg_color }}',
         },
         meta: {
           icon: {

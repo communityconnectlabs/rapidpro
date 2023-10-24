@@ -366,6 +366,10 @@
       }
 
       var storeHistory = $("#id_store_history").val() === 1;
+      var allowAttachments = $("#id_allow_attachments").val() === 1;
+      var enableLanguageSelector = $("#id_allow_multi_language").val() === 1;
+      var enableTextButton = $("#id_fab_text_toggle").val() === 1;
+      var fabText = $("#id_fab_text").val();
 
       welcomeMessageQuickReplies = (welcomeMessageQuickReplies !== "" && welcomeMessageQuickReplies !== undefined) ? welcomeMessageQuickReplies.split(",") : [];
 
@@ -374,6 +378,8 @@
         channelUUID: '{{ object.uuid }}',
         title: title,
         autoOpen: true,
+        allowAttachments: allowAttachments,
+        enableLanguageSelector: enableLanguageSelector,
         hostApi: 'https://{{ hostname }}',
         icon: icon,
         welcomeMessage: welcomeMessage,
@@ -382,6 +388,7 @@
         inputTextPlaceholderI18n: inputTextDict,
         welcomeMessageQuickReplies: welcomeMessageQuickReplies,
         storeHistory: storeHistory,
+        fabText: enableTextButton ? fabText : undefined,
         theme: {
           widgetBackgroundColor: widgetBackgroundColor,
           chatHeaderBackgroundColor: chatHeaderBackgroundColor,
@@ -397,7 +404,9 @@
           sideOfScreen: sideOfScreen,
           googleFont: googleFont,
           width: width,
-          height: height
+          height: height,
+          fabTextColor: chatHeaderTextColor,
+          fabBackgroundColor: chatHeaderBackgroundColor
         },
         meta: {
           icon: {
