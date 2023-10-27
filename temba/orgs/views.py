@@ -4493,7 +4493,7 @@ class OrgCRUDL(SmartCRUDL):
                 choices=[],
                 widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
                 label=_("IVR/Voice"),
-                help_text=_("The preferred channel for IVR/Voice."),
+                help_text=_("The default channel for IVR/Voice."),
                 required=False,
             )
 
@@ -4501,7 +4501,7 @@ class OrgCRUDL(SmartCRUDL):
                 choices=[],
                 widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
                 label=_("SMS/MMS"),
-                help_text=_("The preferred channel for SMS/MMS."),
+                help_text=_("The default channel for SMS/MMS."),
                 required=False,
             )
 
@@ -4561,8 +4561,8 @@ class OrgCRUDL(SmartCRUDL):
         def derive_initial(self):
             initial = super().derive_initial()
             org = self.derive_org()
-            initial["voice_channel"] = (org.config or {}).get("voice_preferred_channel", "")
-            initial["sms_channel"] = (org.config or {}).get("sms_preferred_channel", "")
+            initial["voice_channel"] = (org.config or {}).get("voice_default_channel", "")
+            initial["sms_channel"] = (org.config or {}).get("sms_default_channel", "")
             return initial
 
         def get_form_kwargs(self):
@@ -4574,15 +4574,15 @@ class OrgCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
             org = self.request.user.get_org()
 
-            voice_channel = (org.config or {}).get("voice_preferred_channel", None)
+            voice_channel = (org.config or {}).get("voice_default_channel", None)
             if voice_channel:
                 channel = self.org.channels.filter(uuid=voice_channel).first()
-                context["voice_preferred_channel"] = channel.name
+                context["voice_default_channel"] = channel.name
 
-            sms_channel = (org.config or {}).get("sms_preferred_channel", None)
+            sms_channel = (org.config or {}).get("sms_default_channel", None)
             if sms_channel:
                 channel = self.org.channels.filter(uuid=sms_channel).first()
-                context["sms_preferred_channel"] = channel.name
+                context["sms_default_channel"] = channel.name
 
             return context
 
@@ -4594,19 +4594,19 @@ class OrgCRUDL(SmartCRUDL):
 
             if not voice_channel:
                 try:
-                    current_config.pop("voice_preferred_channel")
+                    current_config.pop("voice_default_channel")
                 except KeyError:
                     pass
             else:
-                current_config.update({"voice_preferred_channel": voice_channel})
+                current_config.update({"voice_default_channel": voice_channel})
 
             if not sms_channel:
                 try:
-                    current_config.pop("sms_preferred_channel")
+                    current_config.pop("sms_default_channel")
                 except KeyError:
                     pass
             else:
-                current_config.update({"sms_preferred_channel": sms_channel})
+                current_config.update({"sms_default_channel": sms_channel})
 
             org.config = current_config
             org.save(update_fields=["config"])
