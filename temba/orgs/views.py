@@ -1232,6 +1232,7 @@ class OrgCRUDL(SmartCRUDL):
         "send_invite",
         "translations",
         "channels_mapping",
+        "calendar_automation_flow",
         "translate",
         "opt_out_message",
         "dashboard_setup",
@@ -4013,6 +4014,11 @@ class OrgCRUDL(SmartCRUDL):
                 formax.add_section("org", reverse("orgs.org_edit"), icon="icon-office")
                 formax.add_section("channels_mapping", reverse("orgs.org_channels_mapping"), icon="icon-feed")
 
+            if self.has_org_perm("orgs.org_calendar_automation_flow"):
+                formax.add_section(
+                    "calendar_automation_flow", reverse("orgs.org_calendar_automation_flow"), icon="icon-flow"
+                )
+
             # only pro orgs get multiple users
             if self.has_org_perm("orgs.org_manage_accounts") and org.is_multi_user:
                 formax.add_section("accounts", reverse("orgs.org_accounts"), icon="icon-users", action="redirect")
@@ -4607,6 +4613,95 @@ class OrgCRUDL(SmartCRUDL):
                     pass
             else:
                 current_config.update({"sms_default_channel": sms_channel})
+
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class CalendarAutomationFlow(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class CalendarAutomationFlowForm(forms.ModelForm):
+            flow = forms.ChoiceField(
+                choices=[],
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+                label=_("Message Flow"),
+                help_text=_("The flow to be triggered on the calendar automation."),
+                required=False,
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+                self.fields["flow"].choices = [("", "")] + list(
+                    self.org.flows.filter(
+                        is_active=True,
+                        is_system=False,
+                        flow_type=Flow.TYPE_MESSAGE,
+                    ).order_by("name").values_list("uuid", "name")
+                )
+
+            def clean(self):
+                cleaned_data = super().clean()
+                flow = cleaned_data.get("flow")
+
+                is_valid_flow = True
+                if flow:
+                    is_valid_flow = self.org.flows.filter(
+                        uuid=flow,
+                        is_active=True,
+                        is_system=False,
+                        flow_type=Flow.TYPE_MESSAGE,
+                    ).first() is not None
+
+                if not is_valid_flow:
+                    self.add_error(
+                        "flow",
+                        "The flow selected is not associated with this organization or is not active"
+                    )
+
+            class Meta:
+                model = Org
+                fields = ("flow",)
+
+        success_message = ""
+        form_class = CalendarAutomationFlowForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["flow"] = (org.config or {}).get("calendar_automation_flow", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            flow = (org.config or {}).get("calendar_automation_flow", None)
+            if flow:
+                flow_obj = self.org.flows.filter(uuid=flow).first()
+                context["flow"] = flow_obj.name
+
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            flow = form.cleaned_data.get("flow")
+
+            if not flow:
+                try:
+                    current_config.pop("calendar_automation_flow")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"calendar_automation_flow": flow})
 
             org.config = current_config
             org.save(update_fields=["config"])
