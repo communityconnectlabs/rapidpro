@@ -4639,7 +4639,9 @@ class OrgCRUDL(SmartCRUDL):
                         is_active=True,
                         is_system=False,
                         flow_type=Flow.TYPE_MESSAGE,
-                    ).order_by("name").values_list("uuid", "name")
+                    )
+                    .order_by("name")
+                    .values_list("uuid", "name")
                 )
 
             def clean(self):
@@ -4648,17 +4650,19 @@ class OrgCRUDL(SmartCRUDL):
 
                 is_valid_flow = True
                 if flow:
-                    is_valid_flow = self.org.flows.filter(
-                        uuid=flow,
-                        is_active=True,
-                        is_system=False,
-                        flow_type=Flow.TYPE_MESSAGE,
-                    ).first() is not None
+                    is_valid_flow = (
+                        self.org.flows.filter(
+                            uuid=flow,
+                            is_active=True,
+                            is_system=False,
+                            flow_type=Flow.TYPE_MESSAGE,
+                        ).first()
+                        is not None
+                    )
 
                 if not is_valid_flow:
                     self.add_error(
-                        "flow",
-                        "The flow selected is not associated with this organization or is not active"
+                        "flow", "The flow selected is not associated with this organization or is not active"
                     )
 
             class Meta:
