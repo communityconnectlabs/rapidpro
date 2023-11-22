@@ -5148,6 +5148,7 @@ class SimulationTest(TembaTest):
                             "redaction_policy": "none",
                             "has_ivr_machine_detection": False,
                             "links": [],
+                            "config": {},
                         },
                         "user": {"email": "Administrator@nyaruka.com", "name": ""},
                     },
@@ -5321,6 +5322,7 @@ class AssetServerTest(TembaTest):
                     "redaction_policy": "none",
                     "has_ivr_machine_detection": False,
                     "links": [],
+                    "config": {},
                 },
             )
 

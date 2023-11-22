@@ -44,6 +44,28 @@
           {% render_field "logo_style" %}
           {% render_field "title" %}
           {% render_field "store_history" %}
+          {% render_field "allow_attachments" %}
+          {% render_field "allow_multi_language" %}
+          .control-group.field_allow_fab_text 
+            .controls
+              <temba-checkbox
+                id="id_fab_text_toggle"
+                name="{{form.allow_fab_text.name}}"
+                label="{{form.allow_fab_text.label}}"
+                help_text="{{form.allow_fab_text.help_text}}"
+                errors="{{form.allow_fab_text.errors}}"
+                {% if form.allow_fab_text.value %}checked{% endif %}>
+              </temba-checkbox>
+              <div style="padding-left: 33px">
+                <temba-textinput
+                  id="id_fab_text"
+                  type="text"
+                  name="{{form.fab_text.name}}"
+                  value="{{form.fab_text.value}}"
+                  class="{% if not form.allow_fab_text.value %}hide{% endif %}"
+                  maxlength="64">
+                </temba-textinput>
+              </div>
         </div>
       </div>
 
@@ -344,6 +366,10 @@
       }
 
       var storeHistory = $("#id_store_history").val() === 1;
+      var allowAttachments = $("#id_allow_attachments").val() === 1;
+      var enableLanguageSelector = $("#id_allow_multi_language").val() === 1;
+      var enableTextButton = $("#id_fab_text_toggle").val() === 1;
+      var fabText = $("#id_fab_text").val();
 
       welcomeMessageQuickReplies = (welcomeMessageQuickReplies !== "" && welcomeMessageQuickReplies !== undefined) ? welcomeMessageQuickReplies.split(",") : [];
 
@@ -352,6 +378,8 @@
         channelUUID: '{{ object.uuid }}',
         title: title,
         autoOpen: true,
+        allowAttachments: allowAttachments,
+        enableLanguageSelector: enableLanguageSelector,
         hostApi: 'https://{{ hostname }}',
         icon: icon,
         welcomeMessage: welcomeMessage,
@@ -360,6 +388,7 @@
         inputTextPlaceholderI18n: inputTextDict,
         welcomeMessageQuickReplies: welcomeMessageQuickReplies,
         storeHistory: storeHistory,
+        fabText: enableTextButton ? fabText : undefined,
         theme: {
           widgetBackgroundColor: widgetBackgroundColor,
           chatHeaderBackgroundColor: chatHeaderBackgroundColor,
@@ -375,7 +404,9 @@
           sideOfScreen: sideOfScreen,
           googleFont: googleFont,
           width: width,
-          height: height
+          height: height,
+          fabTextColor: chatHeaderTextColor,
+          fabBackgroundColor: chatHeaderBackgroundColor
         },
         meta: {
           icon: {
@@ -418,7 +449,7 @@
           el.slideDown();
         });
 
-        buildGoogleFontLink($("temba-select[name='google_font']").find("temba-option[selected]")[0].attributes.value.nodeValue);
+        buildGoogleFontLink($("temba-select[name='google_font']").find("temba-option[selected]")[0]?.attributes?.value?.nodeValue);
 
         {% for item in customable_fields %}
         $("{{ item }}").blur(function() {
@@ -512,6 +543,14 @@
         $("textarea").removeAttr("required");
 
         buildWebChat(welcomeMsgValues, inputTextPlaceholderValues, "{{ form.google_font.value }}", "{{ form.logo_style.value }}", "{{ form.side_of_screen.value }}", "{{ form.welcome_msg_quick_replies.value|safeseq|join:',' }}");
+
+        $("#id_fab_text_toggle").change(function() {
+          if ($(this).val()) {
+            $("#id_fab_text").removeClass("hide");
+          } else {
+            $("#id_fab_text").addClass("hide");
+          }
+        });
       });
       {% endif %}
     })(jQuery);
