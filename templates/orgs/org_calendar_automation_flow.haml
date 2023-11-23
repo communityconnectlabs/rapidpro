@@ -1,0 +1,10 @@
+-extends "smartmin/update.html"
+-load i18n
+
+-block summary
+  -if flow
+    -blocktrans trimmed with selected_flow=flow
+      Calendar automation flow: <b>{{ selected_flow }}</b><br>
+
+  -else
+    -trans "Select your calendar automation flow."
