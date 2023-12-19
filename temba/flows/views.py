@@ -2371,11 +2371,9 @@ class FlowCRUDL(SmartCRUDL):
                     r.expire(flow_key, 60)
                 else:
                     reader_session = True
-            session_expired = False if reader_session else not editing_available           
+            session_expired = False if reader_session else not editing_available
             return JsonResponse(
-                dict(
-                    nodes=active, segments=visited, is_starting=flow.is_starting(), session_expired=session_expired
-                )
+                dict(nodes=active, segments=visited, is_starting=flow.is_starting(), session_expired=session_expired)
             )
 
     class Simulate(OrgObjPermsMixin, SmartReadView):
