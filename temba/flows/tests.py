@@ -3006,7 +3006,7 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertEqual(200, response.status_code)
         self.assertEqual(
             {
-                "editing_available": False,
+                "session_expired": False,
                 "is_starting": False,
                 "nodes": {beer_split["uuid"]: 1},
                 "segments": {
