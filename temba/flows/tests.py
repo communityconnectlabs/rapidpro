@@ -28,6 +28,7 @@ from temba.orgs.integrations.dtone import DTOneType
 from temba.templates.models import Template, TemplateTranslation
 from temba.tests import AnonymousOrg, CRUDLTestMixin, MockResponse, TembaTest, matchers, mock_mailroom
 from temba.tests.engine import MockSessionWriter
+from temba.tests.redis import MockRedis
 from temba.tests.s3 import MockS3Client, jsonlgz_encode
 from temba.tickets.models import Ticketer
 from temba.triggers.models import Trigger
@@ -3001,7 +3002,9 @@ class FlowCRUDLTest(TembaTest, CRUDLTestMixin):
         )
 
         self.login(self.admin)
-        response = self.client.get(reverse("flows.flow_activity", args=[flow.uuid]))
+        with patch("temba.flows.views.get_redis_connection") as mock_redis:
+            mock_redis.return_value = MockRedis({f"active-flow-editor-{flow.uuid}": "test_user".encode()})
+            response = self.client.get(reverse("flows.flow_activity", args=[flow.uuid]))
 
         self.assertEqual(200, response.status_code)
         self.assertEqual(
