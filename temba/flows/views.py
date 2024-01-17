@@ -2364,15 +2364,16 @@ class FlowCRUDL(SmartCRUDL):
             flow_key = f"active-flow-editor-{flow.uuid}"
             active_editor = r.get(flow_key)
             editing_available = False
+            reader_session = False
             if active_editor is not None:
                 if self.request.user.username == active_editor.decode():
                     editing_available = True
-                    r.expire(flow_key, 30)
-
+                    r.expire(flow_key, 60)
+                else:
+                    reader_session = True
+            session_expired = False if reader_session else not editing_available
             return JsonResponse(
-                dict(
-                    nodes=active, segments=visited, is_starting=flow.is_starting(), editing_available=editing_available
-                )
+                dict(nodes=active, segments=visited, is_starting=flow.is_starting(), session_expired=session_expired)
             )
 
     class Simulate(OrgObjPermsMixin, SmartReadView):
