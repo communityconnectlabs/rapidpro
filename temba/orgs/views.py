@@ -4723,8 +4723,10 @@ class OrgCRUDL(SmartCRUDL):
                 required=False,
                 label=_("Custom Domain"),
                 widget=InputWidget,
-                help_text=_("Provide a valid domain to be used on your shortened links. E.g. https://cclabs.cc. "
-                            "Please contact CCL support for further configuration."),
+                help_text=_(
+                    "Provide a valid domain to be used on your shortened links. E.g. https://cclabs.cc. "
+                    "Please contact CCL support for further configuration."
+                ),
             )
 
             def __init__(self, *args, **kwargs):
