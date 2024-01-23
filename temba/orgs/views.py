@@ -4721,9 +4721,10 @@ class OrgCRUDL(SmartCRUDL):
         class ShortenerCustomDomainForm(forms.ModelForm):
             domain = forms.CharField(
                 required=False,
-                label=_("Domain"),
+                label=_("Custom Domain"),
                 widget=InputWidget,
-                help_text=_("Please provide your domain without to be used on your shorten link."),
+                help_text=_("Provide a valid domain to be used on your shortened links. E.g. https://cclabs.cc. "
+                            "Please contact CCL support for further configuration."),
             )
 
             def __init__(self, *args, **kwargs):
@@ -4734,8 +4735,8 @@ class OrgCRUDL(SmartCRUDL):
 
             def clean_domain(self):
                 domain = self.cleaned_data.get("domain")
-                if domain:
-                    domain = str(domain).replace("https", "").replace("/", "").replace(":", "")
+                if domain and not str(domain).startswith("https://"):
+                    domain = f"https://{domain}"
 
                 return domain
 
