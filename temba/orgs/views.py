@@ -4724,8 +4724,7 @@ class OrgCRUDL(SmartCRUDL):
                 label=_("Custom Domain"),
                 widget=InputWidget,
                 help_text=_(
-                    "Provide a valid domain to be used on your shortened links. E.g. https://cclabs.cc. "
-                    "Please contact CCL support for further configuration."
+                    "Please enter your custom domain here. And contact your account team for further configuration."
                 ),
             )
 
