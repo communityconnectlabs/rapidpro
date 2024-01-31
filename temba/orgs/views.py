@@ -1233,6 +1233,7 @@ class OrgCRUDL(SmartCRUDL):
         "translations",
         "channels_mapping",
         "calendar_automation_flow",
+        "shortener_custom_domain",
         "translate",
         "opt_out_message",
         "dashboard_setup",
@@ -4019,6 +4020,11 @@ class OrgCRUDL(SmartCRUDL):
                     "calendar_automation_flow", reverse("orgs.org_calendar_automation_flow"), icon="icon-flow"
                 )
 
+            if self.has_org_perm("orgs.org_shortener_custom_domain"):
+                formax.add_section(
+                    "shortener_custom_domain", reverse("orgs.org_shortener_custom_domain"), icon="icon-earth"
+                )
+
             # only pro orgs get multiple users
             if self.has_org_perm("orgs.org_manage_accounts") and org.is_multi_user:
                 formax.add_section("accounts", reverse("orgs.org_accounts"), icon="icon-users", action="redirect")
@@ -4706,6 +4712,75 @@ class OrgCRUDL(SmartCRUDL):
                     pass
             else:
                 current_config.update({"calendar_automation_flow": flow})
+
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class ShortenerCustomDomain(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class ShortenerCustomDomainForm(forms.ModelForm):
+            domain = forms.CharField(
+                required=False,
+                label=_("Custom Domain"),
+                widget=InputWidget,
+                help_text=_(
+                    "Please enter your custom domain here. And contact your account team for further configuration."
+                ),
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+            def clean_domain(self):
+                domain = self.cleaned_data.get("domain")
+                if domain and not str(domain).startswith("https://"):
+                    domain = f"https://{domain}"
+
+                return domain
+
+            class Meta:
+                model = Org
+                fields = ("domain",)
+
+        success_message = ""
+        form_class = ShortenerCustomDomainForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["domain"] = (org.config or {}).get("shortener_custom_domain", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            domain = (org.config or {}).get("shortener_custom_domain", None)
+            if domain:
+                context["domain"] = domain
+
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            domain = form.cleaned_data.get("domain")
+
+            if not domain:
+                try:
+                    current_config.pop("shortener_custom_domain")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"shortener_custom_domain": domain})
 
             org.config = current_config
             org.save(update_fields=["config"])
