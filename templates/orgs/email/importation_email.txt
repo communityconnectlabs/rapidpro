@@ -13,5 +13,5 @@ Failures: {{failures}}
 {% endif %}
 {% blocktrans %}
 Best,
-The CommunityConnectLabs Team
+The CommunityCX Team
 {% endblocktrans %}
