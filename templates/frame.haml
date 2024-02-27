@@ -491,6 +491,9 @@
 
 
       });
+
+  -if "msg" in request.path or "contact" in request.path or "flow" in request.path
+    -include "includes/ccl_webchat.haml"
 {% endblock body %}
 
 </html>
