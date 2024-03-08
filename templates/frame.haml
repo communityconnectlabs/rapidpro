@@ -492,7 +492,7 @@
 
       });
 
-  -if "msg" in request.path or "contact" in request.path or "flow" in request.path
+  -if request.get_full_path != "/user/forget/" and request.get_full_path != "/users/login/" and request.get_full_path != "/"
     -include "includes/ccl_webchat.haml"
 {% endblock body %}
 
