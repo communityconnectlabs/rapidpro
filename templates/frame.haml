@@ -491,6 +491,9 @@
 
 
       });
+
+  -if request.get_full_path != "/user/forget/" and request.get_full_path != "/users/login/" and request.get_full_path != "/"
+    -include "includes/ccl_webchat.haml"
 {% endblock body %}
 
 </html>
