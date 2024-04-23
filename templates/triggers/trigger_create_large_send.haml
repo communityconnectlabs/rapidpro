@@ -100,15 +100,20 @@
           const formOption = {
             method: 'POST',
             body: formData,
+            signal: AbortSignal.timeout(30000),
             headers: {
               'X-Requested-With': 'XMLHttpRequest',
               'X-CSRFToken': getCookie('csrftoken')
             }
           }
+          showAlertMessage("Calculating groups...", "black");
           fetch('{% url "triggers.trigger_large_send_schedule_summary" %}', formOption)
             .then((response) => response.json())
             .then((response) => {
               toggleScheduleList(response);
+            }).catch((error) => {
+              console.log("[trigger_large_send_schedule_summary]", error)
+              showAlertMessage("Unable to process the summary, please try again.", "red")
             });
         }
       }, 100);
@@ -116,6 +121,13 @@
 
     function chunkBy(number, n) {
       return new Array(Math.floor(number / n)).fill(n).concat(number % n)
+    }
+
+    function showAlertMessage(msg, color) {
+      const { modaxBody } = getFormElements();
+      const scheduleListPreview = modaxBody.querySelector('.schedule-list-preview');
+      scheduleListPreview.innerHTML = `<p style="color: ${color}">${msg}</p>`;
+      scheduleListPreview.classList.remove('hidden');
     }
 
     function toggleScheduleList(response) {
