@@ -414,9 +414,14 @@ class LargeSendMixin:
 
     @classmethod
     def get_new_time(cls, input_time, hour, add_to_day=0):
-        input_time = datetime.datetime(
-            year=input_time.year, month=input_time.month, day=input_time.day + add_to_day, hour=hour
-        )
+        try:
+            input_time = datetime.datetime(
+                year=input_time.year, month=input_time.month, day=input_time.day + add_to_day, hour=hour
+            )
+        except ValueError:
+            input_time = datetime.datetime(
+                year=input_time.year, month=input_time.month, day=input_time.day, hour=hour
+            ) + timedelta(days=add_to_day)
         return timezone.make_aware(input_time)
 
     def derive_start_time(self, start_time, limit_time):

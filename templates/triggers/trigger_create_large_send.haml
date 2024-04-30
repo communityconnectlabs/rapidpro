@@ -107,16 +107,34 @@
             }
           }
           showAlertMessage("Calculating groups...", "black");
+          recreatePrimaryButton(true);
           fetch('{% url "triggers.trigger_large_send_schedule_summary" %}', formOption)
             .then((response) => response.json())
             .then((response) => {
               toggleScheduleList(response);
+              recreatePrimaryButton(false);
             }).catch((error) => {
               console.log("[trigger_large_send_schedule_summary]", error)
               showAlertMessage("Unable to process the summary, please try again.", "red")
             });
         }
       }, 100);
+    }
+
+    function recreatePrimaryButton(disable) {
+      const { dialogFooter } = getFormElements();
+      const currentSubmit = dialogFooter.querySelector('temba-button');
+      let options = { name: 'Create', onclick: showConfirmation, primary: true };
+      if (disable) {
+        options['disabled'] = true;
+      }
+      const submitButton = createButton(options);
+      try {
+        if (currentSubmit) {
+          dialogFooter.removeChild(currentSubmit);
+          dialogFooter.prepend(submitButton);
+        }
+      } catch (e) {}
     }
 
     function chunkBy(number, n) {
@@ -236,7 +254,7 @@
       initCalFields(form);
       onValueChange();
       const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
-      const submitButton = createButton({ name: 'Create', onclick: showConfirmation, primary: true });
+      const submitButton = createButton({ name: 'Create', onclick: showConfirmation, primary: true, disabled: true });
       try {
         if (currentSubmit) {
           dialogFooter.removeChild(currentSubmit);
