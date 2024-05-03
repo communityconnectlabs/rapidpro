@@ -182,6 +182,7 @@
       event.preventDefault();
       const scheduleList = modaxBody.querySelector('#schedule-list');
       const confirmationContent = confirmationDialog.querySelector('.p-6');
+      confirmationContent.innerHTML = "Please confirm you want to send on the following schedule:"
       if (scheduleList) confirmationContent.appendChild(scheduleList);
       confirmationDialog.open = true;
     }
@@ -216,9 +217,11 @@
               hasError = true;
             }
           });
-          event.target.disabled = false;
-          if (hasError) confirmationDialog.open = false;
-          else window.location.href = '{% url "triggers.trigger_list" %}';
+          if (hasError) {
+            confirmationDialog.open = false;
+          } else {
+            window.location.href = '{% url "triggers.trigger_list" %}';
+          }
         });
     }
 
