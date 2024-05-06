@@ -91,6 +91,12 @@
         groupFields.forEach(elem => groupList.push(Number(elem.value)));
 
         if (startTime && groupList.length > 0 && intervalValue && chunkSizeValue) {
+          if (chunkSizeValue > 500) {
+            showAlertMessage("Chunks should be max of 500", "red");
+            recreatePrimaryButton(true);
+            return
+          }
+
           const formData = new FormData();
           formData.append('groups', groupList);
           formData.append('start_time', startTime);
@@ -118,7 +124,7 @@
               showAlertMessage("Unable to process the summary, please try again.", "red")
             });
         }
-      }, 100);
+      }, 500);
     }
 
     function recreatePrimaryButton(disable) {
