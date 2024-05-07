@@ -91,6 +91,12 @@
         groupFields.forEach(elem => groupList.push(Number(elem.value)));
 
         if (startTime && groupList.length > 0 && intervalValue && chunkSizeValue) {
+          if (chunkSizeValue > 500) {
+            showAlertMessage("Chunks should be max of 500", "red");
+            recreatePrimaryButton(true);
+            return
+          }
+
           const formData = new FormData();
           formData.append('groups', groupList);
           formData.append('start_time', startTime);
@@ -100,22 +106,52 @@
           const formOption = {
             method: 'POST',
             body: formData,
+            signal: AbortSignal.timeout(30000),
             headers: {
               'X-Requested-With': 'XMLHttpRequest',
               'X-CSRFToken': getCookie('csrftoken')
             }
           }
+          showAlertMessage("Calculating groups...", "black");
+          recreatePrimaryButton(true);
           fetch('{% url "triggers.trigger_large_send_schedule_summary" %}', formOption)
             .then((response) => response.json())
             .then((response) => {
               toggleScheduleList(response);
+              recreatePrimaryButton(false);
+            }).catch((error) => {
+              console.log("[trigger_large_send_schedule_summary]", error)
+              showAlertMessage("Unable to process the summary, please try again.", "red")
             });
         }
-      }, 100);
+      }, 500);
+    }
+
+    function recreatePrimaryButton(disable) {
+      const { dialogFooter } = getFormElements();
+      const currentSubmit = dialogFooter.querySelector('temba-button');
+      let options = { name: 'Create', onclick: showConfirmation, primary: true };
+      if (disable) {
+        options['disabled'] = true;
+      }
+      const submitButton = createButton(options);
+      try {
+        if (currentSubmit) {
+          dialogFooter.removeChild(currentSubmit);
+          dialogFooter.prepend(submitButton);
+        }
+      } catch (e) {}
     }
 
     function chunkBy(number, n) {
       return new Array(Math.floor(number / n)).fill(n).concat(number % n)
+    }
+
+    function showAlertMessage(msg, color) {
+      const { modaxBody } = getFormElements();
+      const scheduleListPreview = modaxBody.querySelector('.schedule-list-preview');
+      scheduleListPreview.innerHTML = `<p style="color: ${color}">${msg}</p>`;
+      scheduleListPreview.classList.remove('hidden');
     }
 
     function toggleScheduleList(response) {
@@ -152,6 +188,7 @@
       event.preventDefault();
       const scheduleList = modaxBody.querySelector('#schedule-list');
       const confirmationContent = confirmationDialog.querySelector('.p-6');
+      confirmationContent.innerHTML = "Please confirm you want to send on the following schedule:"
       if (scheduleList) confirmationContent.appendChild(scheduleList);
       confirmationDialog.open = true;
     }
@@ -186,9 +223,11 @@
               hasError = true;
             }
           });
-          event.target.disabled = false;
-          if (hasError) confirmationDialog.open = false;
-          else window.location.href = '{% url "triggers.trigger_list" %}';
+          if (hasError) {
+            confirmationDialog.open = false;
+          } else {
+            window.location.href = '{% url "triggers.trigger_list" %}';
+          }
         });
     }
 
@@ -224,7 +263,7 @@
       initCalFields(form);
       onValueChange();
       const currentSubmit = dialogFooter.querySelector('temba-button[primary]');
-      const submitButton = createButton({ name: 'Create', onclick: showConfirmation, primary: true });
+      const submitButton = createButton({ name: 'Create', onclick: showConfirmation, primary: true, disabled: true });
       try {
         if (currentSubmit) {
           dialogFooter.removeChild(currentSubmit);

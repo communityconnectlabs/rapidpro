@@ -358,6 +358,7 @@ class BaseLargeSendForm(forms.ModelForm):
         (45, _("45 minutes")),
         (60, _("1 hour")),
     )
+    CHUNK_MAX_LIMIT = 500
 
     batch_interval = forms.ChoiceField(
         choices=BATCH_INTERVAL,
@@ -366,12 +367,14 @@ class BaseLargeSendForm(forms.ModelForm):
         required=True,
         widget=SelectWidget(),
     )
+
     flow = TembaChoiceField(
         Flow.objects.none(),
         label=_("Flow"),
         required=True,
         widget=SelectWidget(attrs={"placeholder": _("Select a flow"), "searchable": True}),
     )
+
     groups = TembaMultipleChoiceField(
         queryset=ContactGroup.user_groups.none(),
         label=_("Groups"),
@@ -381,15 +384,18 @@ class BaseLargeSendForm(forms.ModelForm):
             attrs={"icons": True, "placeholder": _("Select contact groups"), "searchable": True}
         ),
     )
+
     start_time = forms.DateTimeField(
         required=True,
         label=_("Start Time for Send"),
         widget=InputWidget(attrs={"datetimepicker": True, "placeholder": _("Select a date and time")}),
     )
+
     chunk_size = forms.IntegerField(
         label=_("Chunks"),
-        help_text=_("I want to split the message to this many pieces"),
-        widget=InputWidget(attrs={"type": "number", "placeholder": _("Enter chunk size")}),
+        max_value=CHUNK_MAX_LIMIT,
+        help_text=_("I want to split the message to this many pieces. Max: 500"),
+        widget=InputWidget(attrs={"type": "number", "max": CHUNK_MAX_LIMIT, "placeholder": _("Enter chunk size")}),
     )
 
     limit_time = forms.BooleanField(required=False, label=_("Limit to business hours"), help_text=_("9 AM to 5 PM"))
@@ -414,9 +420,14 @@ class LargeSendMixin:
 
     @classmethod
     def get_new_time(cls, input_time, hour, add_to_day=0):
-        input_time = datetime.datetime(
-            year=input_time.year, month=input_time.month, day=input_time.day + add_to_day, hour=hour
-        )
+        try:
+            input_time = datetime.datetime(
+                year=input_time.year, month=input_time.month, day=input_time.day + add_to_day, hour=hour
+            )
+        except ValueError:
+            input_time = datetime.datetime(
+                year=input_time.year, month=input_time.month, day=input_time.day, hour=hour
+            ) + timedelta(days=add_to_day)
         return timezone.make_aware(input_time)
 
     def derive_start_time(self, start_time, limit_time):
