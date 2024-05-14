@@ -30,6 +30,7 @@ class PrivateFileStorage(DefaultStorage):
 
 public_file_storage = PublicFileStorage()
 public_file_storage.default_acl = "public-read"
+public_file_storage.querystring_auth = False  # don't include access token in attachment URLs
 private_file_storage = PrivateFileStorage()
 private_file_storage.default_acl = "private"
 

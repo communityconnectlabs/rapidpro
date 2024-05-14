@@ -30,7 +30,7 @@ from temba import mailroom
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import analytics, countries, get_anonymous_user, json, on_transaction_commit, redact
 from temba.utils.email import send_template_email
-from temba.utils.models import JSONAsTextField, SquashableModel, TembaModel, generate_uuid
+from temba.utils.models import JSONAsTextField, LegacyUUIDMixin, SquashableModel, TembaModel, generate_uuid
 from temba.utils.text import random_string
 
 logger = logging.getLogger(__name__)
@@ -91,16 +91,15 @@ class ChannelType(metaclass=ABCMeta):
     # during activation. Channels should make sure their claim view is non-atomic if a callback will be involved
     async_activation = True
 
-    redact_request_keys = set()
-    redact_response_keys = set()
-    force_redact_request_keys = set()
-    force_redact_response_keys = set()
+    redact_request_keys = ()
+    redact_response_keys = ()
+    redact_values = ()
 
     def is_available_to(self, user):
         """
         Determines whether this channel type is available to the given user considering the region and when not considering region, e.g. check timezone
         """
-        region_ignore_visible = (not self.beta_only) or user.is_beta()
+        region_ignore_visible = (not self.beta_only) or user.is_beta
         region_aware_visible = True
 
         if self.available_timezones is not None:
@@ -243,7 +242,7 @@ class UnsupportedAndroidChannelError(Exception):
         self.message = message
 
 
-class Channel(TembaModel, DependencyMixin):
+class Channel(LegacyUUIDMixin, TembaModel, DependencyMixin):
     """
     Notes:
         - we want to reuse keys as much as possible (2018-10-11)
@@ -283,6 +282,8 @@ class Channel(TembaModel, DependencyMixin):
     CONFIG_ALLOW_INTERNATIONAL = "allow_international"
     CONFIG_MACHINE_DETECTION = "machine_detection"
     CONFIG_WCH_LOGO = "logo"
+
+    CONFIG_WHATSAPP_CLOUD_USER_TOKEN = "whatsapp_cloud_user_token"
 
     CONFIG_VONAGE_API_KEY = "nexmo_api_key"
     CONFIG_VONAGE_API_SECRET = "nexmo_api_secret"
@@ -339,6 +340,8 @@ class Channel(TembaModel, DependencyMixin):
         "schemes": ["tel"],
         "roles": ["send"],
     }
+
+    org_limit_key = Org.LIMIT_CHANNELS
 
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="channels", null=True)
     channel_type = models.CharField(max_length=3)
@@ -504,7 +507,8 @@ class Channel(TembaModel, DependencyMixin):
 
         return TYPES.values()
 
-    def get_type(self):
+    @property
+    def type(self) -> ChannelType:
         return self.get_type_from_code(self.channel_type)
 
     @classmethod
@@ -567,20 +571,19 @@ class Channel(TembaModel, DependencyMixin):
         )
 
     @classmethod
-    def add_vonage_bulk_sender(cls, user, channel):
+    def add_vonage_bulk_sender(cls, org, user, channel):
         # vonage ships numbers around as E164 without the leading +
         parsed = phonenumbers.parse(channel.address, None)
         vonage_phone_number = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164).strip("+")
 
-        org = user.get_org()
         config = {
             Channel.CONFIG_VONAGE_API_KEY: org.config[Org.CONFIG_VONAGE_KEY],
             Channel.CONFIG_VONAGE_API_SECRET: org.config[Org.CONFIG_VONAGE_SECRET],
             Channel.CONFIG_CALLBACK_DOMAIN: org.get_brand_domain(),
         }
 
-        return Channel.create(
-            user.get_org(),
+        return cls.create(
+            org,
             user,
             channel.country,
             "NX",
@@ -755,7 +758,7 @@ class Channel(TembaModel, DependencyMixin):
             return _("Android Phone")
 
     def get_channel_type_display(self):
-        return self.get_type().name
+        return self.type.name
 
     def get_channel_type_name(self):
         if self.is_android():
@@ -787,6 +790,9 @@ class Channel(TembaModel, DependencyMixin):
 
         elif URN.FACEBOOK_SCHEME in self.schemes:
             return "%s (%s)" % (self.config.get(Channel.CONFIG_PAGE_NAME, self.name), self.address)
+
+        elif self.channel_type == "WAC":
+            return "%s (%s)" % (self.config.get("wa_number", ""), self.config.get("wa_verified_name", self.name))
 
         elif self.channel_type == "WCH":
             return self.name
@@ -887,11 +893,9 @@ class Channel(TembaModel, DependencyMixin):
 
         super().release(user)
 
-        channel_type = self.get_type()
-
         # ask the channel type to deactivate - as this usually means calling out to external APIs it can fail
         try:
-            channel_type.deactivate(self)
+            self.type.deactivate(self)
         except TwilioRestException as e:
             raise e
         except Exception as e:
@@ -1112,9 +1116,6 @@ class ChannelCount(SquashableModel):
 
         return sql, params
 
-    def __str__(self):  # pragma: no cover
-        return "ChannelCount(%d) %s %s count: %d" % (self.channel_id, self.count_type, self.day, self.count)
-
     class Meta:
         index_together = ["channel", "count_type", "day"]
 
@@ -1238,55 +1239,57 @@ class ChannelLog(models.Model):
         """
         Gets the URL as it should be displayed to the given user
         """
-        return self._get_display_value(user, self.url, anon_mask)
+        redact_values = Channel.get_type_from_code(self.channel.channel_type).redact_values
+
+        return self._get_display_value(user, self.url, anon_mask, redact_values=redact_values)
 
     def get_request_display(self, user, anon_mask):
         """
         Gets the request trace as it should be displayed to the given user
         """
         redact_keys = Channel.get_type_from_code(self.channel.channel_type).redact_request_keys
-        force_redact_keys = Channel.get_type_from_code(self.channel.channel_type).force_redact_request_keys
+        redact_values = Channel.get_type_from_code(self.channel.channel_type).redact_values
 
-        return self._get_display_value(user, self.request, anon_mask, redact_keys, force_redact_keys)
+        return self._get_display_value(
+            user, self.request, anon_mask, redact_keys=redact_keys, redact_values=redact_values
+        )
 
     def get_response_display(self, user, anon_mask):
         """
         Gets the response trace as it should be displayed to the given user
         """
         redact_keys = Channel.get_type_from_code(self.channel.channel_type).redact_response_keys
-        force_redact_keys = Channel.get_type_from_code(self.channel.channel_type).force_redact_response_keys
+        redact_values = Channel.get_type_from_code(self.channel.channel_type).redact_values
 
-        return self._get_display_value(user, self.response, anon_mask, redact_keys, force_redact_keys)
+        return self._get_display_value(
+            user, self.response, anon_mask, redact_keys=redact_keys, redact_values=redact_values
+        )
 
-    def _get_display_value(self, user, original, mask, redact_keys=(), force_redact_keys=()):
+    def _get_display_value(self, user, original, mask, redact_keys=(), redact_values=()):
         """
         Get a part of the log which may or may not have to be redacted to hide sensitive information in anon orgs
         """
 
-        def basic_reduction():
-            if not self.channel.org.is_anon or user.has_org_perm(self.channel.org, "contacts.contact_break_anon"):
-                return original
+        for secret_val in redact_values:
+            original = redact.text(original, secret_val, mask)
 
-            # if this log doesn't have a msg then we don't know what to redact, so redact completely
-            if not self.msg_id:
-                return mask
+        if not self.channel.org.is_anon or user.has_org_perm(self.channel.org, "contacts.contact_break_anon"):
+            return original
 
-            needle = self.msg.contact_urn.path
+        # if this log doesn't have a msg then we don't know what to redact, so redact completely
+        if not self.msg_id:
+            return mask
 
-            if redact_keys:
-                result = redact.http_trace(original, needle, mask, redact_keys)
-            else:
-                result = redact.text(original, needle, mask)
+        needle = self.msg.contact_urn.path
 
-            # if nothing was redacted, don't risk returning sensitive information we didn't find
-            if original == result:
-                return mask
+        if redact_keys:
+            redacted = redact.http_trace(original, needle, mask, redact_keys)
+        else:
+            redacted = redact.text(original, needle, mask)
 
-            return result
-
-        redacted = basic_reduction()
-        if force_redact_keys:
-            redacted = redact.http_trace(redacted, "********", mask, force_redact_keys)
+        # if nothing was redacted, don't risk returning sensitive information we didn't find
+        if original == redacted:
+            return mask
 
         return redacted
 

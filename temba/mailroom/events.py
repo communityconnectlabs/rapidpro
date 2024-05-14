@@ -118,6 +118,10 @@ class Event:
                 "logs_url": logs_url,
             }
 
+            if obj.status == Msg.STATUS_FAILED:
+                msg_event["failed_reason"] = obj.failed_reason
+                msg_event["failed_reason_display"] = obj.get_failed_reason_display()
+
             if obj.broadcast and obj.broadcast.created_by:
                 user = obj.broadcast.created_by
                 msg_event["msg"]["created_by"] = {
@@ -215,7 +219,7 @@ class Event:
             "campaign_event": {
                 "id": obj.event.id,
                 "offset_display": obj.event.offset_display,
-                "relative_to": {"key": obj.event.relative_to.key, "name": obj.event.relative_to.label},
+                "relative_to": {"key": obj.event.relative_to.key, "name": obj.event.relative_to.name},
             },
             "fired_result": obj.fired_result,
         }

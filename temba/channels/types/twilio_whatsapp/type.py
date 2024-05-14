@@ -44,7 +44,7 @@ class TwilioWhatsappType(ChannelType):
         ),
     )
 
-    redact_request_keys = {
+    redact_request_keys = (
         "FromCity",
         "FromState",
         "FromZip",
@@ -54,7 +54,4 @@ class TwilioWhatsappType(ChannelType):
         "CalledCity",
         "CalledState",
         "CalledZip",
-    }
-
-    force_redact_request_keys = {"MessagingServiceSid"}
-    force_redact_response_keys = {"MessagingServiceSid"}
+    )

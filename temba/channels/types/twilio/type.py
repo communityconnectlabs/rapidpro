@@ -33,7 +33,7 @@ class TwilioType(ChannelType):
 
     ivr_protocol = ChannelType.IVRProtocol.IVR_PROTOCOL_TWIML
 
-    redact_request_keys = {
+    redact_request_keys = (
         "FromCity",
         "FromState",
         "FromZip",
@@ -43,7 +43,7 @@ class TwilioType(ChannelType):
         "CalledCity",
         "CalledState",
         "CalledZip",
-    }
+    )
 
     force_redact_request_keys = {"MessagingServiceSid"}
     force_redact_response_keys = {"MessagingServiceSid"}

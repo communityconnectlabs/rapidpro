@@ -2,13 +2,6 @@ import logging
 import os
 from abc import ABCMeta
 
-import pandas as pd
-from jellyfish import jaro_similarity
-from smartmin.models import SmartModel
-
-from django.conf import settings
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage as storage
 from django.db import models
 from django.template import Engine
 from django.urls import re_path, reverse
@@ -17,8 +10,7 @@ from django.utils.translation import gettext_lazy as _
 
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import on_transaction_commit
-from temba.utils.email import send_template_email
-from temba.utils.models import JSONField
+from temba.utils.models import JSONField, TembaModel
 from temba.utils.uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -81,26 +73,14 @@ class ClassifierType(metaclass=ABCMeta):
         raise NotImplementedError("classifier types must implement get_intents")
 
 
-class Classifier(SmartModel, DependencyMixin):
+class Classifier(TembaModel, DependencyMixin):
     """
-    A classifier represents a set of intents and entity extractors. Many providers call
-    these "apps".
+    A classifier represents a set of intents and entity extractors. Many providers call these "apps".
     """
 
-    # our uuid
-    uuid = models.UUIDField(default=uuid4)
-
-    # the type of this classifier
-    classifier_type = models.CharField(max_length=16)
-
-    # the friendly name for this classifier
-    name = models.CharField(max_length=255)
-
-    # config values for this classifier
-    config = JSONField()
-
-    # the org this classifier is part of
     org = models.ForeignKey(Org, related_name="classifiers", on_delete=models.PROTECT)
+    classifier_type = models.CharField(max_length=16)
+    config = JSONField()
 
     @classmethod
     def create(cls, org, user, classifier_type, name, config, sync=True):
@@ -188,8 +168,9 @@ class Classifier(SmartModel, DependencyMixin):
         self.intents.all().delete()
 
         self.is_active = False
+        self.name = self._deleted_name()
         self.modified_by = user
-        self.save(update_fields=("is_active", "modified_by", "modified_on"))
+        self.save(update_fields=("name", "is_active", "modified_by", "modified_on"))
 
     @classmethod
     def get_types(cls):

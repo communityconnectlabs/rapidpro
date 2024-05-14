@@ -37,6 +37,9 @@ class TriggerType:
     # form class used for creation and updating
     form = None
 
+    def get_instance_name(self, trigger):
+        return f"{self.name} → {trigger.flow.name}"
+
     def export_def(self, trigger) -> dict:
         all_fields = {
             "trigger_type": trigger.trigger_type,
@@ -179,7 +182,7 @@ class Trigger(SmartModel):
         trigger.archive_conflicts(user)
 
         if trigger.channel:
-            trigger.channel.get_type().activate_trigger(trigger)
+            trigger.channel.type.activate_trigger(trigger)
 
         return trigger
 
@@ -198,7 +201,7 @@ class Trigger(SmartModel):
         self.save(update_fields=("modified_by", "modified_on", "is_archived"))
 
         if self.channel:
-            self.channel.get_type().deactivate_trigger(self)
+            self.channel.type.deactivate_trigger(self)
 
     def restore(self, user):
         self.modified_by = user
@@ -209,7 +212,7 @@ class Trigger(SmartModel):
         self.archive_conflicts(user)
 
         if self.channel:
-            self.channel.get_type().activate_trigger(self)
+            self.channel.type.activate_trigger(self)
 
     def archive_conflicts(self, user):
         """
@@ -281,55 +284,57 @@ class Trigger(SmartModel):
         """
 
         for trigger_def in trigger_defs:
-            trigger_type = cls.get_type(code=trigger_def["trigger_type"])
+            cls.import_def(org, user, trigger_def, same_site=same_site)
 
-            # old exports might include scheduled triggers without schedules
-            if not trigger_type.exportable:
-                continue
+    @classmethod
+    def import_def(cls, org, user, definition: dict, same_site: bool = False):
+        trigger_type = cls.get_type(code=definition["trigger_type"])
 
-            # only consider fields which are valid for this type of trigger
-            trigger_def = {k: v for k, v in trigger_def.items() if k in trigger_type.export_fields}
+        # only consider fields which are valid for this type of trigger
+        trigger_def = {k: v for k, v in definition.items() if k in trigger_type.export_fields}
 
-            # resolve groups, channel and flow
-            groups = cls._resolve_import_groups(org, user, same_site, trigger_def["groups"])
-            exclude_groups = cls._resolve_import_groups(org, user, same_site, trigger_def.get("exclude_groups", []))
+        # resolve groups, channel and flow
+        groups = cls._resolve_import_groups(org, user, same_site, trigger_def["groups"])
+        exclude_groups = cls._resolve_import_groups(org, user, same_site, trigger_def.get("exclude_groups", []))
 
-            channel_uuid = trigger_def.get("channel")
-            channel = org.channels.filter(uuid=channel_uuid, is_active=True).first() if channel_uuid else None
+        channel_uuid = trigger_def.get("channel")
+        channel = org.channels.filter(uuid=channel_uuid, is_active=True).first() if channel_uuid else None
 
-            flow_uuid = trigger_def["flow"]["uuid"]
-            flow = org.flows.get(uuid=flow_uuid, is_active=True)
+        flow_uuid = trigger_def["flow"]["uuid"]
+        flow = org.flows.get(uuid=flow_uuid, is_active=True)
 
-            # see if that trigger already exists
-            conflicts = cls.get_conflicts(
+        # see if that trigger already exists
+        conflicts = cls.get_conflicts(
+            org,
+            trigger_def["trigger_type"],
+            groups=groups,
+            keyword=trigger_def.get("keyword"),
+            channel=channel,
+            include_archived=True,
+        )
+
+        # if one of our conflicts is an exact match, we can keep it
+        exact_match = conflicts.filter(flow=flow).order_by("-created_on").first()
+        if exact_match and set(exact_match.exclude_groups.all()) != set(exclude_groups):
+            exact_match = None
+
+        if exact_match:
+            # tho maybe it needs restored...
+            if exact_match.is_archived:
+                exact_match.restore(user)
+
+            return exact_match
+        else:
+            return cls.create(
                 org,
+                user,
                 trigger_def["trigger_type"],
-                groups=groups,
-                keyword=trigger_def.get("keyword"),
+                flow,
                 channel=channel,
-                include_archived=True,
+                groups=groups,
+                exclude_groups=exclude_groups,
+                keyword=trigger_def.get("keyword"),
             )
-
-            # if one of our conflicts is an exact match, we can keep it
-            exact_match = conflicts.filter(flow=flow).order_by("-created_on").first()
-            if exact_match and set(exact_match.exclude_groups.all()) != set(exclude_groups):
-                exact_match = None
-
-            if exact_match:
-                # tho maybe it needs restored...
-                if exact_match.is_archived:
-                    exact_match.restore(user)
-            else:
-                cls.create(
-                    org,
-                    user,
-                    trigger_def["trigger_type"],
-                    flow,
-                    channel=channel,
-                    groups=groups,
-                    exclude_groups=exclude_groups,
-                    keyword=trigger_def.get("keyword"),
-                )
 
     @classmethod
     def _resolve_import_groups(cls, org, user, same_site: bool, specs):
@@ -338,13 +343,13 @@ class Trigger(SmartModel):
             group = None
 
             if same_site:  # pragma: needs cover
-                group = ContactGroup.user_groups.filter(org=org, uuid=spec["uuid"]).first()
+                group = ContactGroup.get_groups(org).filter(uuid=spec["uuid"]).first()
 
             if not group:
-                group = ContactGroup.get_user_group_by_name(org, spec["name"])
+                group = ContactGroup.get_group_by_name(org, spec["name"])
 
             if not group:
-                group = ContactGroup.create_static(org, user, spec["name"])  # pragma: needs cover
+                group = ContactGroup.create_manual(org, user, spec["name"])  # pragma: needs cover
 
             if not group.is_active:  # pragma: needs cover
                 group.is_active = True
@@ -443,6 +448,10 @@ class Trigger(SmartModel):
     def type(self):
         return self.get_type(code=self.trigger_type)
 
+    @property
+    def name(self):
+        return self.type.get_instance_name(self)
+
     def release(self, user):
         """
         Releases this trigger
@@ -463,3 +472,7 @@ class Trigger(SmartModel):
 
     def __str__(self):
         return f'Trigger[type={self.trigger_type}, flow="{self.flow.name}"]'
+
+    class Meta:
+        verbose_name = _("Trigger")
+        verbose_name_plural = _("Triggers")

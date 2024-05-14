@@ -1,3 +1,425 @@
+v7.4.2
+----------
+ * Update copyright notice
+ * Update stable versions
+
+v7.4.1
+----------
+ * Update locale files
+
+v7.4.0
+----------
+ * Remove superfulous Beta group perm
+ * Update new UI opt in permissions
+ * More tweaks to WhatsApp Cloud channel claiming
+
+v7.3.79
+----------
+ * Add missing Facebook ID
+
+v7.3.78
+----------
+ * Add button to allow admin to choose more FB WAC numbers
+
+v7.3.77
+----------
+ * Add contact ticket list in new UI
+ * Fix permissions to connect WAC
+ * Register the WAC number in the activate method
+
+v7.3.76
+----------
+ * Add the Facebook dialog login if the token is not submitted successfully on WAC org connect
+ * Fix campaigns archive and activate buttons
+ * Update to latest Django
+ * Only display WA templates that are active
+ * Update flow start dialog to use start preview endpoint  
+ * Add start flow bulk action for contacts
+
+v7.3.75
+----------
+ * Redirect to channel page after WAC claim
+ * Fix org update pre form users roles list
+ * Adjust permission for org whatsapp connect view
+ * Ignore new conversation triggers without channels in imports
+
+v7.3.74
+----------
+ * Use FB JS SDK for WAC signups
+
+v7.3.73
+----------
+ * Add DB constraint to disallow active or waiting runs without a session
+
+v7.3.72
+----------
+ * Add DB constraint to enforce that flow sessions always have output or output_url
+
+v7.3.71
+----------
+ * Make sure all limits are updatable on the workspace update view
+ * Remove duplicated pagination
+ * Enforce channels limit per workspace
+
+v7.3.70
+----------
+ * Fix workspace group limit check for existing group import
+ * Drop no longer used role m2ms
+
+v7.3.69
+----------
+ * Fix campaign links
+
+v7.3.68
+----------
+ * Add WhatsApp API version choice field
+ * Stop writing to the role specific m2m tables
+ * Add pending events tab to contact details
+
+v7.3.67
+----------
+ * Merge pull request #3865 from nyaruka/plivo_claim
+ * formatting
+ * Sanitize plivo app names to match new rules
+
+v7.3.66
+----------
+ * Merge pull request #3864 from nyaruka/fix-WA-templates
+ * Fix message templates syncing for new categories
+
+v7.3.65
+----------
+ * Fix surveyor joins so new users are added to orgmembership as well.
+
+v7.3.64
+----------
+ * Fix fetching org users with given roles
+
+v7.3.63
+----------
+ * Update mailroom_db command to correctly add users to orgs
+ * Stop reading from org role m2m tables
+
+v7.3.62
+----------
+ * Fix rendering of dates on upcoming events list
+ * Data migration to backfill OrgMembership
+
+v7.3.61
+----------
+ * Add missing migration
+
+v7.3.60
+----------
+ * Data migration to fail active/waiting runs with no session
+ * Include scheduled triggers in upcoming contact events
+ * Add OrgMembership model
+
+v7.3.59
+----------
+ * Spreadsheet layout for contact fields in new UI
+ * Adjust WAC channel claim to add system admin with user token
+
+v7.3.58
+----------
+ * Clean up chat media treatment
+ * Add endpoint to get upcoming scheduled events for a contact
+ * Remove filtering by ticketer on tickets API endpoint and add indexes
+ * Add status to contacts API endpoint
+
+v7.3.57
+----------
+ * Improve WAC phone number verification flow and feedback
+ * Adjust name of WAC channels to include the number
+ * Fix manage user update URL on org update page
+ * Support missing target_ids key in WAC responses
+
+v7.3.56
+----------
+ * Fix deletion of users
+ * Cleanup user update form
+ * Fix missing users manage link page
+ * Add views to verify and register a WAC number
+
+v7.3.55
+----------
+ * Update contact search summary encoding
+
+v7.3.54
+----------
+ * Make channel type a property and use to determine redact values in HTTP request logs
+
+v7.3.53
+----------
+ * Make WAC channel visible to beta group
+
+v7.3.52
+----------
+ * Fix field name for submitted token
+
+v7.3.51
+----------
+ * Use default API throttle rates for unauthenticated users
+ * Bump pyjwt from 2.3.0 to 2.4.0
+ * Cache user role on org
+ * Add WhatsApp Cloud channel type
+
+v7.3.50
+----------
+ * Make Twitter channels beta only for now
+ * Use cached role permissions for permission checking and fix incorrect permissions on some 
+API views
+ * Move remaining mockey patched methods on auth.User to orgs.User
+
+v7.3.49
+----------
+ * Timings in export stats spreadsheet should be rounded to nearest second
+ * Include failed_reason/failed_reason_display on msg_created events
+ * Move more monkey patching on auth.User to orgs.User
+
+v7.3.48
+----------
+ * Include first reply timings in ticket stats export
+ * Create a proxy model for User and start moving some of the monkey patching to proper methods on that
+
+v7.3.47
+----------
+ * Data migration to backfill ticket first reply timings
+
+v7.3.46
+----------
+ * Add new squashable model to track average ticket reply times and close times
+ * Add Ticket.replied_on
+
+v7.3.45
+----------
+ * Add endpoint to export Excel sheet of ticket daily counts for last 90 days
+
+v7.3.44
+----------
+ * Remove omnibox support for fetching by label and message
+ * Remove functionality for creating new label folders and creating labels with folders
+
+v7.3.43
+----------
+ * Fix generating cloned flow names so they can't end with trailing spaces
+ * Deleting of globals should be soft like other types
+ * Simplify checking of workspace limits in UI and API
+
+v7.3.42
+----------
+ * Data migration to backfill ticket daily counts
+
+v7.3.41
+----------
+ * Reorganization of temba.utils.models
+ * Update the approach to the test a token is valid for FBA and IG channels
+ * Promote ContactField and Global to be TembaModels whilst for now retaining their custom name validation logic
+ * Add import support methods to TembaModel and use with Topic
+
+v7.3.40
+----------
+ * Add workspace plan, disallow grandchild org creation.
+ * Add support for shared usage tracking
+
+v7.3.39
+----------
+ * Move temba.utils.models to its own package
+ * Queue broadcasts to mailroom with their created_by
+ * Add teams to mailroom test database
+ * Add is_system to TembaModel, downgrade Contact to SmartModel
+
+v7.3.38
+----------
+ * Make sure we request a FB long lived page token using a long lived user token
+ * Convert campaign and campaignevent to use real UUIDs, simplify use of constants in API
+
+v7.3.37
+----------
+ * Don't forget to squash TicketDailyCount
+ * Fix imports of flows with ticket topic dependencies
+
+v7.3.36
+----------
+ * Add migration to update names of deleted labels and add constraint to enforce uniqueness
+ * Move org limit checking from serializers to API views
+ * Generalize preventing deletion of system objects via the API and allow deleting of groups that are used in flows
+ * Serialized topics in the API should include system field
+ * Add name uniqueness constraints to Team and Topic
+ * Add Team and TicketDailyCount models
+
+v7.3.35
+----------
+ * Tweaks to Topic model to enforce name uniqueness
+ * Add __str__ and __repr__ to TembaModel to replace custom methods and remove several unused ones
+ * Convert FlowLabel to be a TembaModel
+
+v7.3.34
+----------
+ * Fix copying flows to generate a unique name
+ * Rework TembaModel to be a base model class with UUID and name
+
+v7.3.33
+----------
+ * Use model mixin for common name functionality across models
+
+v7.3.32
+----------
+ * Add DB constraint to enforce flow name uniqueness
+
+v7.3.31
+----------
+ * Update components with resolved locked file
+
+v7.3.29
+----------
+ * Fix for flatpickr issue breaking date picker
+ * ContactField.get_or_create should enforce name uniqeuness and ignore invalid names
+ * Add validation error when changing type of field used by campaign events
+
+v7.3.28
+----------
+ * Tweak flow name uniqueness migration to honor max flow name length
+
+v7.3.27
+----------
+ * Tweak header to be uniform treatment regardless of menu
+ * Data migration to make flow names unique
+ * Add flow.preview_start endpoint which calls mailroom endpoint
+
+v7.3.26
+----------
+ * Fix mailroom_db command to set languages on new orgs
+ * Fix inline menus when they have no children
+ * Fix message exports
+
+v7.3.25
+----------
+ * Fix modals on spa pages
+ * Add service button to org edit page
+ * Update to latest django
+ * Add flow name to message Export if we have it
+
+v7.3.24
+----------
+ * Allow creating channel with same address when schemes do not overlap
+
+v7.3.23
+----------
+ * Add status to list of reserved field keys
+ * Migration to drop ContactField.label and field_type
+
+v7.3.22
+----------
+ * Update contact modified_on when deleting a group they belong to
+ * Add custom name validator and use for groups and flows
+
+v7.3.21
+----------
+ * Fix rendering of field names on contact read page
+ * Stop writing ContactField.label and field_type
+
+v7.3.20
+----------
+ * Stop reading ContactField.label and field_type
+
+v7.3.19
+----------
+ * Correct set new ContactField fields in mailroom_db test_db commands
+ * Update version of codecov action as well as versions of rp-indexer and mailroom used by tests
+ * Data migration to populate name and is_system on ContactField
+
+v7.3.18
+----------
+ * Give contact fields a name and is_system db field
+ * Update list of reserved keys for contact fields
+
+v7.3.17
+----------
+ * Fix uploading attachments to properly get uploaded URL
+
+v7.3.16
+----------
+ * Fix generating of unique flow, group and campaign names to respect case-insensitivity and max name length
+ * Add data migration to prefix names of previously deleted flows
+ * Prefix flow names with a UUID when deleted so they don't conflict with other flow names
+ * Remove warning about feature on flow start modal being removed
+
+v7.3.15
+----------
+ * Check name uniqueness on flow creation and updating
+ * Cleanup existing field validation on flow and group forms
+ * Do not fail to release a channel when we cannot reach the Facebook API for FB channels
+
+v7.3.14
+----------
+ * Convert flows to be a soft dependency
+
+v7.3.13
+----------
+ * Replace default index on FlowRun.contact with one that includes flow_id
+
+v7.3.12
+----------
+ * Data migration to give every workspace an Open Tickets smart system group
+
+v7.3.11
+----------
+ * Fix bulk adding/removing to groups from contact list pages
+ * Convert groups into a soft dependency for flows
+ * Use dataclasses instead of NaamedTuples where appropriate
+
+v7.3.10
+----------
+ * Remove path from example result in runs API endpoint docs
+ * Prevent updating or deleting of system groups via the API or UI
+ * Add system property to groups endpoint and fix docs
+
+v7.3.9
+----------
+ * Remove IG channel beta gating
+
+v7.3.8
+----------
+ * Fix fetching of groups from API when using separate readonly DB connection
+
+v7.3.7
+----------
+ * Rework how we fetch contact groups
+
+v7.3.6
+----------
+ * For FB / IG claim pages use expiring token if no long lived token is provided
+
+v7.3.5
+----------
+ * Data migration to update group_type=U to M|Q
+
+v7.3.4
+----------
+ * Merge pull request #3734 from nyaruka/FB-IG-claim
+
+v7.3.3
+----------
+ * Check all org groups when creating unique group names
+ * Make ContactGroup.is_system non-null and switch to using to distinguish between system and user groups
+
+v7.3.2
+----------
+ * Data migration to populate ContactGroup.is_system
+
+v7.3.1
+----------
+ * Add is_system field to ContactGroup and rename 'dynamic' to 'smart'
+ * Return 404 from edit_sub_org if org doesn't exist
+ * Use live JS SDK for FBA and IG refresh token views
+ * Add scheme to flow results exports
+
+v7.3.0
+----------
+ * Add countries supported by Africastalking
+ * Replace empty squashed migrations with real ones
+
 v7.2.4
 ----------
  * Update stable versions in README

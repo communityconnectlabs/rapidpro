@@ -16,22 +16,19 @@
     %meta{http-equiv:"X-UA-Compatible", content:"IE=10"}
     %meta{name:"robots", content:"noindex, nofollow"}
 
-    -if user.is_beta
+    -if user.is_staff
       %script{src:"{{ STATIC_URL }}js/urls.js"}
 
       :javascript
 
         window.STATIC_URL = "{{STATIC_URL}}";
         function loadNewInterface(force) {
-          console.log("loading new interface, force", force);
           var newUrl = mapUrl(window.location.pathname);
-
-          console.log(newUrl);
           if (newUrl != window.location.pathname) {
             window.location = newUrl;
           } else { 
             if (force) {
-              window.location = "/messages";
+              window.location = "/messages/";
             }
           }
         }
@@ -51,7 +48,6 @@
         :javascript
           (function(){
             var nav = getCookie("nav");
-            console.log("Auto route", nav);
             if (nav == "2") {
               loadNewInterface(false);
             }

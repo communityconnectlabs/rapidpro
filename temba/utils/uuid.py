@@ -25,9 +25,9 @@ def seeded_generator(seed: int):
     return generator
 
 
-def is_valid_uuid(value):
+def is_uuid(val: str) -> bool:
     try:
-        UUID(str(value))
+        UUID(val)
         return True
-    except ValueError:
+    except Exception:
         return False

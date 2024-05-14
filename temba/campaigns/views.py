@@ -33,7 +33,7 @@ from .models import Campaign, CampaignEvent
 
 class CampaignForm(forms.ModelForm):
     group = TembaChoiceField(
-        queryset=ContactGroup.user_groups.none(),
+        queryset=ContactGroup.objects.none(),
         empty_label=None,
         widget=SelectWidget(attrs={"placeholder": _("Select group"), "searchable": True}),
         label=_("Group"),
@@ -43,7 +43,7 @@ class CampaignForm(forms.ModelForm):
     def __init__(self, user, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields["group"].queryset = ContactGroup.get_user_groups(user.get_org(), ready_only=False)
+        self.fields["group"].queryset = ContactGroup.get_groups(user.get_org())
 
     class Meta:
         model = Campaign
@@ -59,12 +59,10 @@ class CampaignCRUDL(SmartCRUDL):
     class Menu(MenuMixin, SmartTemplateView):
         def derive_menu(self):
 
-            org = self.request.user.get_org()
-            campaigns = Campaign.objects.filter(org=org)
             menu = []
-
             menu.append(
                 self.create_menu_item(
+                    menu_id="active",
                     name=_("Active"),
                     icon="campaign",
                     href="campaigns.campaign_list",
@@ -73,35 +71,21 @@ class CampaignCRUDL(SmartCRUDL):
 
             menu.append(
                 self.create_menu_item(
-                    menu_id="archived-campaigns",
+                    menu_id="archived",
                     name=_("Archived"),
                     icon="archive",
                     href="campaigns.campaign_archived",
                 )
             )
 
-            active = campaigns.filter(is_archived=False, is_active=True).order_by("name")
-
             menu.append(self.create_divider())
-
             menu.append(
                 self.create_modax_button(
                     name=_("New Campaign"),
                     href="campaigns.campaign_create",
                 )
             )
-            if active:
-                menu.append(self.create_divider())
 
-            for campaign in active:
-                menu.append(
-                    self.create_menu_item(
-                        name=campaign.name,
-                        menu_id=f"{campaign.uuid}",
-                        count=len(campaign.get_events()),
-                        href=reverse("campaigns.campaign_read", args=[campaign.pk]),
-                    )
-                )
             return menu
 
     class Update(OrgObjPermsMixin, ModalMixin, SmartUpdateView):
@@ -118,7 +102,7 @@ class CampaignCRUDL(SmartCRUDL):
                     raise Http404("Campaign not found")
 
         def get_success_url(self):
-            return reverse("campaigns.campaign_read", args=[self.object.pk])
+            return reverse("campaigns.campaign_read", args=[self.object.uuid])
 
         def get_form_kwargs(self, *args, **kwargs):
             form_kwargs = super().get_form_kwargs(*args, **kwargs)
@@ -141,6 +125,8 @@ class CampaignCRUDL(SmartCRUDL):
             return self.render_modal_response(form)
 
     class Read(SpaMixin, OrgObjPermsMixin, SmartReadView):
+        slug_url_kwarg = "uuid"
+
         def derive_title(self):
             return self.object.name
 
@@ -215,7 +201,7 @@ class CampaignCRUDL(SmartCRUDL):
                     dict(
                         title=_("Service"),
                         posterize=True,
-                        href=f'{reverse("orgs.org_service")}?organization={self.object.org_id}&redirect_url={reverse("campaigns.campaign_read", args=[self.object.id])}',
+                        href=f'{reverse("orgs.org_service")}?organization={self.object.org_id}&redirect_url={reverse("campaigns.campaign_read", args=[self.object.uuid])}',
                     )
                 )
 
@@ -230,7 +216,7 @@ class CampaignCRUDL(SmartCRUDL):
         fields = ("name", "group")
         form_class = CampaignForm
         success_message = ""
-        success_url = "id@campaigns.campaign_read"
+        success_url = "uuid@campaigns.campaign_read"
 
         def pre_save(self, obj):
             obj = super().pre_save(obj)
@@ -302,7 +288,7 @@ class CampaignCRUDL(SmartCRUDL):
     class Archive(OrgFilterMixin, OrgPermsMixin, SmartUpdateView):
 
         fields = ()
-        success_url = "id@campaigns.campaign_read"
+        success_url = "uuid@campaigns.campaign_read"
         success_message = _("Campaign archived")
 
         def save(self, obj):
@@ -311,7 +297,7 @@ class CampaignCRUDL(SmartCRUDL):
 
     class Activate(OrgFilterMixin, OrgPermsMixin, SmartUpdateView):
         fields = ()
-        success_url = "id@campaigns.campaign_read"
+        success_url = "uuid@campaigns.campaign_read"
         success_message = _("Campaign activated")
 
         def save(self, obj):
@@ -411,12 +397,20 @@ class CampaignEventForm(forms.ModelForm):
     event_type = forms.ChoiceField(
         choices=((CampaignEvent.TYPE_MESSAGE, "Send a message"), (CampaignEvent.TYPE_FLOW, "Start a flow")),
         required=True,
-        widget=SelectWidget,
+        widget=SelectWidget(attrs={"placeholder": _("Select the event type"), "widget_only": True}),
     )
 
-    direction = forms.ChoiceField(choices=(("B", "Before"), ("A", "After")), required=True, widget=SelectWidget)
+    direction = forms.ChoiceField(
+        choices=(("B", "Before"), ("A", "After")),
+        required=True,
+        widget=SelectWidget(attrs={"placeholder": _("Relative date direction"), "widget_only": True}),
+    )
 
-    unit = forms.ChoiceField(choices=CampaignEvent.UNIT_CHOICES, required=True, widget=SelectWidget)
+    unit = forms.ChoiceField(
+        choices=CampaignEvent.UNIT_CHOICES,
+        required=True,
+        widget=SelectWidget(attrs={"placeholder": _("Select a unit"), "widget_only": True}),
+    )
 
     flow_to_start = TembaChoiceField(
         queryset=Flow.objects.filter(is_active=True),
@@ -432,7 +426,7 @@ class CampaignEventForm(forms.ModelForm):
     )
 
     relative_to = TembaChoiceField(
-        queryset=ContactField.all_fields.none(),
+        queryset=ContactField.objects.none(),
         required=False,
         empty_label=None,
         widget=SelectWidget(
@@ -444,7 +438,11 @@ class CampaignEventForm(forms.ModelForm):
         ),
     )
 
-    delivery_hour = forms.ChoiceField(choices=CampaignEvent.get_hour_choices(), required=False, widget=SelectWidget)
+    delivery_hour = forms.ChoiceField(
+        choices=CampaignEvent.get_hour_choices(),
+        required=False,
+        widget=SelectWidget(attrs={"placeholder": _("Select hour for delivery"), "widget_only": True}),
+    )
 
     flow_start_mode = forms.ChoiceField(
         choices=(
@@ -452,8 +450,7 @@ class CampaignEventForm(forms.ModelForm):
             (CampaignEvent.MODE_SKIP, _("Skip this event")),
         ),
         required=False,
-        label=_("If the contact is already active in a flow"),
-        widget=SelectWidget,
+        widget=SelectWidget(attrs={"widget_only": True}),
     )
 
     message_start_mode = forms.ChoiceField(
@@ -551,13 +548,12 @@ class CampaignEventForm(forms.ModelForm):
         org = self.user.get_org()
 
         relative_to = self.fields["relative_to"]
-        relative_to.queryset = ContactField.all_fields.filter(
-            org=org, is_active=True, value_type=ContactField.TYPE_DATETIME
-        ).order_by("label")
+        relative_to.queryset = org.fields.filter(is_active=True, value_type=ContactField.TYPE_DATETIME).order_by(
+            "name"
+        )
 
         flow = self.fields["flow_to_start"]
-        flow.queryset = Flow.objects.filter(
-            org=self.user.get_org(),
+        flow.queryset = org.flows.filter(
             flow_type__in=[Flow.TYPE_MESSAGE, Flow.TYPE_VOICE, Flow.TYPE_BACKGROUND],
             is_active=True,
             is_archived=False,
@@ -589,7 +585,14 @@ class CampaignEventForm(forms.ModelForm):
                 initial = message.get(lang_code, "")
 
             field = forms.CharField(
-                widget=CompletionTextarea(attrs={"widget_only": True}),
+                widget=CompletionTextarea(
+                    attrs={
+                        "placeholder": _(
+                            "Hi @contact.name! This is just a friendly reminder to apply your fertilizer."
+                        ),
+                        "widget_only": True,
+                    }
+                ),
                 required=False,
                 label=lang_name,
                 initial=initial,
@@ -635,7 +638,7 @@ class CampaignEventForm(forms.ModelForm):
         model = CampaignEvent
         fields = "__all__"
         exclude = ("extra",)
-        widgets = {"offset": InputWidget}
+        widgets = {"offset": InputWidget(attrs={"widget_only": True})}
 
 
 class CampaignEventCRUDL(SmartCRUDL):
@@ -658,7 +661,7 @@ class CampaignEventCRUDL(SmartCRUDL):
             event = self.get_object()
             if not event.is_active:
                 messages.error(self.request, "Campaign event no longer exists")
-                return HttpResponseRedirect(reverse("campaigns.campaign_read", args=[event.campaign.pk]))
+                return HttpResponseRedirect(reverse("campaigns.campaign_read", args=[event.campaign.uuid]))
 
         def get_object_org(self):
             return self.get_object().campaign.org
@@ -693,7 +696,7 @@ class CampaignEventCRUDL(SmartCRUDL):
                         title=_("Edit"),
                         style="button-primary",
                         js_class="update-event",
-                        href=reverse("campaigns.campaignevent_update", args=[campaign_event.id]),
+                        href=reverse("campaigns.campaignevent_update", args=[campaign_event.pk]),
                         modax=_("Edit Event"),
                     )
                 )
@@ -704,7 +707,7 @@ class CampaignEventCRUDL(SmartCRUDL):
                         id="event-delete",
                         title="Delete",
                         href=reverse("campaigns.campaignevent_delete", args=[campaign_event.id]),
-                        js_class="event-delete",
+                        modax=_("Delete Event"),
                     )
                 )
 
@@ -727,10 +730,10 @@ class CampaignEventCRUDL(SmartCRUDL):
             return HttpResponseRedirect(redirect_url)
 
         def get_redirect_url(self):
-            return reverse("campaigns.campaign_read", args=[self.object.campaign.pk])
+            return reverse("campaigns.campaign_read", args=[self.object.campaign.uuid])
 
         def get_cancel_url(self):  # pragma: needs cover
-            return reverse("campaigns.campaign_read", args=[self.object.campaign.pk])
+            return reverse("campaigns.campaign_read", args=[self.object.campaign.uuid])
 
     class Update(OrgObjPermsMixin, ModalMixin, SmartUpdateView):
         success_message = ""
@@ -900,7 +903,7 @@ class CampaignEventCRUDL(SmartCRUDL):
             return fields
 
         def get_success_url(self):
-            return reverse("campaigns.campaign_read", args=[self.object.campaign.pk])
+            return reverse("campaigns.campaign_read", args=[self.object.campaign.uuid])
 
         def get_form_kwargs(self):
             kwargs = super().get_form_kwargs()
@@ -919,8 +922,8 @@ class CampaignEventCRUDL(SmartCRUDL):
             initial["flow_start_mode"] = "I"
 
             # default to our first date field
-            initial["relative_to"] = ContactField.all_fields.filter(
-                org=self.request.user.get_org(), is_active=True, value_type=ContactField.TYPE_DATETIME
+            initial["relative_to"] = self.request.org.fields.filter(
+                is_active=True, value_type=ContactField.TYPE_DATETIME
             ).first()
 
             return initial
@@ -933,7 +936,7 @@ class CampaignEventCRUDL(SmartCRUDL):
 
         def pre_save(self, obj):
             obj = super().pre_save(obj)
-            obj.campaign = Campaign.objects.get(org=self.request.user.get_org(), pk=self.request.GET.get("campaign"))
+            obj.campaign = Campaign.objects.get(org=self.request.user.get_org(), id=self.request.GET.get("campaign"))
 
             if obj.event_type == CampaignEvent.TYPE_FLOW:
                 flow_params_fields = [field for field in self.request.POST.keys() if "flow_parameter_field" in field]
