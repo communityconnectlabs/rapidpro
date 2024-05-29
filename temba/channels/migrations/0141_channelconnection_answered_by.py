@@ -6,13 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('channels', '0140_smpplog'),
+        ("channels", "0140_smpplog"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='channelconnection',
-            name='answered_by',
-            field=models.CharField(choices=[('H', 'Human'), ('M', 'Machine')], max_length=1, null=True),
+            model_name="channelconnection",
+            name="answered_by",
+            field=models.CharField(choices=[("H", "Human"), ("M", "Machine")], max_length=1, null=True),
         ),
     ]
