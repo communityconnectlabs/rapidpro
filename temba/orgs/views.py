@@ -4862,6 +4862,14 @@ class OrgCRUDL(SmartCRUDL):
 
     class OptOutMessage(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
         class OptOutMessageForm(forms.ModelForm):
+            disable_opt_out = forms.BooleanField(
+                required=False,
+                label=_("Disable opt-out"),
+                widget=CheckboxWidget(),
+                help_text=_("Soft opt-out opts users out for negative messages like swear words."),
+                initial=False,
+            )
+
             message = forms.CharField(
                 required=False,
                 label=_("Message"),
@@ -4881,7 +4889,7 @@ class OrgCRUDL(SmartCRUDL):
 
             class Meta:
                 model = Org
-                fields = ("message",)
+                fields = ("message", "disable_opt_out")
 
         success_message = ""
         form_class = OptOutMessageForm
@@ -4890,6 +4898,7 @@ class OrgCRUDL(SmartCRUDL):
             initial = super().derive_initial()
             org = self.derive_org()
             initial["message"] = (org.config or {}).get("opt_out_message_back")
+            initial["disable_opt_out"] = (org.config or {}).get("opt_out_disabled")
             return initial
 
         def get_form_kwargs(self):
@@ -4905,6 +4914,14 @@ class OrgCRUDL(SmartCRUDL):
             else:
                 try:
                     current_config.pop("opt_out_message_back")
+                except KeyError:
+                    pass
+
+            if form.cleaned_data.get("disable_opt_out"):
+                current_config.update(dict(opt_out_disabled=True))
+            else:
+                try:
+                    current_config.pop("opt_out_disabled")
                 except KeyError:
                     pass
             org.config = current_config
