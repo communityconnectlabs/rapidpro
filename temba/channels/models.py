@@ -1671,10 +1671,18 @@ class ChannelConnection(models.Model):
         (ERROR_MACHINE, _("Answering Machine")),  # the call went to an answering machine
     )
 
+    ANSWERED_BY_HUMAN = "H"
+    ANSWERED_BY_MACHINE = "M"
+    ANSWERED_BY_CHOICES = (
+        (ANSWERED_BY_HUMAN, _("Human")),
+        (ANSWERED_BY_MACHINE, _("Machine")),
+    )
+
     org = models.ForeignKey(Org, on_delete=models.PROTECT)
     connection_type = models.CharField(max_length=1, choices=TYPE_CHOICES)
     direction = models.CharField(max_length=1, choices=DIRECTION_CHOICES)
     status = models.CharField(max_length=1, choices=STATUS_CHOICES)
+    answered_by = models.CharField(max_length=1, choices=ANSWERED_BY_CHOICES, null=True)
 
     channel = models.ForeignKey("Channel", on_delete=models.PROTECT, related_name="connections")
     contact = models.ForeignKey("contacts.Contact", on_delete=models.PROTECT, related_name="connections")
