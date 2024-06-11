@@ -6,7 +6,6 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("msgs", "0158_scheduled_bcast_cleanup"),
         ("msgs", "0161_auto_20221003_1150"),
     ]
 

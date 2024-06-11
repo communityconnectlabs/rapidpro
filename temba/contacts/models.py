@@ -70,6 +70,7 @@ class URN:
     VK_SCHEME = "vk"
     WEBCHAT_SCHEME = "webchat"
     WECHAT_SCHEME = "wechat"
+    WHATSAPP_SCHEME = "whatsapp"
 
     SCHEME_CHOICES = (
         (TEL_SCHEME, _("Phone Number")),

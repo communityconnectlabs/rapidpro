@@ -17,6 +17,7 @@ import pytz
 import regex
 import requests
 from packaging.version import Version
+from rest_framework.views import APIView
 from smartmin.users.models import FailedLogin, PasswordHistory, RecoveryToken
 from smartmin.users.views import Login, UserUpdateForm
 from smartmin.views import (

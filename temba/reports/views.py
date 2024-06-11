@@ -118,7 +118,7 @@ class ReportCRUDL(SmartCRUDL):
                 selected_flows = []
             selected_flow_json = list(map(flow_cast, filter(lambda x: x.metadata.get("results"), selected_flows)))
 
-            groups = ContactGroup.user_groups.filter(org=org).order_by("name")
+            groups = ContactGroup.objects.filter(org=org).order_by("name")
             groups_json = list(filter(lambda x: x is not None, [group.analytics_json() for group in groups]))
 
             reports = Report.objects.filter(is_active=True, org=org).order_by("title")

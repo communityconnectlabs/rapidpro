@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
         ("campaigns", "0038_auto_20200428_2109"),
     ]
 
-    dependencies = [("campaigns", "0035_squashed")]
+    dependencies = []
 
     operations = [
         migrations.AlterField(

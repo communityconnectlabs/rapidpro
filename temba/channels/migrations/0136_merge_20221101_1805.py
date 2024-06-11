@@ -7,7 +7,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("channels", "0133_auto_20220322_1447"),
-        ("channels", "0135_alter_channellog_created_on"),
     ]
 
     operations = []

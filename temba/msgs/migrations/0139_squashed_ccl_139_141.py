@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         ("msgs", "0141_auto_20200402_1534"),
     ]
 
-    dependencies = [("msgs", "0144_squashed")]
+    dependencies = []
 
     operations = [
         migrations.AlterField(

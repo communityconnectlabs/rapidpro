@@ -9,7 +9,6 @@ import temba.utils.models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("tickets", "0025_remove_ticket_subject"),
         ("msgs", "0163_alter_msg_status"),
     ]
 

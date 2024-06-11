@@ -91,9 +91,7 @@ class Migration(migrations.Migration):
     ]
 
     dependencies = [
-        ("flows", "0243_squashed"),
         ("orgs", "0059_squashed_ccl_0059_0061"),
-        ("contacts", "0129_squashed"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

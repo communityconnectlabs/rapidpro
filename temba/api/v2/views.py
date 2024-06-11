@@ -4840,7 +4840,7 @@ class ReportEndpointMixin:
             for group_name in group_uuid_names["names"]:
                 group_name_filter |= Q(name__iexact=group_name)
             group_uuid_names["uuids"].extend(
-                ContactGroup.user_groups.filter(org=org).filter(group_name_filter).values_list("uuid", flat=True)
+                ContactGroup.objects.filter(org=org).filter(group_name_filter).values_list("uuid", flat=True)
             )
         if group_uuid_names["uuids"]:
             main_conditions.insert(1, {"term": {"groups": group_uuid_names["uuids"][0]}})

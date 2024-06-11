@@ -10,7 +10,7 @@ from temba.flows.models import Flow
 from temba.msgs.models import Msg
 from temba.orgs.models import Org
 from temba.utils import json, on_transaction_commit
-from temba.utils.models import TembaModel, TembaUUIDMixin, TranslatableField
+from temba.utils.models import TembaModel, TembaUUIDMixin, TranslatableField, JSONAsTextField
 
 
 class Campaign(TembaModel):

@@ -6,7 +6,6 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("msgs", "0155_auto_20210715_1854"),
         ("msgs", "0147_msg_segments"),
     ]
 

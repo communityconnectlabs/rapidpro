@@ -7,7 +7,7 @@ import temba.utils.models
 
 class Migration(migrations.Migration):
 
-    dependencies = [("triggers", "0017_squashed")]
+    dependencies = []
 
     operations = [
         migrations.AddField(

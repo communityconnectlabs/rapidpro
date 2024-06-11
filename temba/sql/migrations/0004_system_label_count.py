@@ -44,8 +44,6 @@ $$ LANGUAGE plpgsql;
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("sql", "0003_bigint_m2ms"),
-    ]
+    dependencies = []
 
     operations = [migrations.RunSQL(SQL)]

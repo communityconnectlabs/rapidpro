@@ -1107,7 +1107,7 @@ class OrgDeleteTest(TembaNonAtomicTest):
         self.assertEqual(org, org_from_db)
 
         contact_field = self.create_field("test_field_group_dep", "Name", org=org)
-        group = ContactGroup.user_groups.create(
+        group = ContactGroup.objects.create(
             org=org,
             name="Group Dependency",
             query="test_field_group_dep=******",

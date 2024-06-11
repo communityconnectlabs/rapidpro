@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("request_logs", "0008_squashed"),
-    ]
+    dependencies = []
 
     operations = [
         migrations.AlterField(

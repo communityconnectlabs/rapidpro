@@ -25,7 +25,8 @@ from temba.orgs.models import DependencyMixin, Org, TopUp
 from temba.schedules.models import Schedule
 from temba.utils import chunk_list, on_transaction_commit
 from temba.utils.export import BaseExportAssetStore, BaseExportTask
-from temba.utils.models import JSONAsTextField, LegacyUUIDMixin, SquashableModel, TembaModel, TranslatableField
+from temba.utils.models import JSONAsTextField, LegacyUUIDMixin, SquashableModel, TembaModel, TranslatableField, \
+    JSONField
 from temba.utils.text import clean_string
 from temba.utils.uuid import uuid4
 

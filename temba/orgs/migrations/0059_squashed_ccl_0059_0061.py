@@ -31,7 +31,7 @@ class Migration(migrations.Migration):
         ("orgs", "0061_data_move_admins_to_nested_org"),
     ]
 
-    dependencies = [("orgs", "0072_squashed")]
+    dependencies = []
 
     operations = [
         migrations.AddField(

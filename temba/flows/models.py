@@ -13,6 +13,7 @@ from urllib.request import urlopen
 import boto3
 import iso8601
 import pytz
+from django.dispatch import receiver
 from django_redis import get_redis_connection
 from packaging.version import Version
 from smartmin.models import SmartModel

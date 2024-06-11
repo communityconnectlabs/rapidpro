@@ -311,7 +311,6 @@ class LinkCRUDL(SmartCRUDL):
             context["org_has_links"] = Link.objects.filter(org=self.request.user.get_org(), is_active=True).count()
             context["folders"] = self.get_folders()
             context["request_url"] = self.request.path
-            context["actions"] = self.actions
 
             return context
 

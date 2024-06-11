@@ -10,9 +10,7 @@ import temba.utils.models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("classifiers", "0004_squashed"),
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(

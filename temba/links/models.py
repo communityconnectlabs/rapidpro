@@ -18,7 +18,7 @@ from temba.orgs.models import Org
 from temba.utils import chunk_list
 from temba.utils.dates import datetime_to_str
 from temba.utils.export import BaseExportAssetStore, BaseExportTask, TableExporter
-from temba.utils.models import TembaModel, URLTextField
+from temba.utils.models import TembaModel
 from temba.utils.text import clean_string
 
 MAX_HISTORY = 50
@@ -33,7 +33,7 @@ class Link(TembaModel):
 
     name = models.CharField(max_length=64, help_text=_("The name for this trackable link"))
 
-    destination = URLTextField(help_text="The destination URL for this trackable link")
+    destination = models.TextField(help_text="The destination URL for this trackable link")
 
     org = models.ForeignKey(Org, related_name="links", on_delete=models.CASCADE)
 

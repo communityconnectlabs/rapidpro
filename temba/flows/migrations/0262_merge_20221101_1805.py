@@ -6,7 +6,6 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("flows", "0259_auto_20210825_1438"),
         ("flows", "0261_flowtemplate_flowtemplategroup"),
     ]
 

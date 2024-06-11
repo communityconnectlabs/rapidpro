@@ -575,7 +575,7 @@ class ContactCRUDL(SmartCRUDL):
         "delete",
         "scheduled",
         "history",
-        "start",
+        # "start",
         "invite_participants",
     )
 
@@ -849,11 +849,13 @@ class ContactCRUDL(SmartCRUDL):
 
             # add opt-out fields
             try:
-                opt_out_message = ContactField.system_fields.get(org=contact.org, key=ContactField.KEY_OPT_OUT_MSG)
-                opt_out_datetime = ContactField.system_fields.get(org=contact.org, key=ContactField.KEY_OPTED_OUT_ON)
-                opt_out_message.field_type, opt_out_datetime.field_type = (
-                    ContactField.FIELD_TYPE_USER,
-                    ContactField.FIELD_TYPE_USER,
+                opt_out_message = ContactField.objects.get(org=contact.org, key=ContactField.KEY_OPT_OUT_MSG)
+                opt_out_datetime = ContactField.objects.get(org=contact.org, key=ContactField.KEY_OPTED_OUT_ON)
+                opt_out_message.is_system = False
+                opt_out_datetime.is_system = False
+                opt_out_message.value_type, opt_out_datetime.value_type = (
+                    ContactField.TYPE_TEXT,
+                    ContactField.TYPE_TEXT,
                 )
                 context.update(
                     {
@@ -1572,7 +1574,7 @@ class ContactCRUDL(SmartCRUDL):
 
     class InviteParticipants(ContactListView):
         title = _("Invite Participants")
-        system_group = ContactGroup.TYPE_ACTIVE
+        system_group = ContactGroup.TYPE_DB_ACTIVE
 
         def get(self, request, *args, **kwargs):
             contact_uuid = request.GET.get("contact_uuid")
@@ -1633,7 +1635,7 @@ class ContactCRUDL(SmartCRUDL):
 
             if group_uuid:
                 try:
-                    return ContactGroup.user_groups.get(uuid=group_uuid, org=org)
+                    return ContactGroup.objects.get(uuid=group_uuid, org=org)
                 except ContactGroup.DoesNotExist:
                     raise Http404
 

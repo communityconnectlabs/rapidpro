@@ -7,7 +7,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("request_logs", "0009_auto_20210903_1133"),
-        ("request_logs", "0009_resize_url_field"),
     ]
 
     operations = []

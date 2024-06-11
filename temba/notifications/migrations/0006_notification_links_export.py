@@ -8,7 +8,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("links", "0006_alter_linkcontacts_flow"),
-        ("notifications", "0005_auto_20211007_1713"),
     ]
 
     operations = [

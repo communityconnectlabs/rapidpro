@@ -289,13 +289,12 @@ class FlowImageCRUDL(SmartCRUDL):
                 .order_by("name")
             )
             context["groups"] = (
-                ContactGroup.user_groups.filter(org=self.request.user.get_org(), is_active=True)
+                ContactGroup.objects.filter(org=self.request.user.get_org(), is_active=True)
                 .only("name", "uuid")
                 .order_by("name")
             )
             context["folders"] = folders
             context["request_url"] = self.request.path
-            context["actions"] = self.actions
             context["contact_fields"] = ContactField.user_fields.filter(
                 org=self.request.user.get_org(), is_active=True
             ).order_by("pk")
@@ -357,7 +356,7 @@ class FlowImageCRUDL(SmartCRUDL):
             if obj_type == "flow":
                 return get_object_or_404(Flow, org=self.org, uuid=uuid)
             else:
-                return get_object_or_404(ContactGroup.user_groups, org=self.org, uuid=uuid)
+                return get_object_or_404(ContactGroup.objects, org=self.org, uuid=uuid)
 
         def get_queryset_filter(self):
             obj = self.derive_object()
@@ -405,7 +404,7 @@ class FlowImageCRUDL(SmartCRUDL):
                     get_filter = dict(is_active=False, org=org)
                 elif (type_ == "group" or type_ == "flow") and uuid_:
                     if type_ == "group":
-                        group = ContactGroup.user_groups.filter(org=org, uuid=uuid_).only("id").first()
+                        group = ContactGroup.objects.filter(org=org, uuid=uuid_).only("id").first()
                         contacts_id = (
                             group.contacts.all()
                             .exclude(is_active=False)

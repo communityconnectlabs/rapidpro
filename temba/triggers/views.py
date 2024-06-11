@@ -374,7 +374,7 @@ class BaseLargeSendForm(forms.ModelForm):
         widget=SelectWidget(attrs={"placeholder": _("Select a flow"), "searchable": True}),
     )
     groups = TembaMultipleChoiceField(
-        queryset=ContactGroup.user_groups.none(),
+        queryset=ContactGroup.objects.none(),
         label=_("Groups"),
         help_text=_("Only includes contacts in these groups."),
         required=True,
@@ -975,7 +975,7 @@ class TriggerCRUDL(SmartCRUDL):
             contacts = []
 
             for group_id in groups:
-                group = ContactGroup.user_groups.filter(id=group_id, org=self.org).first()
+                group = ContactGroup.objects.filter(id=group_id, org=self.org).first()
                 contacts.append(set(group.contacts.values_list("id", flat=True)))
 
             contacts = list(set().union(*contacts))
