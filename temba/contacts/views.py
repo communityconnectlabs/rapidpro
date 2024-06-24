@@ -74,6 +74,7 @@ from .models import (
 from .search import SearchException, parse_query, search_contacts
 from .search.omnibox import omnibox_query, omnibox_results_to_dict
 from .tasks import export_contacts_task
+from ..flows.models import Flow
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +356,7 @@ class ContactListView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
         for group in groups:
             obj = {
                 "id": group.id,
+                "uuid": group.uuid,
                 "name": group.name,
                 "count": group_counts[group],
                 "url": reverse("contacts.contact_filter", args=[group.uuid]),
@@ -1160,14 +1162,15 @@ class ContactCRUDL(SmartCRUDL):
                         title=_("Start Studio Flow"),
                         modax=_("Launch Studio Flow"),
                         href=reverse("flows.flow_launch_studio_flow"),
-                    ),
+                    )
+                )
+                links.append(
                     dict(
                         id="export-contacts",
                         title=_("Export"),
                         modax=_("Export Contacts"),
                         href=self.derive_export_url(),
                     )
-
                 )
 
             links.extend(super().get_gear_links())
@@ -1666,11 +1669,16 @@ class ContactCRUDL(SmartCRUDL):
             context = super().get_context_data(*args, **kwargs)
             org = self.request.user.get_org()
             group = self.derive_group()
+            groups = org.groups.filter(is_active=True).select_related("org").order_by(Upper("name"))
             view_url = reverse("contacts.contact_invite_participants")
 
-            counts = ContactGroup.get_system_group_counts(org)
+            counts = ContactGroupCount.get_totals(groups)
+            all_groups_count = 0
+            for item in groups:
+                if item.group_type == ContactGroup.TYPE_DB_ACTIVE:
+                    all_groups_count += counts[item]
 
-            folders = [dict(count=counts[ContactGroup.TYPE_ACTIVE], label=_("All Contacts"), url=view_url)]
+            folders = [dict(count=all_groups_count, label=_("All Contacts"), url=view_url)]
 
             available_flows = Flow.objects.filter(org=org, is_active=True, is_system=False, is_archived=False)
             current_optin_flow = available_flows.filter(uuid=org.get_optin_flow())
@@ -1683,6 +1691,11 @@ class ContactCRUDL(SmartCRUDL):
             context["folders"] = folders
             context["current_group"] = group
             context["contact_fields"] = ContactField.user_fields.active_for_org(org=org).order_by("-priority", "pk")
+
+            system_groups, smart_groups, manual_groups = self.get_groups(org)
+
+            context["smart_groups"] = smart_groups
+            context["manual_groups"] = manual_groups
 
             return context
 

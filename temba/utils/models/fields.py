@@ -88,7 +88,7 @@ class JSONAsTextField(CheckFieldDefaultMixin, models.Field):
         if self.has_default() and value is None:
             return self.get_default()
 
-        if value is None:
+        if value in ["", None]:
             return value
 
         if isinstance(value, str):

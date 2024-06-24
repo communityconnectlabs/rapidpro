@@ -37,25 +37,23 @@
             .font-normal.uppercase.text-xs.pb-1.text-gray-500
               - trans "Smart Groups"
             .inner-scroll
-              -for group in groups
-                -if group.is_dynamic
-                  .lp-nav-item(class="{% if current_group.id == group.pk %}font-normal{% endif %}")
-                    .name(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
-                      {{group.label}}
-                    .count(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
-                      {{ group.count | intcomma }}
+              -for group in smart_groups
+                .lp-nav-item(class="{% if current_group.id == group.id %}font-normal{% endif %}")
+                  .name(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                    {{ group.name }}
+                  .count(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                    {{ group.count | intcomma }}
 
           .lp-nav.lower
             .font-normal.uppercase.text-xs.text-gray-500.pb-1
               - trans "Groups"
             .inner-scroll
-              -for group in groups
-                -if not group.is_dynamic
-                  .lp-nav-item(class="{% if current_group.id == group.pk %}font-normal{% endif %}")
-                    .name(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
-                      {{group.label}}
-                    .count(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
-                      {{ group.count | intcomma }}
+              -for group in manual_groups
+                .lp-nav-item(class="{% if current_group.id == group.id %}font-normal{% endif %}")
+                  .name(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                    {{ group.name }}
+                  .count(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                    {{ group.count | intcomma }}
 
         .right
           - if has_contacts
@@ -71,13 +69,13 @@
                         .subtitle
                           -block subtitle
 
-                  .list-buttons-container.mr-2.mt-2.flex-grow.h-full.visible
+                  .list-buttons-container.mr-2.mt-2.mb-2.flex-grow.h-full.visible
                     %form.controls{method:"POST"}
                       - csrf_token
                         %label.m-0.control-label
                           %trans Opt-in flow
                         %div(style="display: flex;")
-                          %temba-select#id_opt_in_flow.w-96{float:'left', name:'optin_flow_uuid', data-url-template:"{% url 'flows.flow_broadcast' '0' %}", placeholder:'{{_("Opt-in flow")}}'}
+                          %temba-select#id_opt_in_flow.w-96{float:'left', name:'optin_flow_uuid', data-url-template:"{% url 'flows.flow_broadcast' %}", placeholder:'{{_("Opt-in flow")}}'}
                             %temba-option
                             - for flow in flows
                               %temba-option{value:'{{flow.uuid}}', name: '{{ flow.name }}', '{% if flow.uuid == optin_flow %}selected{% endif %}'}
@@ -170,7 +168,7 @@
                                 %td.field
                             %td
 
-                  .flex.flex-col.mb-16
+                  .flex.flex-col.mb-16.mt-4
                     -include "includes/pagination.haml"
 
                     -if paginator.is_es_search and not page_obj.has_next_page and page_obj.number == paginator.num_pages and paginator.count > 10000
@@ -273,9 +271,9 @@
     }
 
     #id_save_flow_btn {
-      margin-top: 6px;
+      margin-top: 0;
       margin-left: 5px;
-      height: 36px;
+      height: 37px;
     }
 
     .invite-column {
