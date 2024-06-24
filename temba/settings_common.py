@@ -836,7 +836,6 @@ GROUP_PERMISSIONS = {
         "orgs.org_import",
         "orgs.org_lookups",
         "orgs.org_menu",
-        "orgs.org_opt_out_message",
         "orgs.org_parse_data_view",
         "orgs.org_parse_data_import",
         "orgs.org_profile",
