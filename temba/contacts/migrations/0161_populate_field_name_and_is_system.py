@@ -8,7 +8,7 @@ def populate_field_name_and_is_system(apps, schema_editor):  # pragma: no cover
     ContactField = apps.get_model("contacts", "ContactField")
 
     num_updated = 0
-    for field in ContactField.objects.filter(Q(name=None) | Q(is_system=None)):
+    for field in ContactField.all_fields.filter(Q(name=None) | Q(is_system=None)):
         field.name = field.label
         field.is_system = field.field_type == "S"
         field.save(update_fields=("name", "is_system"))
