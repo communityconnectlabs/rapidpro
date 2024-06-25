@@ -5,7 +5,6 @@ from urllib.parse import urlencode
 import iso8601
 import regex
 import requests
-from django.utils import timezone
 from django_redis import get_redis_connection
 from packaging.version import Version
 from simplejson import JSONDecodeError
@@ -30,6 +29,7 @@ from django.db.models.functions import Lower
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.functional import cached_property
 from django.utils.text import slugify
@@ -72,7 +72,7 @@ from temba.orgs.views import (
     OrgPermsMixin,
 )
 from temba.triggers.models import Trigger
-from temba.utils import analytics, gettext, json, languages, on_transaction_commit, str_to_bool, build_flow_parameters
+from temba.utils import analytics, build_flow_parameters, gettext, json, languages, on_transaction_commit, str_to_bool
 from temba.utils.fields import (
     CheckboxWidget,
     CompletionTextarea,

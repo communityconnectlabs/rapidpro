@@ -32,10 +32,10 @@ from . import chunk_list, countries, format_number, languages, percentage, redac
 from .cache import get_cacheable_result, incrby_existing
 from .celery import nonoverlapping_task
 from .dates import date_range, datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
-from .email import is_valid_address, send_simple_email, send_email_with_attachments
+from .email import is_valid_address, send_email_with_attachments, send_simple_email
 from .export import TableExporter
 from .fields import NameValidator, validate_external_url
-from .gsm7 import is_gsm7, replace_non_gsm7_accents, calculate_num_segments, replace_accented_chars
+from .gsm7 import calculate_num_segments, is_gsm7, replace_accented_chars, replace_non_gsm7_accents
 from .http import http_headers
 from .locks import LockNotAcquiredException, NonBlockingLock
 from .models import patch_queryset_count

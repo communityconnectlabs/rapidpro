@@ -1,13 +1,14 @@
 import logging
 import os
-import pandas as pd
 from abc import ABCMeta
 
-from django.conf import settings
-from django.core.files.base import ContentFile
+import pandas as pd
 from jellyfish import jaro_similarity
 from smartmin.models import SmartModel
 
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage as storage
 from django.db import models
 from django.template import Engine
 from django.urls import re_path, reverse
@@ -19,7 +20,6 @@ from temba.utils import on_transaction_commit
 from temba.utils.email import send_template_email
 from temba.utils.models import JSONField, TembaModel
 from temba.utils.uuid import uuid4
-from django.core.files.storage import default_storage as storage
 
 logger = logging.getLogger(__name__)
 

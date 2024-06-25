@@ -65,6 +65,7 @@ from temba.utils.uuid import is_uuid
 from ...links.models import Link, LinkContacts
 from ...orgs.models import DEFAULT_FIELDS_PAYLOAD_LOOKUPS, DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS, LOOKUPS
 from ...utils.gsm7 import replace_accented_chars
+from ...utils.legacy import dates
 from ..models import SSLPermission
 from ..support import InvalidQueryError, csv_response_wrapper
 from .serializers import (
@@ -114,7 +115,6 @@ from .serializers import (
     WorkspaceReadSerializer,
 )
 from .validators import is_uuid_valid
-from ...utils.legacy import dates
 
 
 class RootView(views.APIView):
