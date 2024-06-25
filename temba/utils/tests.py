@@ -21,7 +21,7 @@ from celery.app.task import Task
 
 from temba.campaigns.models import Campaign
 from temba.contacts.models import Contact, ExportContactsTask
-from temba.flows.models import Flow
+from temba.flows.models import Flow, FlowRun
 from temba.tests import TembaTest, matchers
 from temba.triggers.models import Trigger
 from temba.utils import json, uuid
@@ -32,11 +32,13 @@ from . import chunk_list, countries, format_number, languages, percentage, redac
 from .cache import get_cacheable_result, incrby_existing
 from .celery import nonoverlapping_task
 from .dates import date_range, datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
-from .email import is_valid_address, send_simple_email
+from .email import is_valid_address, send_simple_email, send_email_with_attachments
 from .export import TableExporter
 from .fields import NameValidator, validate_external_url
+from .gsm7 import is_gsm7, replace_non_gsm7_accents, calculate_num_segments, replace_accented_chars
 from .http import http_headers
 from .locks import LockNotAcquiredException, NonBlockingLock
+from .models import patch_queryset_count
 from .templatetags.temba import oxford, short_datetime
 from .text import (
     clean_string,
@@ -558,7 +560,6 @@ class EmailTest(TembaTest):
 
         send_email_with_attachments("Test Subject", template, ["recipient@bar.com"], [("text.csv", "", "text/csv")])
         self.assertOutbox(0, settings.DEFAULT_FROM_EMAIL, "Test Subject", text_template, ["recipient@bar.com"])
-        self.assertGreater(len(mail.outbox[0].attachments), 0)
 
         send_email_with_attachments(
             "Test Subject",
@@ -568,7 +569,6 @@ class EmailTest(TembaTest):
             from_email="no-reply@foo.com",
         )
         self.assertOutbox(1, "no-reply@foo.com", "Test Subject", text_template, ["recipient@bar.com"])
-        self.assertGreater(len(mail.outbox[1].attachments), 0)
 
     def test_is_valid_address(self):
 

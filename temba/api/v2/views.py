@@ -114,6 +114,7 @@ from .serializers import (
     WorkspaceReadSerializer,
 )
 from .validators import is_uuid_valid
+from ...utils.legacy import dates
 
 
 class RootView(views.APIView):

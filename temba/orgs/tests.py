@@ -554,6 +554,7 @@ class UserTest(TembaTest):
 
     @override_settings(USER_LOCKOUT_TIMEOUT=1, USER_FAILED_LOGIN_LIMIT=3)
     def test_confirm_access(self):
+        failed_url = reverse("users.user_failed")
         confirm_url = reverse("users.confirm_access") + "?next=/msg/inbox/"
 
         # try to access before logging in

@@ -47,7 +47,7 @@ from temba.utils.dates import datetime_to_str
 from temba.utils.email import send_template_email
 from temba.utils.legacy.dates import str_to_datetime
 from temba.utils.models import JSONAsTextField, JSONField, SquashableModel
-from temba.utils.s3 import private_file_storage, public_file_storage
+from temba.utils.s3 import private_file_storage
 from temba.utils.text import generate_token, random_string
 from temba.utils.timezones import timezone_to_country_code
 from temba.utils.uuid import uuid4
@@ -2577,7 +2577,7 @@ class TopUp(SmartModel):
             credits=credits,
             expires_on=expires_on,
             stripe_charge=stripe_charge,
-            comment=comment,
+            comment=None,
             created_by=user,
             modified_by=user,
         )
