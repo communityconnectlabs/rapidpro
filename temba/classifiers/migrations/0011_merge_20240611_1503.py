@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('classifiers', '0009_classifier_is_system'),
-        ('classifiers', '0010_classifierduplicateschecktask'),
+        ("classifiers", "0009_classifier_is_system"),
+        ("classifiers", "0010_classifierduplicateschecktask"),
     ]
 
-    operations = [
-    ]
+    operations = []

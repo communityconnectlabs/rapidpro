@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('campaigns', '0046_merge_0042_alter_campaignevent_message_0045_squashed'),
-        ('campaigns', '0048_campaign_is_system'),
+        ("campaigns", "0046_merge_0042_alter_campaignevent_message_0045_squashed"),
+        ("campaigns", "0048_campaign_is_system"),
     ]
 
-    operations = [
-    ]
+    operations = []

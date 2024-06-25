@@ -84,19 +84,6 @@ from temba.utils.http import http_headers
 from temba.utils.timezones import TimeZoneFormField
 from temba.utils.views import ComponentFormMixin, NonAtomicMixin, RequireRecentAuthMixin, SpaMixin
 
-from .models import (
-    BackupToken,
-    IntegrationType,
-    Invitation,
-    Org,
-    OrgCache,
-    OrgRole,
-    TopUp,
-    User,
-    get_stripe_credentials,
-)
-from .tasks import apply_topups_task
-
 # session key for storing a two-factor enabled user's id once we've checked their password
 from ..utils.text import random_string
 from .models import (
@@ -113,6 +100,7 @@ from .models import (
     OrgCache,
     OrgRole,
     TopUp,
+    User,
     get_stripe_credentials,
 )
 from .tasks import apply_topups_task

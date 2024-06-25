@@ -23,13 +23,13 @@ def forwards_func(apps, schema_editor):
                     modified_by=org.modified_by,
                 )
             )
-    ContactField.all_fields.using(db_alias).bulk_create(contact_fields)
+    ContactField.objects.using(db_alias).bulk_create(contact_fields)
 
 
 def backward_func(apps, schema_editor):
     db_alias = schema_editor.connection.alias
     ContactField = apps.get_model("contacts", "ContactField")
-    ContactField.all_fields.using(db_alias).filter(key__in=["opt_out_message", "out_out_datetime"]).delete()
+    ContactField.object.using(db_alias).filter(key__in=["opt_out_message", "out_out_datetime"]).delete()
 
 
 class Migration(migrations.Migration):

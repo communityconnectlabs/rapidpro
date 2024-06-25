@@ -2,12 +2,13 @@ import logging
 import os
 from abc import ABCMeta
 
+from smartmin.models import SmartModel
+
 from django.db import models
 from django.template import Engine
 from django.urls import re_path, reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from smartmin.models import SmartModel
 
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import on_transaction_commit

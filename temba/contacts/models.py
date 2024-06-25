@@ -1769,7 +1769,6 @@ class ContactGroup(LegacyUUIDMixin, TembaModel, DependencyMixin):
     def as_export_def(self):
         return {"uuid": str(self.uuid), "name": self.name, "query": self.query}
 
-
     def update_flows(self):
         """
         Update flow steps with the actual contact group name.

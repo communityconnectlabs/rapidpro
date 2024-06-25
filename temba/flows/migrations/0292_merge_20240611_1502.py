@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('flows', '0281_alter_exportflowimagestask_created_by_and_more'),
-        ('flows', '0291_flowrun_flows_run_active_or_waiting_has_session'),
+        ("flows", "0281_alter_exportflowimagestask_created_by_and_more"),
+        ("flows", "0291_flowrun_flows_run_active_or_waiting_has_session"),
     ]
 
-    operations = [
-    ]
+    operations = []

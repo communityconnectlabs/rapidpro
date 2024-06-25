@@ -13,8 +13,6 @@ from urllib.request import urlopen
 import boto3
 import iso8601
 import pytz
-from django.dispatch import receiver
-from django.urls import reverse
 from django_redis import get_redis_connection
 from packaging.version import Version
 from regex import regex
@@ -26,8 +24,10 @@ from django.contrib.auth.models import Group, User
 from django.contrib.postgres.fields import ArrayField
 from django.core.files.temp import NamedTemporaryFile
 from django.db import models, transaction
-from django.db.models import Max, Q, Sum, Count
+from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import Lower, TruncDate
+from django.dispatch import receiver
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -48,7 +48,7 @@ from temba.utils.dates import datetime_to_str
 from temba.utils.email import send_template_email
 from temba.utils.export import BaseExportAssetStore, BaseExportTask
 from temba.utils.models import JSONAsTextField, JSONField, LegacyUUIDMixin, SquashableModel, TembaModel
-from temba.utils.uuid import uuid4, is_uuid
+from temba.utils.uuid import is_uuid, uuid4
 
 from . import legacy
 

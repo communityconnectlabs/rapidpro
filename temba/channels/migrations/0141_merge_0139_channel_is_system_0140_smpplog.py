@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('channels', '0139_channel_is_system'),
-        ('channels', '0140_smpplog'),
+        ("channels", "0139_channel_is_system"),
+        ("channels", "0140_smpplog"),
     ]
 
-    operations = [
-    ]
+    operations = []

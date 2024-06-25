@@ -5,8 +5,6 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("channels", "0126_auto_20210916_1247")
-    ]
+    dependencies = [("channels", "0126_auto_20210916_1247")]
 
     operations = []

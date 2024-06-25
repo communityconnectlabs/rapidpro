@@ -363,8 +363,14 @@ class UserSettings(models.Model):
     external_id = models.CharField(max_length=128, null=True)
     verification_token = models.CharField(max_length=64, null=True)
     authy_id = models.CharField(verbose_name=_("Authy ID"), max_length=255, null=True, blank=True)
-    tel = models.CharField(verbose_name=_("Phone Number"), max_length=16, null=True, blank=True, help_text=_("Phone number for testing and recording voice flows"),)
-        
+    tel = models.CharField(
+        verbose_name=_("Phone Number"),
+        max_length=16,
+        null=True,
+        blank=True,
+        help_text=_("Phone number for testing and recording voice flows"),
+    )
+
     @classmethod
     def get_or_create(cls, user):
         existing = UserSettings.objects.filter(user=user).first()

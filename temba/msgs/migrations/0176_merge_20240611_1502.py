@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('msgs', '0171_alter_broadcast_status'),
-        ('msgs', '0175_alter_msg_failed_reason'),
+        ("msgs", "0171_alter_broadcast_status"),
+        ("msgs", "0175_alter_msg_failed_reason"),
     ]
 
-    operations = [
-    ]
+    operations = []

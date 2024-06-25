@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('triggers', '0024_alter_trigger_options'),
-        ('triggers', '0024_merge_0022_merge_20220223_1706_0023_squashed'),
+        ("triggers", "0024_alter_trigger_options"),
+        ("triggers", "0024_merge_0022_merge_20220223_1706_0023_squashed"),
     ]
 
-    operations = [
-    ]
+    operations = []

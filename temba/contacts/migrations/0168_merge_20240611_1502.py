@@ -6,9 +6,8 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('contacts', '0154_merge_0145_auto_20221107_1150_0153_squashed'),
-        ('contacts', '0167_alter_contactgroup_is_system'),
+        ("contacts", "0154_merge_0145_auto_20221107_1150_0153_squashed"),
+        ("contacts", "0167_alter_contactgroup_is_system"),
     ]
 
-    operations = [
-    ]
+    operations = []

@@ -61,6 +61,7 @@ from temba.utils.models import patch_queryset_count
 from temba.utils.models.es import IDSliceQuerySet
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, NonAtomicMixin, SpaMixin
 
+from ..flows.models import Flow
 from .models import (
     URN,
     Contact,
@@ -74,7 +75,6 @@ from .models import (
 from .search import SearchException, parse_query, search_contacts
 from .search.omnibox import omnibox_query, omnibox_results_to_dict
 from .tasks import export_contacts_task
-from ..flows.models import Flow
 
 logger = logging.getLogger(__name__)
 
