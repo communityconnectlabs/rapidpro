@@ -588,6 +588,8 @@ GROUP_PERMISSIONS = {
     ),
     "Granters": ("orgs.org_grant",),
     "Customer Support": (
+        "auth.user_list",
+        "auth.user_update",
         "apks.apk_create",
         "apks.apk_list",
         "apks.apk_update",
