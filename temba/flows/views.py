@@ -2368,7 +2368,7 @@ class FlowCRUDL(SmartCRUDL):
             if active_editor is not None:
                 if self.request.user.username == active_editor.decode():
                     editing_available = True
-                    r.expire(flow_key, 60)
+                    r.expire(flow_key, 300)
                 else:
                     reader_session = True
             session_expired = False if reader_session else not editing_available
