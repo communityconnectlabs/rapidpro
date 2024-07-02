@@ -207,7 +207,7 @@
 
   -if request.user.is_superuser or perms.orgs.user_list
     -if not user_org
-      %a{href:"{% url 'orgs.user_list' %}", class:"{% active request 'users' %}"}
+      %a{href:"{% url 'users.user_list' %}", class:"{% active request 'users' %}"}
         .circle
           .icon-users-2.icon-3
         .title

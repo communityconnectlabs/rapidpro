@@ -41,8 +41,8 @@
 
     -if no_authy_code
       .mt-4
-        %temba-textinput(name='authy_code' placeholder='{{_("SMS Code")|escapejs}}')
-        %a{href:"javascript:resendCode();", class:"mt-2"}
+        %input.input(name='authy_code' placeholder='{{_("SMS Code")|escapejs}}')
+        %a{href:"javascript:resendCode();", class:"mt-4"}
           -trans "Resend code"
 
       %input{type:"hidden", name:"change_phone_number", value:"", id:"change_phone_number"}
