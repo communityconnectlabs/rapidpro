@@ -54,5 +54,5 @@
         .cap-label
           {{user_role.role_display}}
         -for user in user_role.users
-          %a{href:'{% url "orgs.user_update" user.id %}'}
+          %a{href:'{% url "users.user_update" user.id %}'}
             {{user.email}}
