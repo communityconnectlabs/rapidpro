@@ -420,6 +420,10 @@
         {% if has_translator %}
           translation: '/org/translate/',
         {% endif %}
+
+        {% if allow_analyzer and analyzer_endpoint %}
+        analyzer: '{{analyzer_endpoint}}',
+        {% endif %}
       },
 
     };
