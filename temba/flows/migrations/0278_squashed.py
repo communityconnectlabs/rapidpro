@@ -281,6 +281,14 @@ class Migration(migrations.Migration):
                 ("path", temba.utils.models.JSONAsTextField(default=list, null=True)),
                 ("current_node_uuid", models.UUIDField(null=True)),
                 ("delete_from_results", models.BooleanField(null=True)),
+                (
+                    "events",
+                    temba.utils.models.fields.JSONField(
+                        decoder=temba.utils.json.TembaDecoder,
+                        encoder=temba.utils.json.TembaEncoder,
+                        null=True,
+                    ),
+                ),
             ],
             bases=(models.Model,),
         ),

@@ -50,4 +50,15 @@ class Migration(migrations.Migration):
             field=models.CharField(blank=True, max_length=255, null=True, verbose_name="Authy ID"),
         ),
         migrations.RunPython(code=add_parent_org_admins, reverse_code=remove_parent_org_admins),
+        migrations.AddField(
+            model_name="usersettings",
+            name="tel",
+            field=models.CharField(
+                blank=True,
+                help_text="Phone number for testing and recording voice flows",
+                max_length=16,
+                null=True,
+                verbose_name="Phone Number",
+            ),
+        ),
     ]
