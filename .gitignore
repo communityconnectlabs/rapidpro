@@ -30,7 +30,6 @@ static/javascripts/
 temba/settings.py
 temba/smartmin
 temba.db
-smartmin
 docs/
 
 # Exclude media folder except files used for import testing
