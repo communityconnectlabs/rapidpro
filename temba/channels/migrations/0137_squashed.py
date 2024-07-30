@@ -232,6 +232,17 @@ class Migration(migrations.Migration):
                         max_length=1,
                     ),
                 ),
+                (
+                    "answered_by",
+                    models.CharField(
+                        choices=[
+                            ("H", "Human"),
+                            ("M", "Machine"),
+                        ],
+                        max_length=1,
+                        null=True,
+                    ),
+                ),
                 ("external_id", models.CharField(max_length=255)),
                 ("created_on", models.DateTimeField(default=django.utils.timezone.now)),
                 ("modified_on", models.DateTimeField(default=django.utils.timezone.now)),
