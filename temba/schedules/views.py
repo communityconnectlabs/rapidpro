@@ -1,7 +1,7 @@
-from django.db.models import Q
 from smartmin.views import SmartCRUDL, SmartUpdateView
 
 from django import forms
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -9,8 +9,8 @@ from temba.orgs.views import OrgObjPermsMixin
 from temba.utils.fields import InputWidget, SelectMultipleWidget, SelectWidget
 from temba.utils.views import ComponentFormMixin
 
-from .models import Schedule
 from ..triggers.models import Trigger
+from .models import Schedule
 
 
 class ScheduleFormMixin(forms.Form):
