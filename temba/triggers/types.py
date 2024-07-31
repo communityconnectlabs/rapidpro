@@ -147,6 +147,17 @@ class ScheduledInBatchTriggerType(TriggerType):
 
             self.set_user(user)
 
+        def clean(self):
+            cleaned_data = super().clean()
+
+            # schedule triggers must use specific groups or contacts
+            if not cleaned_data["groups"] and not cleaned_data["contacts"]:
+                raise forms.ValidationError(_("Must provide at least one group or contact to include."))
+
+            ScheduleFormMixin.clean(self)
+
+            return cleaned_data
+
         class Meta(BaseTriggerForm.Meta):
             fields = ScheduleFormMixin.Meta.fields + ("batch_interval", "flow", "groups", "exclude_groups")
             help_texts = {

@@ -92,7 +92,7 @@ class Schedule(SmartModel):
         schedule.update_schedule(start_time, repeat_period, repeat_days_of_week, now=now)
         return schedule
 
-    def update_schedule(self, start_time, repeat_period, repeat_days_of_week, now=None):
+    def update_schedule(self, start_time, repeat_period, repeat_days_of_week, now=None, autosave=True):
         assert self.org is not None
 
         if not now:
@@ -117,7 +117,8 @@ class Schedule(SmartModel):
             self.repeat_days_of_week = None
 
             self.next_fire = start_time if start_time and start_time > now else None
-            self.save()
+            if autosave:
+                self.save()
 
         else:
             # our start time needs to be in the org timezone so that we always fire at the
@@ -140,8 +141,8 @@ class Schedule(SmartModel):
                 self.next_fire = self.calculate_next_fire(now)
             else:
                 self.next_fire = start_time
-
-            self.save()
+            if autosave:
+                self.save()
 
     def get_broadcast(self):
         if hasattr(self, "broadcast"):

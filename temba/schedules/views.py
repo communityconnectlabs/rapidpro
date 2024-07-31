@@ -1,3 +1,4 @@
+from django.db.models import Q
 from smartmin.views import SmartCRUDL, SmartUpdateView
 
 from django import forms
@@ -9,6 +10,7 @@ from temba.utils.fields import InputWidget, SelectMultipleWidget, SelectWidget
 from temba.utils.views import ComponentFormMixin
 
 from .models import Schedule
+from ..triggers.models import Trigger
 
 
 class ScheduleFormMixin(forms.Form):
@@ -43,6 +45,50 @@ class ScheduleFormMixin(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+
+        start_datetime = cleaned_data.get("start_datetime")
+        repeat_period = cleaned_data.get("repeat_period")
+        repeat_days_of_week = cleaned_data.get("repeat_days_of_week")
+
+        flow = cleaned_data.get("flow")
+        contacts = cleaned_data.get("contacts", [])
+        groups = cleaned_data.get("groups", [])
+        exclude_groups = cleaned_data.get("exclude_groups", [])
+
+        conflicts = Trigger.objects.filter(
+            org=self.org,  # noqa
+            trigger_type=Trigger.TYPE_SCHEDULE,
+            is_active=True,
+            is_archived=False,
+            flow=flow,
+        )
+
+        contacts_query = Q()
+        for contact in contacts:
+            contacts_query &= Q(contacts__id=contact.id)
+        conflicts = conflicts.filter(contacts_query)
+
+        groups_query = Q()
+        for group in groups:
+            groups_query &= Q(groups__id=group.id)
+        conflicts = conflicts.filter(groups_query)
+
+        groups_excluded_query = Q()
+        for group in exclude_groups:
+            groups_excluded_query &= Q(groups__id=group.id)
+        conflicts = conflicts.filter(groups_excluded_query)
+
+        if start_datetime:
+            schedule = Schedule(org=self.org)  # noqa
+            schedule.update_schedule(start_datetime, repeat_period, repeat_days_of_week, autosave=False)
+            conflicts = conflicts.filter(
+                schedule__next_fire=schedule.next_fire,
+                schedule__repeat_period=schedule.repeat_period,
+                schedule__repeat_days_of_week=schedule.repeat_days_of_week,
+            )
+
+        if conflicts.count() > 0:
+            raise forms.ValidationError(_("There already exists a trigger of this type with these options."))
 
         if self.is_valid():
             if cleaned_data["repeat_period"] == Schedule.REPEAT_WEEKLY and not cleaned_data.get("repeat_days_of_week"):
