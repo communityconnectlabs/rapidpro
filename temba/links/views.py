@@ -1,4 +1,5 @@
 import logging
+import re
 import socket
 from datetime import timedelta
 
@@ -367,7 +368,12 @@ class LinkHandler(RedirectView):
 
         link = Link.objects.filter(uuid=self.kwargs.get("uuid")).only("id", "destination").first()
         contact = Contact.objects.filter(uuid=self.request.GET.get("contact")).only("id").first()
-        destination_full_url = self.request.GET.get("full_link")
+        full_path_url = self.request.get_full_path()
+        match = re.search(r"[?&]full_link=([^*]+)", full_path_url)
+
+        # Check if the pattern was found and extract the value
+        destination_full_url = match.group(1) if match else None
+
         related_flow_uuid = self.request.GET.get("flow")
 
         # Whether the contact is from the simulator
