@@ -53,6 +53,13 @@ class ScheduleFormMixin(forms.Form):
         repeat_period = cleaned_data.get("repeat_period")
         repeat_days_of_week = cleaned_data.get("repeat_days_of_week")
 
+        if not self.is_valid():
+            return cleaned_data
+
+        if repeat_period == Schedule.REPEAT_WEEKLY and not repeat_days_of_week:
+            self.add_error("repeat_days_of_week", _("Must specify at least one day of the week."))
+            return cleaned_data
+
         flow = cleaned_data.get("flow")
         contacts = cleaned_data.get("contacts", [])
         groups = cleaned_data.get("groups", [])
@@ -90,10 +97,6 @@ class ScheduleFormMixin(forms.Form):
 
         if conflicts.count() > 0:
             raise forms.ValidationError(_("There already exists a trigger of this type with these options."))
-
-        if self.is_valid():
-            if cleaned_data["repeat_period"] == Schedule.REPEAT_WEEKLY and not cleaned_data.get("repeat_days_of_week"):
-                self.add_error("repeat_days_of_week", _("Must specify at least one day of the week."))
 
         return cleaned_data
 
