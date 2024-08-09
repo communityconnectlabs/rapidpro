@@ -6,10 +6,10 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from temba.orgs.views import OrgObjPermsMixin
+from temba.triggers.models import Trigger
 from temba.utils.fields import InputWidget, SelectMultipleWidget, SelectWidget
 from temba.utils.views import ComponentFormMixin
 
-from ..triggers.models import Trigger
 from .models import Schedule
 
 
@@ -34,6 +34,9 @@ class ScheduleFormMixin(forms.Form):
         """
         tz = user.get_org().timezone
         self.fields["start_datetime"].help_text = _("First time this should happen in the %s timezone.") % tz
+        if not all((getattr(self, "user", None), getattr(self, "org", None))):
+            self.user = user
+            self.org = user.get_org()
 
     def clean_repeat_days_of_week(self):
         value = self.cleaned_data["repeat_days_of_week"]
@@ -66,18 +69,16 @@ class ScheduleFormMixin(forms.Form):
         contacts_query = Q()
         for contact in contacts:
             contacts_query &= Q(contacts__id=contact.id)
-        conflicts = conflicts.filter(contacts_query)
 
         groups_query = Q()
         for group in groups:
             groups_query &= Q(groups__id=group.id)
-        conflicts = conflicts.filter(groups_query)
 
         groups_excluded_query = Q()
         for group in exclude_groups:
             groups_excluded_query &= Q(groups__id=group.id)
-        conflicts = conflicts.filter(groups_excluded_query)
 
+        conflicts = conflicts.filter(contacts_query | groups_query | groups_excluded_query)
         if start_datetime:
             schedule = Schedule(org=self.org)  # noqa
             schedule.update_schedule(start_datetime, repeat_period, repeat_days_of_week, autosave=False)
