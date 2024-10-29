@@ -1,3 +1,5 @@
+# Supervisor
+supervisord.pid
 # General
 .DS_Store
 .idea
