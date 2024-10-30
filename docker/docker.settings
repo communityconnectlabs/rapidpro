@@ -177,6 +177,39 @@ COMPRESS_ENABLED = os.environ.get("COMPRESS_ENABLED", "true") == "true"
 COMPRESS_OFFLINE = False
 
 LOGGING["root"]["level"] = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
+LOGGING["root"]["handler"] = ["console","file"]
+LOGGING["disable_existing_loggers"] = False
+LOGGING["handlers"]["file"] = {
+    "level": "DEBUG",
+    "class": "logging.FileHandler",
+    "filename": os.environ.get("DJANGO_LOG_FILE", "/var/log/rapidpro.log"),
+}
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "root": {"level": "INFO", "handlers": ["console","file"]},
+    "formatters": {"verbose": {"format": "%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s"}},
+    "handlers": {
+        "console": {"level": "DEBUG", "class": "logging.StreamHandler", "formatter": "verbose"},
+        "null": {"class": "logging.NullHandler"},
+        "file": {
+            "level": "DEBUG",
+            "class": "logging.FileHandler",
+            "filename": os.environ.get("DJANGO_LOG_FILE", "/var/log/rapidpro.log"),
+        }
+    },
+    "loggers": {
+        "pycountry": {"level": "ERROR", "handlers": ["console","file"], "propagate": False},
+        "django.security.DisallowedHost": {"handlers": ["null","file"], "propagate": False},
+        "django.db.backends": {"level": "ERROR", "handlers": ["console","file"], "propagate": False},
+        "temba.formax": {"level": "DEBUG" if DEBUG else "INFO", "handlers": ["console","file"], "propagate": False},
+    },
+}
+
+
+
 
 AWS_S3_ENABLED = os.environ.get("AWS_S3_ENABLED", "true") == "true"
 

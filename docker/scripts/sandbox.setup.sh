@@ -76,7 +76,7 @@ echo "daemon off;" >> /etc/nginx/nginx.conf
 check_outcome "Disable Daemon"
 rm -f /etc/nginx/sites-enabled/default
 check_outcome "Remove Default Site"
-ln -sf /rapidpro/docker/nginx.conf /etc/nginx/sites-enabled/ccl-rapidpro.conf
+ln -sf /rapidpro/docker/nginx.sandbox.conf /etc/nginx/sites-enabled/ccl-rapidpro.conf
 check_outcome "Link Nginx Config"
 
 #----------------------------------
