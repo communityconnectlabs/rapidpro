@@ -151,7 +151,7 @@ class ScheduledInBatchTriggerType(TriggerType):
             cleaned_data = super().clean()
 
             # schedule triggers must use specific groups or contacts
-            if not cleaned_data["groups"] and not cleaned_data["contacts"]:
+            if not cleaned_data.get("groups") and not cleaned_data.get("contacts"):
                 raise forms.ValidationError(_("Must provide at least one group or contact to include."))
 
             ScheduleFormMixin.clean(self)

@@ -119,6 +119,9 @@
       section = form.parents(".formax-section");
       followRedirects = section.data("action") === 'redirect';
 
+      // disable submit button after the button is clicked and form is about to be sent
+      form.find("input[type=submit]").prop("disabled", true);
+
       const headers = {
         "X-FORMAX": true
       }
