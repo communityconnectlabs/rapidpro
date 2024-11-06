@@ -90,7 +90,7 @@ jobs:
         poetry run python manage.py runserver > rapidpro.log &
 
     - name: ZAP Scan
-      uses: zaproxy/action-full-scan@v0.4.0
+      uses: zaproxy/action-full-scan@v0.11.0
       with:
         target: 'http://127.0.0.1:8000'
         rules_file_name: '.zap/rules.tsv'
