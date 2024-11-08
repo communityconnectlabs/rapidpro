@@ -1,8 +1,13 @@
 import datetime
 import decimal
 import json
+import re
 
 import pytz
+import simplejson
+
+from django.http import HttpResponse
+from django.utils.timezone import is_aware
 
 
 def load(value):
@@ -13,12 +18,12 @@ def load(value):
     return json.load(value, parse_float=decimal.Decimal)
 
 
-def loads(value):
+def loads(value, object_hook=None):
     """
     Converts the passed in string to a JSON dictionary. The dictionary passed back will be ordered
     and decimal values will be represented as a decimal.Decimal.
     """
-    return json.loads(value, parse_float=decimal.Decimal)
+    return json.loads(value, object_hook=object_hook, parse_float=decimal.Decimal)
 
 
 def dumps(value, *args, **kwargs):
@@ -42,6 +47,20 @@ def encode_datetime(dt, micros=False):
     return (as_str if micros else as_str[:-3]) + "Z"
 
 
+DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
+DATETIME_FORMAT_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def decode_datetime(value):
+    if isinstance(value, dict) or isinstance(value, list):
+        for k, v in value.items() if isinstance(value, dict) else enumerate(value):
+            if isinstance(v, str) and DATETIME_FORMAT_REGEX.match(v):
+                value[k] = datetime.datetime.strptime(v.removesuffix("Z"), DATETIME_FORMAT)
+            if isinstance(v, dict) or isinstance(v, list):
+                decode_datetime(v)
+    return value
+
+
 class TembaEncoder(json.JSONEncoder):
     """
     Our own encoder for datetimes.. we always convert to UTC and always include milliseconds
@@ -60,3 +79,37 @@ class TembaEncoder(json.JSONEncoder):
 class TembaDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, parse_float=decimal.Decimal, **kwargs)
+
+
+def default_json_encoder(o):
+    if isinstance(o, datetime.datetime):
+        r = o.isoformat()
+        if o.microsecond:
+            r = r[:23] + r[26:]
+        if r.endswith("+00:00"):
+            r = r[:-6] + "Z"
+        return r
+    elif isinstance(o, datetime.date):
+        return o.isoformat()
+    elif isinstance(o, datetime.time):
+        if is_aware(o):
+            raise ValueError("JSON can't represent timezone-aware times.")
+        r = o.isoformat()
+        if o.microsecond:
+            r = r[:12]
+        return r
+    else:
+        raise TypeError(repr(o) + " is not JSON serializable")
+
+
+class JsonResponse(HttpResponse):
+    """
+    JsonResponse encode a dictionary into json format and it handle datetime and decimal types. The problem is JsonResponse encodes decimal to strings. { "minutes" : Decimal('10.1')} becoming { "minutes" : "10.0"} which was causing problems. This modified version transform to { "minutes" : 10.0} as intended.
+    """
+
+    def __init__(self, data, safe=True, **kwargs):
+        if safe and not isinstance(data, dict):
+            raise TypeError("In order to allow non-dict objects to be " "serialized set the safe parameter to False")
+        kwargs.setdefault("content_type", "application/json")
+        data = simplejson.dumps(data, default=default_json_encoder)
+        super(JsonResponse, self).__init__(content=data, **kwargs)

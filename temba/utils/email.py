@@ -133,3 +133,35 @@ def send_temba_email(subject, text, html, from_email, recipient_list, connection
         print("----------- Skipping sending email, SEND_EMAILS to set False -----------")
         print(text)
         print("------------------------------------------------------------------------")
+
+
+def send_email_with_attachments(subject, template, recipient_list, attachments=None, from_email=None, context=None):
+    if from_email is None:
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "website@rapidpro.io")
+
+    if attachments is None:
+        attachments = []
+
+    if context is None:
+        context = dict()
+
+    html_template = loader.get_template(template + ".html")
+    text_template = loader.get_template(template + ".txt")
+
+    context["subject"] = subject
+    context["branding"] = settings.BRANDING.get(settings.DEFAULT_BRAND)
+
+    html = html_template.render(context)
+    text = text_template.render(context)
+
+    if settings.SEND_EMAILS:
+        message = EmailMultiAlternatives(subject, text, from_email, to=recipient_list)
+        message.attach_alternative(html, "text/html")
+        for file_name, content, mime_type in attachments:
+            message.attach(file_name, content, mime_type)
+        message.send()
+    else:
+        # just print to console if we aren't meant to send emails
+        print("----------- Skipping sending email, SEND_EMAILS to set False -----------")
+        print(text)
+        print("------------------------------------------------------------------------")

@@ -25,20 +25,62 @@
           -else
             .icon.icon-loop.mr-2.text-gray-400.spin
 
+          -blocktrans trimmed count info.num_duplicates as count
+            Duplicated {{ count }} contact
+            -plural
+              Duplicated {{ count }} contacts
+
+        .import-result.text-lg.mt-2
+          -if is_finished
+            .icon.icon-checkmark.text-success.mr-2
+          -else
+            .icon.icon-loop.mr-2.text-gray-400.spin
+
           -blocktrans trimmed count info.num_updated as count
             Updated {{ count }} existing contact
             -plural
               Updated {{ count }} existing contacts
 
-        -if is_finished and object.group
-          .import-result.text-lg.mt-2
+        -if is_finished
+          -if is_validated
+            .validated-list-report
+              -for mobile_contact in info.validated_urn_carriers.mobile
+                .import-result.text-lg.mt-2
+                .icon.icon-checkmark.text-success.mr-2
+                {% url 'contacts.contact_filter' mobile_contact.uuid as group_url %}
+                -blocktrans trimmed with count=mobile_contact.count group_name=mobile_contact.group
+                  Added {{ count }} contact to the <a href="{{ group_url }}">{{ group_name }}</a> group
+
+              -for landline_contact in info.validated_urn_carriers.landline
+                .import-result.text-lg.mt-2
+                .icon.icon-checkmark.text-success.mr-2
+                {% url 'contacts.contact_filter' landline_contact.uuid as group_url %}
+                -blocktrans trimmed with count=landline_contact.count group_name=landline_contact.group
+                  Added {{ count }} contact to the <a href="{{ group_url }}">{{ group_name }}</a> group
+          -else
+            .import-result.text-lg.mt-2
             .icon.icon-checkmark.text-success.mr-2
 
             {% url 'contacts.contact_filter' object.group.uuid as group_url %}
-            -blocktrans trimmed count info.num_created|add:info.num_updated as count with group_url=group_url group_name=object.group.name
+            -blocktrans trimmed count info.num_total as count with group_url=group_url group_name=object.group.name
               Added {{ count }} contact to the <a href="{{ group_url }}">{{ group_name }}</a> group
               -plural
                 Added {{ count }} contacts to the <a href="{{ group_url }}">{{ group_name }}</a> group
+
+        -if is_finished and info.num_blocked and contactimport.is_active
+          .import-result.text-lg.mt-2
+            .icon.icon-checkmark.text-success.mr-2
+
+            -blocktrans with blocked_count=info.num_blocked
+              You have {{ blocked_count }} contact(s) in this import that are
+              currently blocked. Do you want to unblock them?
+
+            .unblock-buttons
+              .flex.flex-row.justify-center.gap-4
+                %a.button.button-light(href="{% url 'contacts.contactimport_read' object.id %}?unblock=true")
+                  -trans "Yes"
+                %a.button.button-light(href="{% url 'contacts.contactimport_read' object.id %}?unblock=false")
+                  -trans "No"
 
         -if info.num_errored
           .import-result.text-lg.mt-2

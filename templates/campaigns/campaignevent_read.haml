@@ -33,7 +33,11 @@
       .start-flow
         -trans "Start the"
         %a.href{ href: "{% url 'flows.flow_editor' object.flow.uuid %}" }= object.flow.name
-        -trans "Flow"
+        Flow
+        -if object.extra
+          |
+          %span.linked(onclick='javascript:showModax("event-update")')
+            -trans "Contains flow parameters"
 
 
   -if not scheduled_event_fires
@@ -116,13 +120,38 @@
                 {{fired_event_fires_count}} more
 
   -if org_perms.campaigns.campaignevent_delete
-    .deletion.hide
-      .title
-        Remove
+    %temba-dialog#confirm-event-delete(header='{{ _("Delete Event")|escapejs }}' primaryButtonName='{{ _("Delete")|escapejs }}' destructive='true')
+      .p-6
+        -trans "Are you sure you want to remove this event? Once the event is removed, it will be gone forever. This cannot be undone."
 
-      .body
-        %p Are you sure you want to remove this event? Once the event is removed, it will be gone forever. This cannot be undone.
-      %a#delete-form.posterize{}
+
+-block extra-script
+  {{block.super}}
+  %script{src:"{{ STATIC_URL }}js/flow-parameters.js"}
+  %script{src:"{{ STATIC_URL }}js/msg-encodings.js"}
+  -if gsm_replacements
+    :javascript
+      GSM7_REPLACEMENTS = JSON.parse('{{ gsm_replacements | escapejs }}');
+
+      const element = document.getElementsByClassName("event-delete");
+      element[0].addEventListener("click", function() {
+        var dialog = document.getElementById("confirm-event-delete");
+        dialog.open = true;
+      });
+
+      document.addEventListener("DOMContentLoaded", function() {
+        var dialog = document.getElementById("confirm-event-delete");
+        dialog.addEventListener("temba-button-clicked", function(event){
+          var id = '{{ object.pk }}';
+          var locationHref = '/campaign/read/{{ object.campaign.pk }}'
+          if (!event.detail.button.secondary) {
+            $.post('/campaignevent/delete/' + id + '/').success(function() {
+              window.location.href = locationHref;
+            });
+          }
+          dialog.open = false;
+        });
+      });
 
 -block extra-less
   -compress css

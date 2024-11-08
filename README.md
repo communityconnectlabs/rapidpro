@@ -1,7 +1,7 @@
 # RapidPro 
 
-[![Build Status](https://github.com/rapidpro/rapidpro/workflows/CI/badge.svg)](https://github.com/rapidpro/rapidpro/actions?query=workflow%3ACI) 
-[![codecov](https://codecov.io/gh/rapidpro/rapidpro/branch/main/graph/badge.svg)](https://codecov.io/gh/rapidpro/rapidpro)
+[![Build Status](https://github.com/greatnonprofits-nfp/rapidpro/workflows/CI/badge.svg)](https://github.com/rapidpro/rapidpro/actions?query=workflow%3ACI) 
+[![codecov](https://codecov.io/gh/greatnonprofits-nfp/rapidpro/branch/main/graph/badge.svg)](https://codecov.io/gh/greatnonprofits-nfp/rapidpro)
 
 RapidPro is a hosted service for visually building interactive messaging applications.
 To learn more, please visit the project site at http://rapidpro.github.io/rapidpro.
@@ -47,7 +47,12 @@ version of these dependencies you need to run with it.
 ## Updating FlowEditor version
 
 ```
-% npm install @nyaruka/flow-editor@whatever-version --save
+% npm install @greatnonprofits-nfp/flow-editor@whatever-version --save
+```
+
+## Installing pre-commit to lint and format the code
+```bash
+pre-commit install
 ```
 
 ### Get Involved

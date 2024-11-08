@@ -1,0 +1,208 @@
+-extends "smartmin/form.html"
+
+-load smartmin
+-load i18n
+
+- block pjax
+  #pjax
+    .row{style:"height:250px;"}
+      .span3
+        #big-help.glyph.icon-tree
+
+      .span9
+        %p
+          -blocktrans with source=source.name target=target.name
+            You have selected to merge "{{ source }}" with "{{ target }}".
+        %p
+          -blocktrans with source=source.name target=target.name
+            All data from {{ source }} will be transferred to {{ target }}. This transfer may take several minutes.
+        %p
+          -trans 'If you do not wish to combine these flows, click the "Cancel Button" below'
+
+        %form#import-form.smartmin-form.horizontal-form{method:"post", enctype:"multipart/form-data"}
+          -csrf_token
+          %input{type:"hidden", name:"merging_map", value:"{{ merging_map }}"}
+
+          -block fields
+            - if not prevent_merge
+              %label{for: "flow_name"}
+                -trans "Name of new combined flow:"
+              %temba-textinput{type:"text", name:"flow_name", id:"flow_name", value:"{{ target.name }}"}
+              %br
+
+          - if errors
+            - for error in errors
+              %div.alert.alert-error.form-errors
+                {{ error }}
+
+          - if conflict_solutions and not prevent_merge
+            %label{for: "flow_name"}
+              -trans "Merging conflicts:"
+            %fieldset
+              %table
+                - for conflict in conflict_solutions
+                  %tr.conflict
+                    %td.field-form-label
+                      %div
+                        %i {{ conflict.node_label }}
+                    %td.field-form-label
+                      %input.resolving-select{
+                        id: "conflict-{{ conflict.uuid }}"
+                        type: "text",
+                        name: "conflicts[{{ conflict.uuid }}]",
+                        placeholder: '{% trans "Choose solution..." %}'
+                      }
+          
+          - if warnings
+            .warning
+              .attn
+                -trans "Warning!"
+              
+              - for warning in warnings
+                %p
+                  =warning
+        
+          .flex
+            - if not prevent_merge
+              %input.button-primary{type:"submit", value:'{% trans "Combine Flows" %}'}
+            %a.button-light.ml-4{onclick:"javascript:history.go(-1)"}
+              -trans "Cancel"
+
+
+- block extra-script
+  :javascript
+    {% for conflict in conflict_solutions %}
+      $("#conflict-{{ conflict.uuid }}").select2({
+          minimumResultsForSearch: -1,
+          placeholder: gettext("Choose solution..."),
+          containerCssClass: "select2-temba-field",
+          data: [
+            {% for solution in conflict.solutions %}
+              {id: "{{ solution | escapejs }}", text: "{{ solution | escapejs }}"},
+            {% endfor %}
+          ]
+      });
+    {% endfor %}
+
+    $(document).ready(function(){
+      setTimeout(function(){
+        $("input.resolving-select").trigger('change.select2');
+      }, 1000);
+
+      $("input.resolving-select").on("change", function (e) {
+        $(this).parent().removeClass("required");
+      });
+
+      $("form").submit(function(e) {
+        let errors = 0;
+        $("input.resolving-select").each(function () {
+          if ($(this).val() === "") {
+            $(this).parent().addClass("required");
+            errors++;
+          }
+        });
+  
+        if (errors > 0) {
+          e.preventDefault();
+        }
+      });
+    });
+    
+
+- block extra-style
+  :css
+    .warning {
+      margin-top:20px;
+      margin-bottom:20px;
+      width: 600px;
+      padding: 15px;
+      background: #fff6c0;
+      border: 1px solid #EFE7B4;
+    }
+
+    .warning .attn {
+      font-weight: 500;
+      margin-bottom:8px;
+      font-size:20px;
+    }
+
+    .form-buttons {
+      margin-top: 10px;
+    }
+
+    #example {
+      margin-top: 20px;
+      background: #f8f8f8;
+    }
+
+    #file-upload {
+      position:relative;
+    }
+
+    #csv_file_errors {
+      font-size: 20px;
+    }
+
+    #real-button {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      z-index: 1;
+      height:35px;
+      width:340px;
+    }
+
+    #file-field {
+      width:255px;
+      height:25px;
+      font-size:16px;
+      border:solid 1px #000;
+      margin-bottom: 0px;
+    }
+
+    #csv_file {
+      position:absolute;
+      width:385px;
+      height:40px;
+      top: 0px;
+      left: 0px;
+      text-align: right;
+      -moz-opacity:0 ;
+      filter:alpha(opacity: 0);
+      opacity: 0;
+      z-index: 2;
+    }
+
+    #import-message .import-result {
+      padding-bottom: 10px;
+      font-size: 20px;
+    }
+
+    #import-message .import-result .glyph {
+      font-size: 28px;
+      margin: 0px 20px;
+      line-height: 22px;
+    }
+
+    #import-message .import-result .well {
+      font-size: 14px;
+    }
+
+    #import-message .import-result a {
+      text-decoration :none;
+    }
+
+    .unblock-buttons .container {
+      margin-left: auto;
+      margin-right: auto;
+      width: 150px;
+    }
+
+    .select2-container {
+      max-width: 350px;
+    }
+
+    .required > .select2-container > .select2-choice {
+      border: 1px solid tomato;
+      box-shadow: 0px 0px 2px tomato;
+    }

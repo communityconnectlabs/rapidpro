@@ -1,0 +1,143 @@
+-extends "smartmin/list.html"
+-load smartmin sms temba compress
+-load i18n humanize
+
+-block title-icon
+  .title-icon
+    %span.glyph.icon-easy
+
+-block page-title
+  -trans "Trackable Links"
+
+-block page-top
+
+-block content
+
+  #pjax
+    -block pjax
+      .lp-frame
+
+        .left
+          - if org_perms.links.link_create
+            %temba-modax#create-label-modal(header='{% trans "Create Trackable Link" %}' endpoint="{% url 'links.link_create' %}")
+              .button-primary.block
+                -trans "Create Trackable Link"
+
+          .lp-nav.lower
+            .font-normal.uppercase.text-xs.text-gray-500.pb-1
+              -trans "Links"
+            .inner-scroll
+              -for folder in folders
+                .lp-nav-item(class="{% if request.get_full_path == folder.url %}font-normal{% endif %}")
+                  .name(onclick="goto(event)" href='{{folder.url}}')
+                    {{folder.label}}
+                  .count(onclick="goto(event)" href='{{folder.url}}')
+                    {{ folder.count | intcomma }}
+
+        .right
+          -block link-list
+            .flex.w-full.mb-4.items-end.flex-wrap.justify-end.-mt-2(style="min-height:41px")
+              -block action-buttons
+                .list-buttons-container.h-full.mr-2.mt-2.flex-grow
+                  .list-buttons.flex.items-center.-mx-2.h-full
+
+                    - if 'restore' in actions and org_perms.links.link_update
+                      .button-action.object-btn-restore
+                        .-mt-1.mr-2.glyph.icon-checkmark
+                        -trans "Activate"
+
+                    - if 'archive' in actions and org_perms.links.link_update
+                      .button-action.object-btn-archive
+                        .-mt-1.mr-2.glyph.icon-box
+                        -trans "Archive"
+
+                .flex-grow.ml-1.self-end.items-end
+                  .flex.flex-col.pr-12
+                    .page-title.leading-tight
+                      {{title}}
+
+                .gear-links
+                  -include "gear_links_include.haml"
+
+            %form#search-form.mb-4(method="get")
+              %temba-textinput.w-full(placeholder='{% trans "Search" %}' name="search" value="{{search}}")
+
+              -if search_error
+                .mb-4.ml-2
+                  %span.search-error
+                    =search_error
+              -elif search
+                .mb-4.ml-1.text-base.leading-relaxed
+                  -blocktrans with results_count=paginator.count|intcomma count cc=paginator.count
+                    Found {{ results_count }} trackable link matching <i>{{search}}</i>.
+                    -plural
+                      Found {{ results_count }} trackable links matching <i>{{search}}</i>.
+
+            %table.list.object-list.lined.selectable
+              %tr.links
+                -if org_perms.links.link_update
+                  %th
+                %th
+                  -trans "Name"
+                %th
+                  -trans "Unique clicks"
+                %th
+                  -trans "Total clicks"
+              %tbody
+                -for object in object_list
+                  -with object.get_and_clear_unread_responses as new_responses
+                    %tr.contact.select-row.object-row(data-uuid="{{object.uuid}}" data-object-id="{{object.id}}" onrowclick='handleRowClicked("{{object.uuid}}")')
+                      - if org_perms.contacts.contact_update or org_perms.msgs.broadcast_send
+                        %td.link.checkbox.object-row-checkbox
+                          %temba-checkbox(onclick="handleRowSelection(this)")
+                      %td.value-name
+                        = object.name
+
+                      -if not object.get_unique_clicks_count
+                        %td.value-unique-clicks
+                          -trans "No clicks"
+
+                      -else
+                        %td.value-unique-clicks
+                          {% blocktrans count unique_clicks_count=object.get_unique_clicks_count %}
+                            {{ unique_clicks_count }} click
+                          {% plural %}
+                            {{ unique_clicks_count }} clicks
+                          {% endblocktrans %}
+
+                      -if not object.get_clicks_count
+                        %td.value-total-clicks
+                          -trans "No clicks"
+
+                      -else
+                        %td.value-total-clicks
+                          {% blocktrans count clicks_count=object.get_clicks_count %}
+                            {{ clicks_count }} click
+                          {% plural %}
+                            {{ clicks_count }} clicks
+                          {% endblocktrans %}
+                -empty
+                  %tr.link
+                    %td.link
+                      -trans "No matching links."
+
+            .flex.flex-col.mb-16
+              -include "includes/pagination.haml"
+
+-block extra-style
+  {{ block.super }}
+  :css
+    .link.checkbox {
+      width: 20px;
+    }
+    .value-status {
+      text-align: right;
+    }
+
+-block extra-script
+  {{ block.super }}
+
+  :javascript
+    function handleRowClicked(uuid) {
+      gotoLink("/link/read/" + uuid + "/");
+    }

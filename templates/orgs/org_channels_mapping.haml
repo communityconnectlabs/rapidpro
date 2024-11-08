@@ -1,0 +1,13 @@
+-extends "smartmin/update.html"
+-load i18n
+
+-block summary
+  -if voice_default_channel or sms_default_channel
+    -if voice_default_channel
+      -blocktrans trimmed with ivr_channel=voice_default_channel
+        Default IVR channel: <b>{{ ivr_channel }}</b><br>
+    -if sms_default_channel
+      -blocktrans trimmed with sms_channel=sms_default_channel
+        Default SMS channel: <b>{{ sms_channel }}</b>
+  -else
+    -trans "Choose your default channels for IVR/Voice and SMS/MMS."

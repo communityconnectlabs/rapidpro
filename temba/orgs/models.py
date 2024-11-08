@@ -3,6 +3,8 @@ import itertools
 import logging
 import operator
 import os
+import re
+import time
 from abc import ABCMeta
 from collections import defaultdict
 from datetime import timedelta
@@ -17,9 +19,11 @@ import stripe
 import stripe.error
 from django_redis import get_redis_connection
 from packaging.version import Version
+from pandas import read_csv, read_excel
 from requests import Session
 from smartmin.models import SmartModel
 from timezone_field import TimeZoneField
+from twilio.base.exceptions import TwilioException
 from twilio.rest import Client as TwilioClient
 
 from django.conf import settings
@@ -40,16 +44,35 @@ from temba.archives.models import Archive
 from temba.bundles import get_brand_bundles, get_bundle_map
 from temba.locations.models import AdminBoundary
 from temba.utils import chunk_list, json, languages
-from temba.utils.cache import get_cacheable_result
+from temba.utils.cache import get_cacheable_result, redis_cached_property
 from temba.utils.dates import datetime_to_str
 from temba.utils.email import send_template_email
+from temba.utils.legacy.dates import str_to_datetime
 from temba.utils.models import JSONAsTextField, JSONField, SquashableModel
-from temba.utils.s3 import public_file_storage
+from temba.utils.s3 import private_file_storage
 from temba.utils.text import generate_token, random_string
 from temba.utils.timezones import timezone_to_country_code
 from temba.utils.uuid import uuid4
 
 logger = logging.getLogger(__name__)
+
+
+GIFTCARDS = "GIFTCARDS"
+LOOKUPS = "LOOKUPS"
+
+DEFAULT_FIELDS_PAYLOAD_GIFTCARDS = {
+    "active": {"type": "Boolean"},
+    "egiftnumber": {"type": "String"},
+    "url": {"type": "String"},
+    "challengecode": {"type": "String"},
+    "identifier": {"type": "String"},
+}
+
+DEFAULT_FIELDS_PAYLOAD_LOOKUPS = {}
+
+DEFAULT_INDEXES_FIELDS_PAYLOAD_GIFTCARDS = {"IndexIdentifier": {"identifier": 1}}
+
+DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS = {}
 
 # cache keys and TTLs
 ORG_LOCK_KEY = "org:%d:lock:%s"
@@ -247,12 +270,39 @@ class Org(SmartModel):
         DATE_FORMAT_YEAR_FIRST: "YYYY-MM-DD",
     }
 
+    PLAN_FREE = "FREE"
+    PLAN_TRIAL = "TRIAL"
+    PLAN_TIER1 = "TIER1"
+    PLAN_TIER2 = "TIER2"
+    PLAN_TIER3 = "TIER3"
+    PLAN_TIER_39 = "TIER_39"
+    PLAN_TIER_249 = "TIER_249"
+    PLAN_TIER_449 = "TIER_449"
+    PLANS = (
+        (PLAN_FREE, _("Free Plan")),
+        (PLAN_TRIAL, _("Trial")),
+        (PLAN_TIER_39, _("Bronze")),
+        (PLAN_TIER1, _("Silver")),
+        (PLAN_TIER2, _("Gold (Legacy)")),
+        (PLAN_TIER3, _("Platinum (Legacy)")),
+        (PLAN_TIER_249, _("Gold")),
+        (PLAN_TIER_449, _("Platinum")),
+    )
+
+    STATUS_SUSPENDED = "suspended"
+    STATUS_RESTORED = "restored"
+    STATUS_WHITELISTED = "whitelisted"
+
+    OPTIN_FLOW = "OPTIN_FLOW"
+
+    CONFIG_STATUS = "STATUS"
     CONFIG_VERIFIED = "verified"
     CONFIG_SMTP_SERVER = "smtp_server"
     CONFIG_TWILIO_SID = "ACCOUNT_SID"
     CONFIG_TWILIO_TOKEN = "ACCOUNT_TOKEN"
     CONFIG_VONAGE_KEY = "NEXMO_KEY"
     CONFIG_VONAGE_SECRET = "NEXMO_SECRET"
+    CONFIG_IVR_MACHINE_DETECTION = "IVR_MACHINE_DETECTION"
 
     EARLIEST_IMPORT_VERSION = "3"
     CURRENT_EXPORT_VERSION = "13"
@@ -454,6 +504,152 @@ class Org(SmartModel):
     def get_brand_domain(self):
         return self.get_branding()["domain"]
 
+    def get_collections(self, collection_type=GIFTCARDS):
+        """
+        Returns the collections (gift card or lookup) set up on this Org
+        """
+        if self.config:
+            return self.config.get(collection_type, [])
+        return []
+
+    def remove_collection_from_org(self, user, index, collection_type=GIFTCARDS):
+        """
+        Remove collections (gift card or lookup) added on this Org
+        """
+        collections = self.get_collections(collection_type=collection_type)
+
+        if collections:
+            collections.pop(index)
+
+        config = self.config
+        config[collection_type] = collections
+        self.config = config
+        self.modified_by = user
+        self.save(update_fields=["config"])
+
+    def add_collection_to_org(self, user, name, collection_type=GIFTCARDS):
+        """
+        Add a collection (gift card or lookup) to this Org
+        """
+        collections = self.get_collections(collection_type=collection_type)
+        config = self.config
+
+        if collections:
+            collections.insert(0, name)
+        else:
+            collections = [name]
+
+        config[collection_type] = collections
+        self.config = config
+        self.modified_by = user
+        self.save(update_fields=["config"])
+
+    @classmethod
+    def get_parse_import_file_headers(cls, csv_file, needed_check=True, extension=None):
+        csv_file.open()
+
+        # this file isn't good enough, lets write it to local disk
+        from uuid import uuid4
+
+        from django.conf import settings
+
+        # make sure our tmp directory is present (throws if already present)
+        try:
+            os.makedirs(os.path.join(settings.MEDIA_ROOT, "tmp"))
+        except Exception:
+            pass
+
+        # write our file out
+        tmp_file = os.path.join(settings.MEDIA_ROOT, "tmp/%s" % str(uuid4()))
+
+        out_file = open(tmp_file, "wb")
+        out_file.write(csv_file.read())
+        out_file.close()
+
+        try:
+            if extension == "csv":
+                spamreader = read_csv(tmp_file, delimiter=",", index_col=False)
+            else:
+                spamreader = read_excel(tmp_file, index_col=False)
+            headers = spamreader.columns.tolist()
+
+            # Removing empty columns name from CSV files imported
+            headers = [slugify(str(item).lower()).replace("-", "_") for item in headers if "Unnamed" not in item]
+        except UnicodeDecodeError:
+            if extension == "csv":
+                spamreader = read_csv(tmp_file, delimiter=",", encoding="ISO-8859-1", index_col=False)
+            else:
+                spamreader = read_excel(tmp_file, encoding="ISO-8859-1", index_col=False)
+            headers = spamreader.columns.tolist()
+
+            # Removing empty columns name from CSV files imported
+            headers = [slugify(str(item).lower()).replace("-", "_") for item in headers if "Unnamed" not in item]
+        finally:
+            os.remove(tmp_file)
+
+        if needed_check:
+            Org.validate_parse_import_header(headers)
+        else:
+            valid_field_regex = r"^[a-zA-Z][a-zA-Z0-9_ -]*$"
+            invalid_fields = [item for item in headers if not re.match(valid_field_regex, item)]
+            reserved_keywords = ["class", "for", "return", "global", "pass", "or", "raise", "def", "id", "objectid"]
+
+            if not invalid_fields:
+                invalid_fields = [
+                    item for item in headers if item.replace("numeric_", "").replace("date_", "") in reserved_keywords
+                ]
+
+            if invalid_fields:
+                raise Exception(
+                    _(
+                        "Upload error: The file you are trying to upload has a missing or invalid column "
+                        "header name. The column names should only contain spaces, underscores, and "
+                        "alphanumeric characters. They must begin with a letter and be unique. The following words are "
+                        "not allowed on the column names: words such 'class', 'for', 'return', 'global', 'pass', 'or', "
+                        "'raise', 'def', 'id' and 'objectid'."
+                    )
+                )
+
+        return [header.strip() for header in headers]
+
+    @classmethod
+    def validate_parse_import_header(cls, headers):
+        PARSE_GIFTCARDS_IMPORT_HEADERS = ["egiftnumber", "url", "challengecode"]
+
+        not_found_headers = [h for h in PARSE_GIFTCARDS_IMPORT_HEADERS if h not in headers]
+        string_possible_headers = '", "'.join([h for h in PARSE_GIFTCARDS_IMPORT_HEADERS])
+        blank_headers = [h for h in headers if h is None or h == "" or "Unnamed" in h]
+        valid_field_regex = r"^[a-zA-Z][a-zA-Z0-9_ -]*$"
+        invalid_fields = [h for h in headers if not re.match(valid_field_regex, h)]
+
+        if ("Identifier" in headers or "identifier" in headers) or ("Active" in headers or "active" in headers):
+            raise Exception(_('Please remove the "identifier" and/or "active" column from your file.'))
+
+        if blank_headers or invalid_fields:
+            raise Exception(
+                _(
+                    "Upload error: The file you are trying to upload has a missing or invalid column "
+                    "header name. The column names should only contain spaces, underscores, and "
+                    "alphanumeric characters. They must begin with a letter and be unique."
+                )
+            )
+
+        if not_found_headers:
+            raise Exception(
+                _(
+                    f"The file you provided is missing a required header. All these fields: "
+                    f'"{string_possible_headers}" should be included.'
+                )
+            )
+
+    def get_metabase_dashboards(self):
+        """
+        Returns the Metabase dashboards set up on this Org
+        """
+        if self.config:
+            return self.config.get("metabase_dashboards", [])
+        return []
+
     def lock_on(self, lock, qualifier=None):
         """
         Creates the requested type of org-level lock
@@ -538,6 +734,20 @@ class Org(SmartModel):
         """
         return self.config.get(Org.CONFIG_VERIFIED, False)
 
+    def set_ivr_machine_detection(self, value=True):
+        """
+        Set a value ("true" or "false") IVR machine detection
+        We use boolean string here because mailroom is currently supporting only string on ConfigValue func
+        """
+        self.config[Org.CONFIG_IVR_MACHINE_DETECTION] = value
+        self.save(update_fields=("config", "modified_on"))
+
+    def is_ivr_machine_detection_enabled(self):
+        """
+        Whether the IVR machine detection is enabled
+        """
+        return self.config.get(Org.CONFIG_IVR_MACHINE_DETECTION, "false") == "true"
+
     def import_app(self, export_json, user, site=None):
         """
         Imports previously exported JSON
@@ -546,6 +756,7 @@ class Org(SmartModel):
         from temba.campaigns.models import Campaign
         from temba.contacts.models import ContactField, ContactGroup
         from temba.flows.models import Flow
+        from temba.links.models import Link
         from temba.triggers.models import Trigger
 
         # only required field is version
@@ -574,6 +785,7 @@ class Org(SmartModel):
         export_groups = export_json.get("groups", [])
         export_campaigns = export_json.get("campaigns", [])
         export_triggers = export_json.get("triggers", [])
+        export_links = export_json.get("links", [])
 
         dependency_mapping = {}  # dependency UUIDs in import => new UUIDs
 
@@ -586,6 +798,7 @@ class Org(SmartModel):
             # these depend on flows so are imported last
             new_campaigns = Campaign.import_campaigns(self, user, export_campaigns, same_site)
             Trigger.import_triggers(self, user, export_triggers, same_site)
+            Link.import_links(self, user, export_links)
 
         # queue mailroom tasks to schedule campaign events
         for campaign in new_campaigns:
@@ -608,11 +821,13 @@ class Org(SmartModel):
         from temba.campaigns.models import Campaign
         from temba.contacts.models import ContactField
         from temba.flows.models import Flow
+        from temba.links.models import Link
         from temba.triggers.models import Trigger
 
         exported_flows = []
         exported_campaigns = []
         exported_triggers = []
+        exported_links = []
 
         # users can't choose which fields/groups to export - we just include all the dependencies
         fields = set()
@@ -644,12 +859,16 @@ class Org(SmartModel):
                     if include_groups:
                         groups.update(component.groups.all())
 
+            elif isinstance(component, Link):
+                exported_links.append(component.as_json())
+
         return {
             "version": Org.CURRENT_EXPORT_VERSION,
             "site": site_link,
             "flows": exported_flows,
             "campaigns": exported_campaigns,
             "triggers": exported_triggers,
+            "links": exported_links,
             "fields": [f.as_export_def() for f in sorted(fields, key=lambda f: f.key)],
             "groups": [g.as_export_def() for g in sorted(groups, key=lambda g: g.name)],
         }
@@ -890,6 +1109,9 @@ class Org(SmartModel):
         self.modified_by = user
         self.save(update_fields=("flow_languages", "modified_by", "modified_on"))
 
+    def get_dayfirst(self):
+        return self.date_format == Org.DATE_FORMAT_DAY_FIRST
+
     def get_datetime_formats(self, *, seconds=False):
         date_format = Org.DATE_FORMATS_PYTHON.get(self.date_format)
         time_format = "%H:%M:%S" if seconds else "%H:%M"
@@ -903,6 +1125,9 @@ class Org(SmartModel):
         formats = self.get_datetime_formats(seconds=seconds)
         format = formats[1] if show_time else formats[0]
         return datetime_to_str(d, format, self.timezone)
+
+    def parse_datetime(self, s):
+        return str_to_datetime(s, self.timezone, self.get_dayfirst())
 
     def get_users_with_role(self, role: OrgRole):
         """
@@ -1004,28 +1229,36 @@ class Org(SmartModel):
 
     def create_sample_flows(self, api_url):
         # get our sample dir
-        filename = os.path.join(settings.STATICFILES_DIRS[0], "examples", "sample_flows.json")
-
-        # for each of our samples
-        with open(filename, "r") as example_file:
-            samples = example_file.read()
+        filenames = (
+            os.path.join(settings.STATICFILES_DIRS[0], "examples", "sample_flows.json"),
+            os.path.join(settings.STATICFILES_DIRS[0], "examples", "opt_in_flows.json"),
+        )
 
         user = self.get_admins().first()
         if user:
-            # some some substitutions
-            samples = samples.replace("{{EMAIL}}", user.username).replace("{{API_URL}}", api_url)
+            for filename in filenames:
+                # for each of our samples
+                with open(filename, "r") as example_file:
+                    samples = example_file.read()
 
-            try:
-                self.import_app(json.loads(samples), user)
-            except Exception as e:  # pragma: needs cover
-                logger.error(
-                    f"Failed creating sample flows: {str(e)}",
-                    exc_info=True,
-                    extra=dict(definition=json.loads(samples)),
-                )
+                # some some substitutions
+                samples = samples.replace("{{EMAIL}}", user.username).replace("{{API_URL}}", api_url)
+
+                try:
+                    self.import_app(json.loads(samples), user)
+                except Exception as e:  # pragma: needs cover
+                    logger.error(
+                        f"Failed creating sample flows: {str(e)}",
+                        exc_info=True,
+                        extra=dict(definition=json.loads(samples)),
+                    )
 
     def has_low_credits(self):
-        return self.get_credits_remaining() <= self.get_low_credits_threshold()
+        """
+        Whether the organization has less than 15% of the total of credits available
+        :return: bool
+        """
+        return float(self.get_credits_remaining()) <= (0.15 * float(self.get_credits_total()))
 
     def get_low_credits_threshold(self):
         """
@@ -1037,11 +1270,12 @@ class Org(SmartModel):
 
     def _calculate_low_credits_threshold(self):
         now = timezone.now()
-        unexpired_topups = self.topups.filter(is_active=True, expires_on__gte=now)
 
-        active_topup_credits = [topup.credits for topup in unexpired_topups if topup.get_remaining() > 0]
-        last_topup_credits = sum(active_topup_credits)
+        filter_ = dict(is_active=True)
+        if settings.CREDITS_EXPIRATION:
+            filter_.update(dict(expires_on__gte=now))
 
+        last_topup_credits = self.topups.filter(**filter_).aggregate(Sum("credits")).get("credits__sum") or 0
         return int(last_topup_credits * 0.15), self.get_credit_ttl()
 
     def get_credits_total(self, force_dirty=False):
@@ -1066,20 +1300,23 @@ class Org(SmartModel):
         return purchased_credits if purchased_credits else 0, self.get_credit_ttl()
 
     def _calculate_credits_total(self):
-        active_credits = (
-            self.topups.filter(is_active=True, expires_on__gte=timezone.now())
-            .aggregate(Sum("credits"))
-            .get("credits__sum")
-        )
+        filter_ = dict(is_active=True)
+        if settings.CREDITS_EXPIRATION:
+            filter_.update(dict(expires_on__gte=timezone.now()))
+
+            # these are the credits that have been used in expired topups
+            expired_credits = (
+                TopUpCredits.objects.filter(
+                    topup__org=self, topup__is_active=True, topup__expires_on__lte=timezone.now()
+                )
+                .aggregate(Sum("used"))
+                .get("used__sum")
+            )
+        else:
+            expired_credits = False
+
+        active_credits = self.topups.filter(**filter_).aggregate(Sum("credits")).get("credits__sum")
         active_credits = active_credits if active_credits else 0
-
-        # these are the credits that have been used in expired topups
-        expired_credits = (
-            TopUpCredits.objects.filter(topup__org=self, topup__is_active=True, topup__expires_on__lte=timezone.now())
-            .aggregate(Sum("used"))
-            .get("used__sum")
-        )
-
         expired_credits = expired_credits if expired_credits else 0
 
         return active_credits + expired_credits, self.get_credit_ttl()
@@ -1224,9 +1461,10 @@ class Org(SmartModel):
         """
         Calculates the oldest non-expired topup that still has credits
         """
-        non_expired_topups = self.topups.filter(is_active=True, expires_on__gte=timezone.now()).order_by(
-            "expires_on", "id"
-        )
+        filter_ = dict(is_active=True)
+        if settings.CREDITS_EXPIRATION:
+            filter_.update(dict(expires_on__gte=timezone.now()))
+        non_expired_topups = self.topups.filter(**filter_).order_by("expires_on", "id")
         active_topups = (
             non_expired_topups.annotate(used_credits=Sum("topupcredits__used"))
             .filter(credits__gt=0)
@@ -1256,9 +1494,10 @@ class Org(SmartModel):
             all_uncredited = list(msg_uncredited)
 
             # get all topups that haven't expired
-            unexpired_topups = list(
-                self.topups.filter(is_active=True, expires_on__gte=timezone.now()).order_by("-expires_on")
-            )
+            filter_ = dict(is_active=True)
+            if settings.CREDITS_EXPIRATION:
+                filter_.update(dict(expires_on__gte=timezone.now()))
+            unexpired_topups = list(self.topups.filter(**filter_).order_by("-expires_on"))
 
             # dict of topups to lists of their newly assigned items
             new_topup_items = {topup: [] for topup in unexpired_topups}
@@ -1612,6 +1851,31 @@ class Org(SmartModel):
 
         return self.save_media(File(temp), extension)
 
+    @classmethod
+    def get_temporary_file_from_url(cls, media_url):
+        response = None
+        attempts = 0
+        s = Session()
+
+        while attempts < 4:
+            response = s.request("GET", media_url, stream=True)
+
+            # in some cases Facebook isn't ready for us to fetch the media URL yet, if we get a 404
+            # sleep for a bit then try again up to 4 times
+            if response.status_code == 200:
+                break
+            else:
+                attempts += 1
+                time.sleep(0.250)
+
+        if not response:
+            return response
+
+        temp = NamedTemporaryFile(delete=True)
+        temp.write(response.content)
+        temp.flush()
+        return File(temp)
+
     def get_delete_date(self, *, archive_type=Archive.TYPE_MSG):
         """
         Gets the most recent date for which data hasn't been deleted yet or None if no deletion has been done
@@ -1633,9 +1897,8 @@ class Org(SmartModel):
             filename = "%s.%s" % (filename, extension)
 
         path = "%s/%d/media/%s" % (settings.STORAGE_ROOT_DIR, self.pk, filename)
-        location = public_file_storage.save(path, file)
-
-        return f"{settings.STORAGE_URL}/{location}"
+        public_url = private_file_storage.save_with_public_url(path, file)
+        return public_url
 
     def release(self, user, *, release_users=True):
         """
@@ -1673,6 +1936,8 @@ class Org(SmartModel):
         Does an actual delete of this org
         """
 
+        from temba.contacts.models import ContactImport, ContactImportBatch
+
         assert not self.is_active and self.released_on, "can't delete an org which hasn't been released"
         assert not self.deleted_on, "can't delete an org twice"
 
@@ -1683,6 +1948,7 @@ class Org(SmartModel):
         self.notifications.all().delete()
         self.exportcontactstasks.all().delete()
         self.exportmessagestasks.all().delete()
+        self.exportflowimagestasks.all().delete()
         self.exportflowresultstasks.all().delete()
 
         for label in self.msgs_labels(manager="all_objects").all():
@@ -1729,21 +1995,30 @@ class Org(SmartModel):
         # delete all our URNs
         self.urns.all().delete()
 
+        # delete our groups
+        from temba.contacts.models import ContactGroupCount
+
+        for group in self.all_groups.all():
+            ContactGroupCount.objects.filter(group=group).delete()
+
+            ContactImportBatch.objects.filter(contact_import__group=group).delete()
+            ContactImport.objects.filter(group=group).delete()
+
+            group.release(user)
+            group.delete()
+
         # delete our fields
         for contactfield in self.contactfields(manager="all_fields").all():
             contactfield.release(user)
             contactfield.delete()
-
-        # delete our groups
-        for group in self.all_groups.all():
-            group.release(user, immediate=True)
-            group.delete()
 
         # delete our channels
         for channel in self.channels.all():
             channel.counts.all().delete()
             channel.logs.all().delete()
             channel.template_translations.all().delete()
+            channel.channelevent_set.all().delete()
+            channel.connections.all().delete()
 
             channel.delete()
 
@@ -1834,10 +2109,123 @@ class Org(SmartModel):
             "allowed_languages": self.flow_languages,
             "default_country": self.default_country_code,
             "redaction_policy": "urns" if self.is_anon else "none",
+            "links": [
+                f"{item.uuid}:{item.destination}"
+                for item in self.links.filter(is_archived=False).only("uuid", "destination")
+            ],
+            "config": self.config,
+            "has_ivr_machine_detection": self.is_ivr_machine_detection_enabled(),
         }
 
     def __str__(self):
         return self.name
+
+    def set_optin_flow(self, user, flow_uuid):
+        self.modified_by = user
+        self.config.update({Org.OPTIN_FLOW: flow_uuid})
+        self.save(update_fields=("config", "modified_on"))
+
+    def get_optin_flow(self):
+        return self.config.get(Org.OPTIN_FLOW)
+
+    def has_translation_service(self):
+        return bool(self.config.get("translator_service", {}).get("provider"))
+
+    def get_translation(self, text, target_lang, source_lang=None, provider=None, api_key=None, use_config=True):
+        import requests
+
+        def convert_language(lang):
+            languages_map = {"fra": "fr", "deu": "de", "zho": "zh"}
+            if lang == "base":
+                nonlocal self
+                lang = self.flow_languages[0] if self.flow_languages else "eng"
+            return languages_map.get(lang, lang)
+
+        target_lang, source_lang = tuple(map(convert_language, (target_lang, source_lang)))
+        if target_lang == source_lang:
+            return text, 200
+
+        def google_translate(_text, _target_lang, _source_lang, _api_key):
+            body = {"q": _text, "target": _target_lang}
+            body.update({"source": _source_lang} if _source_lang else {})
+            response = requests.post(f"https://translation.googleapis.com/language/translate/v2?key={_api_key}", body)
+            if response.ok:
+                try:
+                    return response.json()["data"]["translations"][0]["translatedText"], 200
+                except KeyError:
+                    pass
+            return None, 404
+
+        def deepl_translate(_text, _target_lang, _source_lang, _api_key):
+            body = {"text": _text, "target_lang": _target_lang}
+            body.update({"source_lang": _source_lang} if _source_lang else {})
+            response = requests.post(f"https://api.deepl.com/v2/translate?auth_key={_api_key}", body)
+            if response.ok:
+                try:
+                    return response.json()["translations"][0]["text"], 200
+                except KeyError:
+                    pass
+            return None, 404
+
+        translator_service = self.config.get("translator_service", {})
+        providers = {
+            "google": google_translate,
+            "deepl": deepl_translate,
+        }
+        saved_provider = translator_service.get("provider", provider) if use_config else provider
+        saved_api_key = translator_service.get("api_key", api_key) if use_config else api_key
+        if all((saved_provider, saved_api_key)) and saved_provider in providers.keys():
+            return providers.get(saved_provider, lambda _: (None, 404))(text, target_lang, source_lang, saved_api_key)
+        return None, 404
+
+    def do_not_contact(self):
+        do_not_contact = (self.config or {}).get("non_contact_hours", False)
+        if not do_not_contact:
+            return False
+
+        timezone.activate(pytz.timezone(str(self.timezone)))
+        start = timezone.localtime(timezone.now()).replace(hour=8, minute=0, second=0, microsecond=0)
+        end = timezone.localtime(timezone.now()).replace(hour=21, minute=0, second=0, microsecond=0)
+        now = timezone.localtime(timezone.now())
+        in_do_not_contact_times = now < start or now > end
+        timezone.deactivate()
+        return in_do_not_contact_times
+
+    @property
+    def do_not_contact_enabled(self):
+        do_not_contact = (self.config or {}).get("non_contact_hours", False)
+        if not do_not_contact:
+            return False
+        return True
+
+    @redis_cached_property
+    def twilio_stats(self):
+        tw = self.get_twilio_client()
+        if not tw:
+            return {}
+
+        curr_year, curr_month = timezone.now().timetuple()[:2]
+        start_year, start_month = (curr_year - 1, curr_month + 1) if curr_month < 12 else (curr_year, 1)
+        start_date = timezone.datetime(start_year, start_month, 1)
+        try:
+            records = tw.api.usage.records.monthly.stream(start_date=start_date)
+        except TwilioException:
+            records = []
+
+        allowed_categories = [
+            "sms-inbound",
+            "sms-outbound",
+            "mms-inbound",
+            "mms-outbound",
+            "calls-inbound",
+            "calls-outbound",
+        ]
+        result_stats = dict(**{category: list() for category in allowed_categories})
+        for record in records:
+            if record.category in allowed_categories:
+                start_datetime = timezone.datetime(record.start_date.year, record.start_date.month, 1)
+                result_stats[record.category].append((start_datetime, record.usage))
+        return result_stats
 
 
 # ===================== monkey patch User class with a few extra functions ========================
@@ -1868,7 +2256,7 @@ def release(user, releasing_user, *, brand):
         org.remove_user(user)
 
 
-def get_user_orgs(user, brands=None):
+def get_user_orgs(user, brands=None, exclude_suspended=True):
     if user.is_superuser:
         return Org.objects.all()
 
@@ -1877,6 +2265,10 @@ def get_user_orgs(user, brands=None):
 
     if brands:
         user_orgs = user_orgs.filter(brand__in=brands)
+
+    if exclude_suspended:
+        not_suspended_orgs_ids = [org.id for org in user_orgs if not org.is_suspended]
+        user_orgs = user_orgs.filter(id__in=not_suspended_orgs_ids)
 
     return user_orgs.filter(is_active=True).distinct().order_by("name")
 
@@ -2119,6 +2511,14 @@ class UserSettings(models.Model):
     last_auth_on = models.DateTimeField(null=True)
     external_id = models.CharField(max_length=128, null=True)
     verification_token = models.CharField(max_length=64, null=True)
+    authy_id = models.CharField(verbose_name=_("Authy ID"), max_length=255, null=True, blank=True)
+    tel = models.CharField(
+        verbose_name=_("Phone Number"),
+        max_length=16,
+        null=True,
+        blank=True,
+        help_text=_("Phone number for testing and recording voice flows"),
+    )
 
     @classmethod
     def get_or_create(cls, user):
@@ -2165,7 +2565,7 @@ class TopUp(SmartModel):
     )
 
     @classmethod
-    def create(cls, user, price, credits, stripe_charge=None, org=None, expires_on=None):
+    def create(cls, user, price, credits, stripe_charge=None, org=None, expires_on=None, comment=None):
         """
         Creates a new topup
         """
@@ -2173,7 +2573,8 @@ class TopUp(SmartModel):
             org = user.get_org()
 
         if not expires_on:
-            expires_on = timezone.now() + timedelta(days=365)  # credits last 1 year
+            delta_days = 365 if settings.CREDITS_EXPIRATION else 365 * 50  # credits last 1 or 50 years depend on conf
+            expires_on = timezone.now() + timedelta(days=delta_days)
 
         topup = TopUp.objects.create(
             org=org,
@@ -2181,6 +2582,7 @@ class TopUp(SmartModel):
             credits=credits,
             expires_on=expires_on,
             stripe_charge=stripe_charge,
+            comment=comment,
             created_by=user,
             modified_by=user,
         )
@@ -2240,7 +2642,7 @@ class TopUp(SmartModel):
             )
 
         now = timezone.now()
-        expired = self.expires_on < now
+        expired = self.expires_on < now if settings.CREDITS_EXPIRATION else False
 
         # add a line for used message credits
         if active:
@@ -2392,6 +2794,9 @@ class CreditAlert(SmartModel):
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="credit_alerts")
 
     alert_type = models.CharField(max_length=1, choices=TYPES)
+    admin_emails = ArrayField(
+        models.EmailField(), help_text=_("Emails of administrators who will be alerted"), default=list
+    )
 
     @classmethod
     def trigger_credit_alert(cls, org, alert_type):
@@ -2401,11 +2806,15 @@ class CreditAlert(SmartModel):
 
         logging.info(f"triggering {alert_type} credits alert type for {org.name}")
 
-        admin = org.get_admins().first()
+        admins = org.get_admins().exclude(email__isnull=True).exclude(email__exact="")
+        admin = admins.first()
 
-        if admin:
+        if admins:
             # Otherwise, create our alert objects and trigger our event
-            alert = CreditAlert.objects.create(org=org, alert_type=alert_type, created_by=admin, modified_by=admin)
+            admin_emails = list(admins.values_list("email", flat=True))
+            alert = CreditAlert.objects.create(
+                org=org, alert_type=alert_type, admin_emails=admin_emails, created_by=admin, modified_by=admin
+            )
 
             alert.send_alert()
 
@@ -2425,7 +2834,7 @@ class CreditAlert(SmartModel):
         template = "orgs/email/alert_email"
         to_email = admin_emails
 
-        context = dict(org=self.org, now=timezone.now(), branding=branding, alert=self, customer=self.created_by)
+        context = dict(org=self.org, now=timezone.now(), branding=branding, alert=self)
         context["subject"] = subject
 
         send_template_email(to_email, subject, template, context, branding)
@@ -2460,6 +2869,8 @@ class CreditAlert(SmartModel):
         Triggers an expiring credit alert for any org that has its last
         active topup expiring in the next 30 days and still has available credits
         """
+        if not settings.CREDITS_EXPIRATION:
+            return
 
         # get the ids of the last to expire topup, with credits, for each org
         final_topups = (

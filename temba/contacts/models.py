@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from itertools import chain
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Set
 
 import iso8601
 import phonenumbers
@@ -15,6 +15,7 @@ from django_redis import get_redis_connection
 from smartmin.models import SmartModel
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, models, transaction
@@ -398,6 +399,8 @@ class ContactField(SmartModel, DependencyMixin):
     KEY_CREATED_ON = "created_on"
     KEY_LANGUAGE = "language"
     KEY_LAST_SEEN_ON = "last_seen_on"
+    KEY_OPT_OUT_MSG = "opt_out_message"
+    KEY_OPTED_OUT_ON = "opt_out_datetime"
 
     # fields that cannot be updated by user
     IMMUTABLE_FIELDS = (KEY_ID, KEY_CREATED_ON, KEY_LAST_SEEN_ON)
@@ -408,6 +411,8 @@ class ContactField(SmartModel, DependencyMixin):
         KEY_CREATED_ON: dict(label="Created On", value_type=TYPE_DATETIME),
         KEY_LANGUAGE: dict(label="Language", value_type=TYPE_TEXT),
         KEY_LAST_SEEN_ON: dict(label="Last Seen On", value_type=TYPE_DATETIME),
+        KEY_OPT_OUT_MSG: dict(label="Opt-Out Message", value_type=TYPE_TEXT),
+        KEY_OPTED_OUT_ON: dict(label="Opt-Out Timestamp", value_type=TYPE_DATETIME),
     }
 
     EXPORT_KEY = "key"
@@ -471,7 +476,7 @@ class ContactField(SmartModel, DependencyMixin):
     @classmethod
     def is_valid_label(cls, label):
         label = label.strip()
-        return regex.match(r"^[A-Za-z0-9\- ]+$", label, regex.V0) and len(label) <= cls.MAX_LABEL_LEN
+        return regex.match(r"^[A-Za-z0-9_\- ]+$", label, regex.V0) and len(label) <= cls.MAX_LABEL_LEN
 
     @classmethod
     def get_or_create(cls, org, user, key, label=None, show_in_table=None, value_type=None, priority=None):
@@ -757,6 +762,18 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
         """
         return self.all_groups.filter(group_type=ContactGroup.TYPE_USER_DEFINED)
 
+    def get_scheduled_triggers(self):
+        from temba.triggers.models import Trigger
+
+        triggers = (
+            Trigger.objects.select_related("schedule")
+            .filter(trigger_type=Trigger.TYPE_SCHEDULE)
+            .filter(schedule__next_fire__gte=timezone.now())
+            .filter(Q(contacts=self) | Q(groups__contacts=self))
+            .filter(is_archived=False)
+        )
+        return triggers
+
     def get_scheduled_messages(self):
         from temba.msgs.models import SystemLabel
 
@@ -821,6 +838,19 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             .order_by("-created_on")
             .select_related("channel")[:limit]
         )
+        retried_calls = []
+        for call in calls:
+            channel_logs = call.channel_logs.only("is_error", "created_on").filter(
+                description__in=["Call Retry Requested", "Error Requesting Call Retry"]
+            )
+            for log in channel_logs:
+                retried_calls.append(
+                    {
+                        "type": "call_retried",
+                        "created_on": log.created_on.isoformat(),
+                        "is_error": log.is_error,
+                    }
+                )
 
         ticket_events = (
             self.ticket_events.filter(created_on__gte=after, created_on__lt=before)
@@ -854,6 +884,7 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             channel_events,
             campaign_events,
             calls,
+            retried_calls,
             transfers,
             session_events,
         )
@@ -1843,6 +1874,45 @@ class ContactGroup(TembaModel, DependencyMixin):
             ContactGroup.EXPORT_QUERY: self.query,
         }
 
+    def update_flows(self):
+        """
+        Update flow steps with the actual contact group name.
+        """
+        flows = self.dependent_flows.all()
+
+        def process_node(node):
+            data_updated = False
+            flow_types = {"add_contact_groups", "remove_contact_groups", "send_broadcast", "start_session"}
+            node_action_types = {action.get("type") for action in node.get("actions", [])}
+            action_type_match = bool(node_action_types and node_action_types.intersection(flow_types))
+            if action_type_match:
+                for action in node.get("actions", []):
+                    if action.get("type") in flow_types:
+                        for group in action.get("groups", []):
+                            if group.get("uuid") == self.uuid:
+                                group["name"] = self.name
+                                data_updated = True
+
+            router_type_match = node.get("router", {}).get("operand", "") == "@contact.groups"
+            if router_type_match:
+                categories = {category["uuid"]: category for category in node.get("router", {}).get("categories", [])}
+                for case in node.get("router", {}).get("cases", []):
+                    if case.get("type") == "has_group" and case.get("arguments", [""])[0] == self.uuid:
+                        case["arguments"][1] = self.name
+                        categories.get(case.get("category_uuid"), {})["name"] = self.name
+                        data_updated = True
+            return data_updated
+
+        for flow in flows:
+            flow_revision = flow.revisions.order_by("revision").last()
+            if any(list(map(process_node, flow_revision.definition.get("nodes", [])))):
+                flow_revision.save()
+
+    def analytics_json(self):
+        member_count = self.get_member_count()
+        if member_count > 0:
+            return dict(name=self.name, id=self.pk, count=member_count)
+
     def __str__(self):
         return self.name
 
@@ -1946,6 +2016,7 @@ class ExportContactsTask(BaseExportTask):
             dict(label="Language", key=ContactField.KEY_LANGUAGE, field=None, urn_scheme=None),
             dict(label="Created On", key=ContactField.KEY_CREATED_ON, field=None, urn_scheme=None),
             dict(label="Last Seen On", key=ContactField.KEY_LAST_SEEN_ON, field=None, urn_scheme=None),
+            dict(label="Groups", key="group_membership", id=0, field=None, urn_scheme=None),
         ]
 
         # anon orgs also get an ID column that is just the PK
@@ -1958,7 +2029,9 @@ class ExportContactsTask(BaseExportTask):
         scheme_counts = dict()
         if not self.org.is_anon:
             org_urns = self.org.urns.using("readonly")
-            schemes_in_use = sorted(list(org_urns.order_by().values_list("scheme", flat=True).distinct()))
+            schemes_in_use = sorted(
+                list(self.org.urns.order_by().exclude(scheme="deleted").values_list("scheme", flat=True).distinct())
+            )
             scheme_contact_max = {}
 
             # for each scheme used by this org, calculate the max number of URNs owned by a single contact
@@ -2104,6 +2177,9 @@ class ExportContactsTask(BaseExportTask):
                 return urn_obj.get_display(org=self.org, formatted=False) if urn_obj else ""
             else:
                 return ""
+        elif field["key"] == "group_membership":
+            groups = contact.all_groups.exclude(name="All Contacts").order_by("name")
+            return ", ".join(groups.values_list("name", flat=True))
         else:
             return contact.get_field_display(field["field"])
 
@@ -2114,7 +2190,7 @@ def get_import_upload_path(instance: Any, filename: str):
 
 
 class ContactImport(SmartModel):
-    MAX_RECORDS = 25_000
+    MAX_RECORDS = 2_000_000
     BATCH_SIZE = 100
     EXPLICIT_CLEAR = "--"
 
@@ -2144,9 +2220,14 @@ class ContactImport(SmartModel):
     started_on = models.DateTimeField(null=True)
     status = models.CharField(max_length=1, default=STATUS_PENDING, choices=STATUS_CHOICES)
     finished_on = models.DateTimeField(null=True)
+    num_duplicates = models.IntegerField(default=0)
+    validate_carrier = models.BooleanField(default=False)
+
+    # no longer used
+    headers = ArrayField(models.CharField(max_length=255), null=True)
 
     @classmethod
-    def try_to_parse(cls, org: Org, file, filename: str) -> tuple[list, int]:
+    def try_to_parse(cls, org: Org, file, filename: str) -> tuple[list, int, int]:
         """
         Tries to parse the given file stream as an import. If successful it returns the automatic column mappings and
         total number of records. Otherwise raises a ValidationError.
@@ -2173,6 +2254,7 @@ class ContactImport(SmartModel):
         seen_uuids = set()
         seen_urns = set()
         num_records = 0
+        num_duplicates = 0
 
         for raw_row in data:
             row = cls._parse_row(raw_row, len(mappings))
@@ -2185,9 +2267,11 @@ class ContactImport(SmartModel):
                 seen_uuids.add(uuid)
             for urn in urns:
                 if urn in seen_urns:
-                    raise ValidationError(
-                        _("Import file contains duplicated contact URN '%(urn)s'."), params={"urn": urn}
-                    )
+                    if not settings.ALLOW_DUPLICATE_CONTACT_IMPORT:
+                        raise ValidationError(
+                            _("Import file contains duplicated contact URN '%(urn)s'."), params={"urn": urn}
+                        )
+                    num_duplicates += 1
                 seen_urns.add(urn)
 
             if uuid or urns:  # if we have a UUID or URN on this row it's an importable record
@@ -2199,13 +2283,12 @@ class ContactImport(SmartModel):
                     _("Import files can contain a maximum of %(max)d records."),
                     params={"max": ContactImport.MAX_RECORDS},
                 )
-
         if num_records == 0:
             raise ValidationError(_("Import file doesn't contain any records."))
 
         file.seek(0)  # seek back to beginning so subsequent reads work
 
-        return mappings, num_records
+        return mappings, num_records, num_duplicates
 
     @staticmethod
     def _extract_uuid_and_urns(row, mappings) -> tuple[str, list[str]]:
@@ -2251,6 +2334,8 @@ class ContactImport(SmartModel):
 
                 if attribute in ("uuid", "name", "language"):
                     mapping = {"type": "attribute", "name": attribute}
+                if attribute == "groups":
+                    mapping = {"type": "groups", "name": "groups"}
             elif header_prefix == "urn" and header_name:
                 mapping = {"type": "scheme", "scheme": header_name.lower()}
             elif header_prefix == "field" and header_name:
@@ -2271,6 +2356,10 @@ class ContactImport(SmartModel):
 
         cls._validate_mappings(mappings)
         return mappings
+
+    @classmethod
+    def _creating_carrier_field(cls, name: str, key: str) -> Dict:
+        return dict(key=key, name=name, value_type=ContactField.TYPE_TEXT, type="new_field")
 
     @staticmethod
     def _validate_mappings(mappings: list):
@@ -2331,6 +2420,19 @@ class ContactImport(SmartModel):
         self.started_on = timezone.now()
         self.save(update_fields=("status", "started_on"))
 
+        if self.validate_carrier:
+            carrier_name_mapping = dict(
+                mapping=self._creating_carrier_field("Carrier Name", "carrier_name"),
+                header="Field:CarrierName",
+            )
+            carrier_type_mapping = dict(
+                mapping=self._creating_carrier_field("Carrier Type", "carrier_type"),
+                header="Field:CarrierType",
+            )
+
+            self.mappings.append(carrier_name_mapping)
+            self.mappings.append(carrier_type_mapping)
+
         # create new contact fields as necessary
         for item in self.mappings:
             mapping = item["mapping"]
@@ -2339,10 +2441,17 @@ class ContactImport(SmartModel):
                     self.org, self.created_by, mapping["key"], label=mapping["name"], value_type=mapping["value_type"]
                 )
 
-        # if user wants contacts added to a new group, create it
-        if self.group_name and not self.group:
-            self.group = ContactGroup.create_static(self.org, self.created_by, name=self.group_name)
-            self.save(update_fields=("group",))
+        if not self.validate_carrier:
+            # if user wants contacts added to a new group, create it
+            if self.group_name and not self.group:
+                self.group = ContactGroup.create_static(self.org, self.created_by, name=self.group_name)
+            # if group was not added from frontend then create one from default
+            elif not self.group:
+                # create the destination group
+                self.group = ContactGroup.create_static(self.org, self.created_by, self.get_default_group_name())
+
+            if self.group:
+                self.save(update_fields=("group",))
 
         # CSV reader expects str stream so wrap file
         file_type = self._get_file_type()
@@ -2403,18 +2512,49 @@ class ContactImport(SmartModel):
         """
         Gets info about this import by merging info from its batches
         """
+        MAX_MOBILE_GROUP_CONTACTS = 50_000
+        MAX_LANDLINE_GROUP_CONTACTS = 10_000
 
         num_created = 0
         num_updated = 0
+        num_blocked = 0
         num_errored = 0
         errors = []
-        batches = self.batches.values("num_created", "num_updated", "num_errored", "errors")
+        oldest_finished_on = None
+        validated_urn_carriers = dict(mobile=[], landline=[])
 
+        mobile_list = []
+        landline_list = []
+
+        batches = self.batches.values(
+            "num_created",
+            "num_updated",
+            "num_blocked",
+            "num_errored",
+            "errors",
+            "finished_on",
+            "carrier_groups",
+        )
+        num_duplicates = 0
         for batch in batches:
             num_created += batch["num_created"]
             num_updated += batch["num_updated"]
+            num_blocked += batch["num_blocked"]
             num_errored += batch["num_errored"]
             errors.extend(batch["errors"])
+            mobile_contacts = batch["carrier_groups"].get("mobile", [])
+            landline_contacts = batch["carrier_groups"].get("landline", [])
+
+            if batch["finished_on"] and (oldest_finished_on is None or batch["finished_on"] > oldest_finished_on):
+                oldest_finished_on = batch["finished_on"]
+                num_duplicates = self.num_duplicates
+
+            if self.validate_carrier:
+                if len(mobile_contacts) > 0:
+                    mobile_list = mobile_list + mobile_contacts
+
+                if len(landline_contacts) > 0:
+                    landline_list = landline_list + landline_contacts
 
         # sort errors by record #
         errors = sorted(errors, key=lambda e: e["record"])
@@ -2425,14 +2565,31 @@ class ContactImport(SmartModel):
             time_taken = timezone.now() - self.started_on
         else:
             time_taken = timedelta(seconds=0)
+        num_total = 0
+        all_operation = num_created + num_updated
+        if all_operation > 0:
+            num_total = all_operation - num_duplicates
+
+        if self.validate_carrier:
+            validated_urn_carriers["mobile"] = self._generate_validation_report(
+                mobile_list, "mobile", MAX_MOBILE_GROUP_CONTACTS
+            )
+            validated_urn_carriers["landline"] = self._generate_validation_report(
+                landline_list, "landline", MAX_LANDLINE_GROUP_CONTACTS
+            )
 
         return {
             "status": self.status,
             "num_created": num_created,
             "num_updated": num_updated,
+            "num_blocked": num_blocked,
             "num_errored": num_errored,
             "errors": errors,
             "time_taken": int(time_taken.total_seconds()),
+            "num_duplicates": num_duplicates,
+            "num_total": num_total,
+            "is_validated": self.validate_carrier,
+            "validated_urn_carriers": validated_urn_carriers,
         }
 
     def _get_file_type(self):
@@ -2440,6 +2597,42 @@ class ContactImport(SmartModel):
         Returns one of xlxs, xls, or csv
         """
         return Path(self.file.name).suffix[1:].lower()
+
+    def _generate_validation_report(self, validated_list: list, carrier_type: str, chunk_size: int) -> list:
+        # sort for consistent behavior
+        validated_list = sorted(validated_list)
+        group_name = self.get_default_group_name()
+        validated_urn_carriers = []
+        count = 0
+        for contacts_chunk in chunk_list(validated_list, chunk_size):
+            chunk_group_name = f"{group_name} - {carrier_type}"
+            if count > 0:
+                chunk_group_name = f"{chunk_group_name} {count}"
+            group = ContactGroup.get_or_create(self.org, self.created_by, chunk_group_name)
+            group.contacts.add(*contacts_chunk)
+            validated_urn_carriers.append(dict(group=group.name, count=len(contacts_chunk), uuid=group.uuid))
+            count += 1
+
+        return validated_urn_carriers
+
+    @staticmethod
+    def get_overall_status(statuses: Set) -> str:
+        """
+        Merges the statuses from the import's batches into a single status value
+        """
+        if not statuses:
+            return ContactImport.STATUS_PENDING
+        elif len(statuses) == 1:  # if there's only one status then we're that
+            return list(statuses)[0]
+
+        # if any batches haven't finished, we're processing
+        if ContactImport.STATUS_PENDING in statuses or ContactImport.STATUS_PROCESSING in statuses:
+            return ContactImport.STATUS_PROCESSING
+
+        # all batches have finished - if any batch failed (shouldn't happen), we failed
+        return (
+            ContactImport.STATUS_FAILED if ContactImport.STATUS_FAILED in statuses else ContactImport.STATUS_COMPLETE
+        )
 
     @staticmethod
     def _parse_header(header: str) -> tuple[str, str]:
@@ -2457,7 +2650,7 @@ class ContactImport(SmartModel):
         """
 
         spec = {}
-        if self.group_id:
+        if not self.validate_carrier:
             spec["groups"] = [str(self.group.uuid)]
 
         for value, item in zip(row, self.mappings):
@@ -2490,6 +2683,16 @@ class ContactImport(SmartModel):
                     spec["fields"] = {}
                 key = mapping["key"]
                 spec["fields"][key] = value
+            elif mapping["type"] == "groups":
+                groups_names = map(lambda x: x.strip(), value.split(","))
+                for group_name in groups_names:
+                    try:
+                        group = self.org.all_groups.get(name__exact=group_name)
+                        if group.group_type == ContactGroup.TYPE_USER_DEFINED:
+                            spec["groups"] = spec.get("groups", []) + [str(group.uuid)]
+                    except ContactGroup.DoesNotExist:
+                        group = ContactGroup.create_static(self.org, self.created_by, group_name)
+                        spec["groups"] = spec.get("groups", []) + [str(group.uuid)]
 
         # Make sure the row has a UUID or URNs
         if not spec.get("uuid", "") and not spec.get("urns", []):
@@ -2592,7 +2795,10 @@ class ContactImportBatch(models.Model):
     num_created = models.IntegerField(default=0)
     num_updated = models.IntegerField(default=0)
     num_errored = models.IntegerField(default=0)
+    num_blocked = models.IntegerField(default=0)
     errors = models.JSONField(default=list)
+    blocked_uuids = JSONField(default=list)
+    carrier_groups = JSONField(default=dict)
     finished_on = models.DateTimeField(null=True)
 
     def import_async(self):

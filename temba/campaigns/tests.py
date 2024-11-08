@@ -360,7 +360,7 @@ class CampaignTest(TembaTest):
 
         # 'Created On' system field must be selectable in the form
         contact_fields = [field.key for field in response.context["form"].fields["relative_to"].queryset]
-        self.assertEqual(contact_fields, ["created_on", "last_seen_on", "planting_date"])
+        self.assertEqual(contact_fields, ["created_on", "last_seen_on", "opt_out_datetime", "planting_date"])
 
         post_data = dict(
             relative_to=self.planting_date.pk,
@@ -579,7 +579,8 @@ class CampaignTest(TembaTest):
         self.assertEqual(5, len(mr_mocks.queued_batch_tasks))
 
         # set a planting date on our other farmer
-        self.set_contact_field(self.farmer2, "planting_date", "1/6/2022")
+        next_year = timezone.now().year + 1
+        self.set_contact_field(self.farmer2, "planting_date", f"1/6/{next_year}")
 
         # should have an event fire now
         fires = EventFire.objects.filter(event__is_active=True)
@@ -691,7 +692,9 @@ class CampaignTest(TembaTest):
         self.assertContains(response, "Archived", count=0)
 
         gear_links = response.context["view"].get_gear_links()
-        self.assertListEqual([gl["title"] for gl in gear_links], ["New Event", "Export", "Edit", "Archive"])
+        self.assertListEqual(
+            [gl["title"] for gl in gear_links], ["New Event", "Export", "Edit", "Archive", "Monitoring"]
+        )
 
         # archive the campaign
         campaign.is_archived = True
@@ -704,7 +707,7 @@ class CampaignTest(TembaTest):
         self.assertContains(response, "Archived", count=2)
 
         gear_links = response.context["view"].get_gear_links()
-        self.assertListEqual([gl["title"] for gl in gear_links], ["Activate", "Export"])
+        self.assertListEqual([gl["title"] for gl in gear_links], ["Export", "Activate"])
 
     def test_view_campaign_archive(self):
         self.login(self.admin)
@@ -1630,7 +1633,9 @@ class CampaignEventCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # 'Created On' system field must be selectable in the form
         contact_fields = [field.key for field in response.context["form"].fields["relative_to"].queryset]
-        self.assertEqual(contact_fields, ["created_on", "last_seen_on", "planting_date", "registered"])
+        self.assertEqual(
+            contact_fields, ["created_on", "last_seen_on", "opt_out_datetime", "planting_date", "registered"]
+        )
 
         # translation in new language is optional
         self.assertUpdateSubmit(

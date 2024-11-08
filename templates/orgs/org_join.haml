@@ -3,6 +3,9 @@
 
 -block title
   {{title}}
+  .subtitle
+    -block subtitle
+      {{block.super}}
 
 -block content
   .formax

@@ -3,8 +3,11 @@ from urllib.parse import urlparse
 
 import boto3
 from botocore.client import Config
+from storages.backends.s3boto3 import S3Boto3Storage
 
+from django.conf import settings
 from django.core.files.storage import DefaultStorage
+from django.urls import reverse
 
 from temba.utils import json
 
@@ -13,8 +16,22 @@ class PublicFileStorage(DefaultStorage):
     default_acl = "public-read"
 
 
+class PrivateFileStorage(DefaultStorage):
+    default_acl = "private"
+
+    def save_with_public_url(self, *args, **kwargs) -> str:
+        location = super(type(self._wrapped), self).save(*args, **kwargs)
+        if isinstance(self._wrapped, S3Boto3Storage):
+            protocol = "http" if settings.DEBUG else "https"
+            relative_path = reverse("file_storage", kwargs={"file_path": location})
+            return f"{protocol}://{settings.HOSTNAME}{relative_path}"
+        return f"{settings.STORAGE_URL}/{location}"
+
+
 public_file_storage = PublicFileStorage()
 public_file_storage.default_acl = "public-read"
+private_file_storage = PrivateFileStorage()
+private_file_storage.default_acl = "private"
 
 _s3_client = None
 

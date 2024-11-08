@@ -107,7 +107,10 @@
           }
         }
 
-        $(container).html(response);
+        // do not update content if it is json
+        if (jqXHR.getResponseHeader("content-type") !== "application/json") {
+          $(container).html(response);
+        }
 
         if (triggerEvents) {
           document.dispatchEvent(new Event("temba-pjax-complete"));
@@ -123,7 +126,6 @@
 
     $.ajax(request);
   }
-
 
 </script>
 

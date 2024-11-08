@@ -187,3 +187,63 @@ class MockTwilioClient(Client):
 
         def update(self, external_id, url):
             print("Updating call for %s to url %s" % (external_id, url))
+
+    @property
+    def studio(self):
+        return MockTwilioClient.MockStudio()
+
+    class MockStudio(object):
+        @property
+        def flows(self):
+            return MockTwilioClient.MockStudioFlows()
+
+    class MockStudioFlows(MockInstanceResource):
+        def __init__(self):
+            pass
+
+        @staticmethod
+        def stream(*_, **__):
+            return iter([MockTwilioClient.MockStudioFlow("FW2932f221ca8741fb714ff97df7986172", "Test Flow")])
+
+    class MockStudioFlow(MockInstanceResource):
+        def __init__(self, sid, friendly_name, status="published"):
+            self.sid = sid
+            self.friendly_name = friendly_name
+            self.status = status
+
+    @property
+    def lookups(self):
+        return MockTwilioClient.MockLookups()
+
+    class MockLookups:
+        @property
+        def v1(self):
+            return MockTwilioClient.MockLookupPhoneNumbers()
+
+    class MockLookupPhoneNumbers(MockInstanceResource):
+        def __init__(self):
+            self.phone_number = ""
+            self._properties = {
+                "caller_name": None,
+                "carrier": {
+                    "error_code": None,
+                    "mobile_country_code": "310",
+                    "mobile_network_code": "456",
+                    "name": "verizon",
+                    "type": "mobile",
+                },
+                "country_code": "US",
+                "national_format": "",
+                "phone_number": "",
+                "add_ons": None,
+                "url": "https://lookups.twilio.com/v1/PhoneNumbers/+15108675310",
+            }
+
+        def phone_numbers(self, phone_number):
+            self.phone_number = phone_number
+            self._properties["phone_number"] = phone_number
+            self._properties["national_format"] = phone_number
+            return self
+
+        def fetch(self, *args, **kwargs):
+            return self

@@ -2,23 +2,141 @@
 -load i18n temba smartmin humanize
 
 -block fields
+  %script{src:"{{ STATIC_URL }}js/temba.js"}
+  %script{src:"{{ STATIC_URL }}js/flow-parameters.js"}
+  %script{src:"{{ STATIC_URL }}js/trigger-common.js"}
+
   -if object.schedule
-    -include 'includes/schedule_fields.haml' with form=form
-    -render_field 'flow'
-    -render_field 'groups'
-    -render_field 'exclude_groups'
-    -render_field 'contacts'
+    :css
+      #schedule-options #start-datetime {
+        margin-top:10px;
+        color: #2980b9;
+        cursor:pointer;
+      }
+
+    #trigger-flow
+      -render_field 'flow'
+    #trigger-groups
+      -render_field 'groups'
+    #trigger-exclude_groups
+      -render_field 'exclude_groups'
+    #schedule-options
+      -render_field 'start_datetime'
+    #recurrence{class:'{% if not object.schedule.next_fire %}hidden{%endif%}'}
+      .repeat-period
+        -render_field 'repeat_period'
+      .repeat-days-container{class:'{% if form.repeat_period.value == "W" %}{% else%}hidden{%endif%}'}
+        -render_field 'repeat_days_of_week'
   -else
-    {{ block.super }}
+    {{block.super}}
+
+  -if object.trigger_type in 'KSMNRC'
+    %h5.embedded-data-update.hidden
+      -trans "Flow Parameters"
+    #embedded-data-update.hidden
+      #embed-container-update
+
+-block modal-extra-style
+  {{block.super}}
+  %link{rel:"stylesheet", href:"{{ STATIC_URL }}css/tailwind.css", type:"text/css"}
+  %link{type:'text/css', rel:'stylesheet', href:"{{ STATIC_URL }}fonts/temba/style.css", media:'all'}
+  :css
+    .embedded-data-update {
+      margin: 0 0 5px 4px;
+      font-weight: 400;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      line-height: normal;
+      color: rgb(119, 119, 119);
+    }
+
+    .embed-row {
+      display: flex;
+    }
+
+    .embed-field-update, .embed-value-update {
+      width: 49%;
+      margin: 0 5px 5px 0;
+    }
+
+    .embed-field-update > input, .embed-value-update > input {
+      width: calc(100% - 18px);
+      font-size: 13px;
+      padding: 9px;
+      border-radius: var(--curvature-widget);;
+      border: 1px solid var(--color-widget-border);
+      color: var(--color-widget-text);
+      outline: none;
+    }
+
+    .embed-field-update > input:read-only {
+      background: #eee;
+    }
+
+    .embed-value-update > input:focus {
+      background: var(--color-widget-bg-focused);
+      border-color: var(--color-focus);
+      box-shadow: var(--widget-box-shadow-focused);
+    }
+
+    .hidden {
+      display: none;
+    }
 
 -block modal-script
   {{ block.super }}
+    :javascript
+      var body = document.querySelector("#update-trigger").getBody();
+      var flowField = body.querySelector("#id_flow");
+      if (flowField) {
+        flowField.addEventListener('change', function (event) {
+          let selectedValue = event.target.values[0].value;
+          let flowId = (selectedValue !== '' ? parseInt(selectedValue) : null);
+          _requestAndBuildFlowParams(flowId);
+        });
+
+        setTimeout(() => {
+          var idFlowVal = flowField.values[0].value;
+          {% if flow_parameters_fields and flow_parameters_values %}
+              var flowParamsFields = "{{ flow_parameters_fields }}".split("|");
+              var flowParamsValues = "{{ flow_parameters_values }}".split("|");
+              _requestAndBuildFlowParams(idFlowVal, flowParamsFields, flowParamsValues);
+          {% else %}
+            _requestAndBuildFlowParams(idFlowVal);
+          {% endif %}
+        }, 100)
+      }
+
+      function _requestAndBuildFlowParams(flowId, fields, values) {
+        if (flowId) {
+          var api_url = "{% url 'flows.flow_flow_parameters' %}?flow_id=" + flowId;
+          $.getJSON(api_url).done(function(data) {
+            if (fields && values) {
+              buildTriggerFlowParams(data.results, values, 'update', body);
+            } else {
+              buildTriggerFlowParams(data.results, [], 'update', body);
+            }
+          });
+        } else {
+          buildTriggerFlowParams([], [], 'update', body);
+        }
+      }
+
   -if object.schedule
     :javascript
       var body = document.querySelector("#update-trigger").getBody();
+      function lockScheduleDate(formContainer) {
+        const scheduleOption = formContainer.querySelector('#schedule-options');
+        if (scheduleOption) {
+          const datePickerElem = scheduleOption.querySelector('#id_start_datetime').shadowRoot
+            .querySelector('lit-flatpickr');
+          datePickerElem.setAttribute('minDate', new Date().toJSON().substring(0,10));
+        }
+      }
+      lockScheduleDate(body);
       var repeatPeriod = body.querySelector("#id_repeat_period");
       var repeatDays = body.querySelector(".repeat-days-container");
-      repeatPeriod.addEventListener("change", function(event){
+      repeatPeriod.addEventListener("change", function(event) {
         var currentRepeat = event.currentTarget.values[0].value;
         if (currentRepeat === 'W') {
           repeatDays.classList.remove("hidden");

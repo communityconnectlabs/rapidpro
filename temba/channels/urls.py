@@ -4,6 +4,7 @@ from django.urls import re_path
 from temba.utils.views import CourierURLHandler
 
 from .models import Channel
+from .types.webchat.views import RenderDownloadImage
 from .views import ChannelCRUDL, ChannelEventCRUDL, ChannelLogCRUDL
 
 # we iterate all our channel types, finding all the URLs they want to wire in
@@ -29,4 +30,5 @@ urlpatterns = [
     re_path(r"^channels/", include(ChannelCRUDL().as_urlpatterns() + ChannelLogCRUDL().as_urlpatterns())),
     re_path(r"^c/", include(courier_urls)),
     re_path(r"^channels/types/", include(type_urls)),
+    re_path(r"^channels/types/webchat/render_download/", RenderDownloadImage.as_view(), {}, "webchat_render_download"),
 ]

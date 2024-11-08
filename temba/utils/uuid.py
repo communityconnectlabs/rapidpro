@@ -23,3 +23,11 @@ def seeded_generator(seed: int):
         return UUID(bytes=bytes(data), version=4)
 
     return generator
+
+
+def is_valid_uuid(value):
+    try:
+        UUID(str(value))
+        return True
+    except ValueError:
+        return False

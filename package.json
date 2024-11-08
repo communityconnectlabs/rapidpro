@@ -9,8 +9,10 @@
     ]
   },
   "dependencies": {
-    "@nyaruka/flow-editor": "1.17.1",
-    "@nyaruka/temba-components": "0.26.0",
+    "@greatnonprofits-nfp/flow-editor": "1.17.10",
+    "@greatnonprofits-nfp/temba-analytics": "1.1.1",
+    "@greatnonprofits-nfp/temba-components": "0.26.1",
+    "@tailwindcss/ui": "0.2.2",
     "colorette": "1.2.2",
     "fa-icons": "0.2.0",
     "is-core-module": "2.4.0",

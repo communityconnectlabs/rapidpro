@@ -1,0 +1,68 @@
+-load i18n channels
+
+%h4
+  -blocktrans
+    To finish, please add this code to your HTML page before the end of the <code>&lt;body&gt;</code> tag.
+
+%h4
+  -trans "Javascript Code"
+%pre.wch-channel
+  %code
+    &lt;div id="ccl-web-surveyor"&gt;&lt;/div&gt;
+    &lt;script src="{{ widget_compiled_file }}" type="text/javascript">&lt;/script>
+    &lt;script>
+      window.renderSurveyor({
+        socketUrl: '{{ channel.address }}',
+        channelUUID: '{{ channel.uuid }}',
+        title: '{{ channel.config.title|adapt_for_widget }}',
+        autoOpen: {{ channel.config.auto_open|adapt_for_widget_bool }},
+        storeHistory: {{ channel.config.store_history|adapt_for_widget_bool }},
+        hostApi: 'https://{{ hostname }}',
+        icon: '{{ channel.config.logo }}',
+        welcomeMessage: '{{ channel.config.welcome_message_default|adapt_for_widget }}',
+        welcomeMessageI18n: {{ welcome_message_i18n }},
+        welcomeMessageQuickReplies: {{ channel.config.welcome_msg_quick_replies|adapt_for_widget_list }},
+        inputTextPlaceholder: '{{ channel.config.inputtext_placeholder_default|adapt_for_widget }}',
+        inputTextPlaceholderI18n: {{ input_placeholder_i18n }},
+        allowAttachments: {{ channel.config.allow_attachments|adapt_for_widget_bool }},
+        enableLanguageSelector: {{ channel.config.allow_multi_language|adapt_for_widget_bool }},
+        fabText: {% if channel.config.allow_fab_text %}'{{channel.config.fab_text|adapt_for_widget}}'{% else %}undefined{% endif %},
+        theme: {
+          widgetBackgroundColor: '{{ "#"|add:channel.config.widget_bg_color }}',
+          chatHeaderBackgroundColor: '{{ "#"|add:channel.config.chat_header_bg_color }}',
+          chatHeaderTextColor: '{{ "#"|add:channel.config.chat_header_text_color }}',
+          automatedChatBackgroundColor: '{{ "#"|add:channel.config.automated_chat_bg }}',
+          automatedChatTextColor: '{{ "#"|add:channel.config.automated_chat_txt }}',
+          userChatBackgroundColor: '{{ "#"|add:channel.config.user_chat_bg }}',
+          userChatTextColor: '{{ "#"|add:channel.config.user_chat_txt }}',
+          logoStyle: '{{ channel.config.logo_style }}',
+          chatButtonHeight: {{ channel.config.chat_button_height }},
+          sidePadding: {{ channel.config.side_padding }},
+          bottomPadding: {{ channel.config.bottom_padding }},
+          sideOfScreen: '{{ channel.config.side_of_screen }}',
+          googleFont: '{{ channel.config.google_font }}',
+          width: '{{channel.config.width}}px',
+          height: '{{channel.config.height}}px',
+          fabTextColor: '{{ "#"|add:channel.config.chat_header_text_color }}',
+          fabBackgroundColor: '{{ "#"|add:channel.config.chat_header_bg_color }}',
+        },
+        meta: {
+          icon: {
+            width: {{ wch_logo_size.width }},
+            height: {{ wch_logo_size.height }}
+          }
+        }
+      }, 'ccl-web-surveyor');
+    &lt;/script>
+
+%a.button-primary.block{id:"btnCopyWCHCode", href:"javascript:;", onclick:"copyWCHCode();"}
+  -trans "Copy"
+
+%hr
+%h4
+  -blocktrans
+    Note: To make sure your website is adapted for the mobile version, please, check if it has some <code>viewport</code> meta tag like:
+%br
+%code
+  :escaped
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />

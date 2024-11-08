@@ -119,7 +119,7 @@ function bindRefreshBlock() {
  */
 document.addEventListener('temba-refresh-begin', function () {
     var checkedIds = getCheckedIds().length > 0;
-    let openedModals = false;
+    var openedModals = false;
     var modals = document.querySelectorAll('temba-modax');
     var activeElement = document.activeElement.tagName;
     var openMenu = !!document.querySelector('.gear-menu.open');
@@ -127,12 +127,7 @@ document.addEventListener('temba-refresh-begin', function () {
 
     var focused = activeElement == 'TEMBA-TEXTINPUT';
 
-    for (var modal of modals) {
-        if (modal.open) {
-            openedModals = true;
-            break;
-        }
-    }
+    openedModals = Array.from(modals).some(function (modal) { return modal.open; });
 
     var pjaxElement = document.querySelector('#pjax');
 

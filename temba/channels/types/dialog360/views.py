@@ -23,6 +23,10 @@ class ClaimView(ClaimViewMixin, SmartFormView):
         )
 
         def clean(self):
+            super().clean()
+            if self.errors:
+                return self.cleaned_data
+
             # first check that our phone number looks sane
             country = self.cleaned_data["country"]
             normalized = URN.normalize_number(self.cleaned_data["number"], country)
@@ -40,10 +44,7 @@ class ClaimView(ClaimViewMixin, SmartFormView):
 
         data = form.cleaned_data
 
-        config = {
-            Channel.CONFIG_BASE_URL: data["base_url"],
-            Channel.CONFIG_AUTH_TOKEN: data["api_key"],
-        }
+        config = {Channel.CONFIG_BASE_URL: data["base_url"], Channel.CONFIG_AUTH_TOKEN: data["api_key"]}
 
         self.object = Channel.create(
             org,

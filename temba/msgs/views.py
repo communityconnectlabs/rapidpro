@@ -17,7 +17,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.db.models.functions.text import Upper
 from django.forms import Form
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -171,14 +171,21 @@ class InboxView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
                 patch_queryset_count(self.object_list, lambda: counts[label])
 
         context = super().get_context_data(**kwargs)
-
         folders = [
             dict(count=counts[SystemLabel.TYPE_INBOX], label=_("Inbox"), url=reverse("msgs.msg_inbox")),
-            dict(count=counts[SystemLabel.TYPE_FLOWS], label=_("Flows"), url=reverse("msgs.msg_flow")),
+            dict(count=counts[SystemLabel.TYPE_FLOWS], label=_("Text Flows"), url=reverse("msgs.msg_flow")),
+            dict(
+                count=counts[SystemLabel.TYPE_FLOW_VOICE], label=_("Voice Flows"), url=reverse("msgs.msg_flow_voice")
+            ),
             dict(count=counts[SystemLabel.TYPE_ARCHIVED], label=_("Archived"), url=reverse("msgs.msg_archived")),
             dict(count=counts[SystemLabel.TYPE_OUTBOX], label=_("Outbox"), url=reverse("msgs.msg_outbox")),
-            dict(count=counts[SystemLabel.TYPE_SENT], label=_("Sent"), url=reverse("msgs.msg_sent")),
-            dict(count=counts[SystemLabel.TYPE_CALLS], label=_("Calls"), url=reverse("channels.channelevent_calls")),
+            dict(count=counts[SystemLabel.TYPE_SENT], label=_("Text Sent"), url=reverse("msgs.msg_sent")),
+            dict(count=counts[SystemLabel.TYPE_SENT_VOICE], label=_("Voice Sent"), url=reverse("msgs.msg_sent_voice")),
+            dict(
+                count=counts[SystemLabel.TYPE_CALLS],
+                label=_("Missed Calls"),
+                url=reverse("channels.channelevent_calls"),
+            ),
             dict(
                 count=counts[SystemLabel.TYPE_SCHEDULED],
                 label=_("Schedules"),
@@ -440,7 +447,7 @@ class BroadcastCRUDL(SmartCRUDL):
                 if has_schedule:
                     success_url = reverse("msgs.broadcast_schedule_read", args=[broadcast.id])
 
-                response = self.render_to_response(self.get_context_data())
+                response = self.render_to_response(self.get_context_data(success_url=success_url))
                 response["Temba-Success"] = success_url
                 return response
 
@@ -521,7 +528,19 @@ class ExportForm(Form):
 
 class MsgCRUDL(SmartCRUDL):
     model = Msg
-    actions = ("inbox", "flow", "archived", "menu", "outbox", "sent", "failed", "filter", "export")
+    actions = (
+        "inbox",
+        "flow",
+        "archived",
+        "menu",
+        "outbox",
+        "sent",
+        "failed",
+        "filter",
+        "export",
+        "flow_voice",
+        "sent_voice",
+    )
 
     class Menu(MenuMixin, OrgPermsMixin, SmartTemplateView):  # pragma: no cover
         def derive_menu(self):
@@ -723,6 +742,17 @@ class MsgCRUDL(SmartCRUDL):
             qs = super().get_queryset(**kwargs)
             return qs.prefetch_related("labels").select_related("contact")
 
+    class FlowVoice(InboxView):
+        title = _("Flow Voice Messages")
+        template_name = "msgs/message_box.haml"
+        system_label = SystemLabel.TYPE_FLOW_VOICE
+        bulk_actions = ("label",)
+        allow_export = True
+
+        def get_queryset(self, **kwargs):
+            qs = super().get_queryset(**kwargs)
+            return qs.prefetch_related("labels").select_related("contact")
+
     class Archived(InboxView):
         title = _("Archived")
         template_name = "msgs/msg_archived.haml"
@@ -773,6 +803,18 @@ class MsgCRUDL(SmartCRUDL):
         def get_queryset(self, **kwargs):
             return super().get_queryset(**kwargs).select_related("contact")
 
+    class SentVoice(InboxView):
+        title = _("Sent Voice Messages")
+        template_name = "msgs/msg_sent.haml"
+        system_label = SystemLabel.TYPE_SENT_VOICE
+        bulk_actions = ()
+        allow_export = True
+        show_channel_logs = True
+
+        def get_queryset(self, **kwargs):  # pragma: needs cover
+            qs = super().get_queryset(**kwargs)
+            return qs.prefetch_related("channel_logs").select_related("contact")
+
     class Failed(InboxView):
         title = _("Failed Outgoing Messages")
         template_name = "msgs/msg_failed.haml"
@@ -790,6 +832,11 @@ class MsgCRUDL(SmartCRUDL):
     class Filter(InboxView):
         template_name = "msgs/msg_filter.haml"
         bulk_actions = ("label",)
+        contact_uuids = []
+
+        def get_filter_contact_uuids(self):
+            msgs = self.get_queryset()
+            return [msg.contact.uuid for msg in msgs]
 
         def derive_title(self, *args, **kwargs):
             return self.derive_label().name
@@ -830,7 +877,12 @@ class MsgCRUDL(SmartCRUDL):
 
             if self.has_org_perm("msgs.broadcast_send"):
                 links.append(
-                    dict(title=_("Send All"), style="btn-primary", href="#", js_class="filter-send-all-send-button")
+                    dict(
+                        id="send-all",
+                        title=_("Send All"),
+                        href=f"{reverse('msgs.broadcast_send')}?c={','.join(self.contact_uuids)}",
+                        modax=_("Send Message"),
+                    )
                 )
 
             links.append(
@@ -870,13 +922,20 @@ class MsgCRUDL(SmartCRUDL):
             return r"^%s/%s/(?P<label>[^/]+)/$" % (path, action)
 
         def derive_label(self):
-            return self.request.user.get_org().msgs_labels.get(uuid=self.kwargs["label"])
+            try:
+                return self.request.user.get_org().msgs_labels.get(uuid=self.kwargs["label"])
+            except Label.DoesNotExist:
+                raise Http404
 
         def get_queryset(self, **kwargs):
             qs = super().get_queryset(**kwargs)
             qs = self.derive_label().filter_messages(qs).filter(visibility=Msg.VISIBILITY_VISIBLE)
+            qs = qs.prefetch_related("labels").select_related("contact")
 
-            return qs.prefetch_related("labels").select_related("contact")
+            # Adding contact uuids to be used on send all functionality
+            self.contact_uuids = [msg.contact.uuid for msg in qs]
+
+            return qs
 
 
 class BaseLabelForm(forms.ModelForm):
@@ -915,6 +974,7 @@ class LabelForm(BaseLabelForm):
         label=_("Folder"),
         widget=SelectWidget(attrs={"placeholder": _("Select folder")}),
         help_text=_("Optional folder which can be used to group related labels."),
+        empty_label=" --------- ",
     )
 
     messages = forms.CharField(required=False, widget=forms.HiddenInput)

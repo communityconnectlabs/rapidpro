@@ -66,22 +66,22 @@ jobs:
         npm install
         sudo npm install -g less
         ln -s ${{ github.workspace }}/temba/settings.py.dev ${{ github.workspace }}/temba/settings.py
-        poetry run ./manage.py migrate
+        poetry run python manage.py migrate
         # fetch and extract rp-indexer
         wget https://github.com/nyaruka/rp-indexer/releases/download/v${{ env.rpindexer-version }}/rp-indexer_${{ env.rpindexer-version }}_linux_amd64.tar.gz
         tar -xvf rp-indexer_${{ env.rpindexer-version }}_linux_amd64.tar.gz rp-indexer
         # fetch, extract and start mailroom
-        wget https://github.com/nyaruka/mailroom/releases/download/v${{ env.mailroom-version }}/mailroom_${{ env.mailroom-version }}_linux_amd64.tar.gz
+        wget https://github.com/rapidpro/mailroom/releases/download/v${{ env.mailroom-version }}/mailroom_${{ env.mailroom-version }}_linux_amd64.tar.gz
         tar -xvf mailroom_${{ env.mailroom-version }}_linux_amd64.tar.gz mailroom
         ./mailroom -db=postgres://temba:temba@localhost:5432/temba?sslmode=disable -redis=redis://localhost:6379/10 -log-level=info > mailroom.log &
 
     - name: Run pre-test checks
       run: |
         # test that everything is well formatted, no missing migrations etc
-        poetry run ./code_check.py --debug
+        poetry run python code_check.py --debug
         # check we can collect and compress all static files
-        poetry run ./manage.py collectstatic --noinput --verbosity=0
-        poetry run ./manage.py compress --extension=".haml" --settings=temba.settings_compress
+        poetry run python manage.py collectstatic --noinput --verbosity=0
+        poetry run python manage.py compress --extension=".haml" --settings=temba.settings_compress
 
     - name: Run tests
       run: |
@@ -98,4 +98,5 @@ jobs:
       if: success()
       uses: codecov/codecov-action@v1
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true

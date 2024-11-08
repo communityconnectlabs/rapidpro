@@ -3,19 +3,22 @@ import logging
 import random
 import smtplib
 import string
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict, namedtuple
 from datetime import datetime, timedelta
 from decimal import Decimal
 from email.utils import parseaddr
 from functools import cmp_to_key
 from urllib.parse import parse_qs, quote, unquote, urlparse
+from uuid import uuid4
 
 import iso8601
 import pyotp
 import pytz
+import regex
 import requests
 from packaging.version import Version
-from smartmin.users.models import FailedLogin, RecoveryToken
+from rest_framework.views import APIView
+from smartmin.users.models import FailedLogin, RecoveryToken, is_password_complex
 from smartmin.users.views import Login
 from smartmin.views import (
     SmartCreateView,
@@ -39,15 +42,18 @@ from django.contrib.auth.models import Group, User
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.views import LoginView as AuthLoginView
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.db.models import ExpressionWrapper, F, IntegerField, Q, Sum
 from django.forms import Form
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import resolve_url
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.encoding import DjangoUnicodeDecodeError, force_str
+from django.utils.functional import cached_property
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.text import slugify
@@ -62,11 +68,14 @@ from temba.classifiers.models import Classifier
 from temba.contacts.models import ContactGroupCount
 from temba.flows.models import Flow
 from temba.formax import FormaxMixin
+from temba.links.models import Link
+from temba.triggers.models import Trigger
 from temba.utils import analytics, get_anonymous_user, json, languages, str_to_bool
 from temba.utils.email import is_valid_address, send_template_email
 from temba.utils.fields import (
     ArbitraryJsonChoiceField,
     CheckboxWidget,
+    CompletionTextarea,
     InputWidget,
     SelectMultipleWidget,
     SelectWidget,
@@ -76,10 +85,26 @@ from temba.utils.http import http_headers
 from temba.utils.timezones import TimeZoneFormField
 from temba.utils.views import ComponentFormMixin, NonAtomicMixin, RequireRecentAuthMixin, SpaMixin
 
-from .models import BackupToken, IntegrationType, Invitation, Org, OrgCache, OrgRole, TopUp, get_stripe_credentials
+# session key for storing a two-factor enabled user's id once we've checked their password
+from ..utils.text import random_string
+from .models import (
+    DEFAULT_FIELDS_PAYLOAD_GIFTCARDS,
+    DEFAULT_FIELDS_PAYLOAD_LOOKUPS,
+    DEFAULT_INDEXES_FIELDS_PAYLOAD_GIFTCARDS,
+    DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS,
+    GIFTCARDS,
+    LOOKUPS,
+    BackupToken,
+    IntegrationType,
+    Invitation,
+    Org,
+    OrgCache,
+    OrgRole,
+    TopUp,
+    get_stripe_credentials,
+)
 from .tasks import apply_topups_task
 
-# session key for storing a two-factor enabled user's id once we've checked their password
 TWO_FACTOR_USER_SESSION_KEY = "_two_factor_user_id"
 TWO_FACTOR_STARTED_SESSION_KEY = "_two_factor_started_on"
 TWO_FACTOR_LIMIT_SECONDS = 5 * 60
@@ -414,6 +439,17 @@ class OrgSignupForm(forms.ModelForm):
 
         return email.lower()
 
+    def clean_password(self):
+        password = self.cleaned_data["password"]
+        if not is_password_complex(password):
+            raise forms.ValidationError(
+                _(
+                    "Passwords must have at least 8 characters, including one uppercase, "
+                    "one lowercase and one number"
+                )
+            )
+        return password
+
     class Meta:
         model = Org
         fields = "__all__"
@@ -423,22 +459,37 @@ class OrgGrantForm(forms.ModelForm):
     first_name = forms.CharField(
         help_text=_("The first name of the workspace administrator"),
         max_length=User._meta.get_field("first_name").max_length,
+        widget=InputWidget(attrs={"placeholder": _("First name")}),
     )
     last_name = forms.CharField(
         help_text=_("Your last name of the workspace administrator"),
         max_length=User._meta.get_field("last_name").max_length,
+        widget=InputWidget(attrs={"placeholder": _("Last name")}),
     )
     email = forms.EmailField(
-        help_text=_("Their email address"), max_length=User._meta.get_field("username").max_length
+        help_text=_("Their email address"),
+        max_length=User._meta.get_field("username").max_length,
+        widget=InputWidget(attrs={"placeholder": _("name@domain.com")}),
     )
-    timezone = TimeZoneFormField(help_text=_("The timezone for the workspace"))
     password = forms.CharField(
-        widget=forms.PasswordInput,
         required=False,
         help_text=_("Their password, at least eight letters please. (leave blank for existing login)"),
+        widget=InputWidget(attrs={"password": True, "placeholder": _("Password")}),
     )
-    name = forms.CharField(label=_("Workspace"), help_text=_("The name of the new workspace"))
-    credits = forms.ChoiceField(choices=(), help_text=_("The initial number of credits granted to this workspace"))
+    timezone = TimeZoneFormField(
+        help_text=_("The timezone for the workspace"),
+        widget=SelectWidget,
+    )
+    name = forms.CharField(
+        label=_("Workspace"),
+        help_text=_("The name of the new workspace"),
+        widget=InputWidget(attrs={"widget_only": False, "placeholder": _("My Company, Inc.")}),
+    )
+    credits = forms.ChoiceField(
+        choices=(),
+        help_text=_("The initial number of credits granted to this workspace"),
+        widget=SelectWidget,
+    )
 
     def __init__(self, *args, **kwargs):
         branding = kwargs["branding"]
@@ -668,6 +719,51 @@ class InferOrgMixin:
         return self.request.user.get_org()
 
 
+class GiftcardsForm(forms.ModelForm):
+    collection = forms.CharField(
+        required=False,
+        label=_("New Collection"),
+        max_length=30,
+        help_text="Enter a name for your collection. ex: my gifts, new lookup table",
+        widget=InputWidget,
+    )
+    remove = forms.CharField(widget=forms.HiddenInput, max_length=6, required=False)
+    index = forms.CharField(widget=forms.HiddenInput, max_length=10, required=False)
+
+    def add_collection_fields(self, collection_type):
+        collections = []
+
+        for collection in self.instance.get_collections(collection_type=collection_type):
+            collections.append(dict(collection=collection))
+
+        self.fields = OrderedDict(self.fields.items())
+        return collections
+
+    def clean_collection(self):
+        new_collection = self.data.get("collection")
+        is_removing = self.data.get("remove", "false") == "true"
+
+        if not is_removing and (not new_collection or new_collection.isspace()):
+            raise ValidationError(_("This field is required"))
+
+        if not is_removing and not regex.match(r"^[A-Za-z0-9_\- ]+$", new_collection, regex.V0):
+            raise ValidationError(
+                _(
+                    "Please make sure the collection name only contains "
+                    "alphanumeric characters [0-9a-zA-Z], spaces, underscores and hyphens"
+                )
+            )
+
+        if new_collection in self.instance.get_collections(collection_type=OrgCRUDL.Giftcards.collection_type):
+            raise ValidationError("This collection name has already been used")
+
+        return new_collection[:30] if new_collection else None
+
+    class Meta:
+        model = Org
+        fields = ("id", "collection", "remove", "index")
+
+
 class UserCRUDL(SmartCRUDL):
     model = User
     actions = (
@@ -685,7 +781,8 @@ class UserCRUDL(SmartCRUDL):
         fields = ("username", "orgs", "date_joined")
         link_fields = ("username",)
         ordering = ("-date_joined",)
-        search_fields = ("username",)
+        search_fields = ("username__icontains", "first_name__icontains", "last_name__icontains")
+        template_name = "smartmin/users/user_list.haml"
 
         def get_username(self, user):
             return mark_safe(f"<a href='{reverse('users.user_update', args=(user.id,))}'>{user.username}</a>")
@@ -1112,6 +1209,7 @@ class OrgCRUDL(SmartCRUDL):
         "clear_cache",
         "twilio_connect",
         "twilio_account",
+        "twilio_stats",
         "vonage_account",
         "vonage_connect",
         "plan",
@@ -1127,6 +1225,18 @@ class OrgCRUDL(SmartCRUDL):
         "transfer_credits",
         "smtp_server",
         "workspace",
+        "giftcards",
+        "lookups",
+        "parse_data_view",
+        "parse_data_import",
+        "send_invite",
+        "translations",
+        "channels_mapping",
+        "calendar_automation_flow",
+        "shortener_custom_domain",
+        "translate",
+        "opt_out_message",
+        "dashboard_setup",
     )
 
     model = Org
@@ -1291,6 +1401,13 @@ class OrgCRUDL(SmartCRUDL):
                 data = self.cleaned_data["import_file"].read()
                 try:
                     json_data = json.loads(force_str(data))
+                except DjangoUnicodeDecodeError:
+                    # handling exception for ISO-8859-1 encoding
+                    try:
+                        data = data.decode("ISO-8859-1")
+                        json_data = json.loads(force_str(data))
+                    except (DjangoUnicodeDecodeError, ValueError):
+                        raise ValidationError(_("This file is not a valid flow definition file."))
                 except (DjangoUnicodeDecodeError, ValueError):
                     raise ValidationError(_("This file is not a valid flow definition file."))
 
@@ -1298,6 +1415,59 @@ class OrgCRUDL(SmartCRUDL):
                     raise ValidationError(
                         _("This file is no longer valid. Please export a new version and try again.")
                     )
+
+                # preprocessing of the triggers
+                if json_data.get("triggers", []):
+                    triggers = []
+                    for trigger in json_data["triggers"]:
+                        if trigger.get("trigger_type") == "K":
+                            filter_params = {
+                                "org": self.org,
+                                "keyword": trigger.get("keyword", ""),
+                                "is_active": True,
+                                "is_archived": False,
+                            }
+                            if trigger.get("groups"):
+                                filter_params["groups__name__in"] = [group["name"] for group in trigger["groups"]]
+                            else:
+                                filter_params["groups"] = None
+
+                            if not Trigger.objects.filter(**filter_params).exists():
+                                triggers.append(trigger)
+                        else:
+                            triggers.append(trigger)
+                    json_data["triggers"] = triggers
+                    data = json.dumps(json_data)
+
+                if json_data.get("links", []):
+                    links = []
+                    processed_links = {}
+                    modified_link_uuids = {}
+                    for link in json_data["links"]:
+                        full_link = f"{link.get('name')} {link.get('destination')}"
+                        filter_params = {
+                            "org": self.org,
+                            "name": link.get("name"),
+                            "destination": link.get("destination"),
+                            "is_archived": False,
+                        }
+                        if full_link in processed_links:
+                            uuid_of_processed_link = processed_links[full_link]
+                            modified_link_uuids[link["uuid"]] = modified_link_uuids.get(
+                                uuid_of_processed_link, uuid_of_processed_link
+                            )
+                        elif Link.objects.exclude(org=self.org).filter(uuid=link["uuid"]).exists():
+                            new_uuid = str(uuid4())
+                            while new_uuid in str(data):
+                                new_uuid = str(uuid4())
+                            modified_link_uuids[link["uuid"]] = new_uuid
+                        if not Link.objects.filter(**filter_params).exists() and full_link not in processed_links:
+                            processed_links[full_link] = link["uuid"]
+                            links.append(link)
+                    json_data["links"] = links
+                    data = json.dumps(json_data)
+                    for origin_link_uuid, new_link_uuid in modified_link_uuids.items():
+                        data = data.replace(origin_link_uuid, new_link_uuid)
 
                 return data
 
@@ -1327,6 +1497,16 @@ class OrgCRUDL(SmartCRUDL):
             return super().form_valid(form)  # pragma: needs cover
 
     class Export(SpaMixin, InferOrgMixin, OrgPermsMixin, SmartTemplateView):
+        def get_gear_links(self):
+            include_archived = bool(int(self.request.GET.get("archived", 0)))
+            return [
+                {
+                    "id": "archived-trigger",
+                    "title": _("Hide Archived") if include_archived else _("Show Archived"),
+                    "href": "?" if include_archived else "?archived=1",
+                }
+            ]
+
         def post(self, request, *args, **kwargs):
             org = self.get_object()
 
@@ -1336,8 +1516,9 @@ class OrgCRUDL(SmartCRUDL):
             # fetch the selected flows and campaigns
             flows = Flow.objects.filter(id__in=flow_ids, org=org, is_active=True)
             campaigns = Campaign.objects.filter(id__in=campaign_ids, org=org, is_active=True)
+            links = []
 
-            components = set(itertools.chain(flows, campaigns))
+            components = set(itertools.chain(flows, campaigns, links))
 
             # add triggers for the selected flows
             for flow in flows:
@@ -1617,7 +1798,6 @@ class OrgCRUDL(SmartCRUDL):
         success_message = "Plivo credentials verified. You can now add a Plivo channel."
 
         def form_valid(self, form):
-
             auth_id = form.cleaned_data["auth_id"]
             auth_token = form.cleaned_data["auth_token"]
 
@@ -1852,7 +2032,6 @@ class OrgCRUDL(SmartCRUDL):
 
         def derive_queryset(self, **kwargs):
             queryset = super().derive_queryset(**kwargs)
-            queryset = queryset.filter(is_active=True)
 
             brands = self.request.branding.get("keys")
             if brands:
@@ -1877,7 +2056,7 @@ class OrgCRUDL(SmartCRUDL):
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
-            context["searches"] = ["Nyaruka"]
+            context["searches"] = []
             context["anon_query"] = str_to_bool(self.request.GET.get("anon"))
             context["flagged_query"] = str_to_bool(self.request.GET.get("flagged"))
             context["suspended_query"] = str_to_bool(self.request.GET.get("suspended"))
@@ -1896,6 +2075,27 @@ class OrgCRUDL(SmartCRUDL):
         class Form(forms.ModelForm):
             parent = forms.IntegerField(required=False)
             plan_end = forms.DateTimeField(required=False)
+            non_contact_hours = forms.BooleanField(required=False)
+            viewers = forms.ModelMultipleChoiceField(
+                User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
+            )
+            editors = forms.ModelMultipleChoiceField(
+                User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
+            )
+            surveyors = forms.ModelMultipleChoiceField(
+                User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
+            )
+            administrators = forms.ModelMultipleChoiceField(
+                User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
+            )
 
             def __init__(self, org, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -1942,6 +2142,10 @@ class OrgCRUDL(SmartCRUDL):
                     "is_multi_user",
                     "is_multi_org",
                     "is_suspended",
+                    "administrators",
+                    "editors",
+                    "viewers",
+                    "surveyors",
                 )
 
         form_class = Form
@@ -1997,6 +2201,25 @@ class OrgCRUDL(SmartCRUDL):
                         )
                     )
 
+                if org.is_ivr_machine_detection_enabled():
+                    links.append(
+                        dict(
+                            title=_("Disable IVR Machine Detection"),
+                            style="button-secondary",
+                            posterize=True,
+                            href="%s?action=disable-machine-detection" % reverse("orgs.org_update", args=[org.pk]),
+                        )
+                    )
+                else:
+                    links.append(
+                        dict(
+                            title=_("Enable IVR Machine Detection"),
+                            style="button-secondary",
+                            posterize=True,
+                            href="%s?action=enable-machine-detection" % reverse("orgs.org_update", args=[org.pk]),
+                        )
+                    )
+
                 if self.request.user.has_perm("orgs.org_delete"):
                     links.append(
                         dict(
@@ -2017,6 +2240,10 @@ class OrgCRUDL(SmartCRUDL):
                     self.get_object().verify()
                 elif action == "unflag":
                     self.get_object().unflag()
+                elif action == "enable-machine-detection":
+                    self.get_object().set_ivr_machine_detection(value="true")
+                elif action == "disable-machine-detection":
+                    self.get_object().set_ivr_machine_detection(value="false")
                 return HttpResponseRedirect(self.get_success_url())
             return super().post(request, *args, **kwargs)
 
@@ -2026,7 +2253,15 @@ class OrgCRUDL(SmartCRUDL):
             cleaned_data = self.form.cleaned_data
 
             obj.limits = cleaned_data["limits"]
+            obj.config = obj.config or {}
+            obj.config["non_contact_hours"] = cleaned_data["non_contact_hours"]
             return obj
+
+        def derive_initial(self):
+            org = self.get_object()
+            initial = super().derive_initial()
+            initial["non_contact_hours"] = (org.config or {}).get("non_contact_hours", False)
+            return initial
 
     class Delete(ModalMixin, SmartDeleteView):
         cancel_url = "id@orgs.org_update"
@@ -2482,7 +2717,7 @@ class OrgCRUDL(SmartCRUDL):
         }
 
         def get_user_orgs(self):
-            return self.request.user.get_user_orgs(self.request.branding.get("keys"))
+            return self.request.user.get_user_orgs()
 
         def get_success_url(self):
             role = self.request.org.get_user_role(self.request.user)
@@ -2577,6 +2812,17 @@ class OrgCRUDL(SmartCRUDL):
 
             role = OrgRole.from_code(self.invitation.user_group) or OrgRole.VIEWER
             obj.add_user(user, role)
+
+            nested_orgs = obj.org_set.all()
+            if role == OrgRole.ADMINISTRATOR and nested_orgs:
+                AdministratorModel = Org.administrators.through
+                AdministratorModel.objects.bulk_create(
+                    [
+                        AdministratorModel(org=nested_org, user=user)
+                        for nested_org in nested_orgs
+                        if user not in nested_org.administrators.all()
+                    ]
+                )
 
             # make the invitation inactive
             self.invitation.is_active = False
@@ -2701,6 +2947,17 @@ class OrgCRUDL(SmartCRUDL):
             if org:
                 role = OrgRole.from_code(self.invitation.user_group) or OrgRole.VIEWER
                 org.add_user(self.request.user, role)
+
+                nested_orgs, user = org.org_set.all(), self.request.user
+                if role == OrgRole.ADMINISTRATOR and nested_orgs:
+                    AdministratorModel = Org.administrators.through
+                    AdministratorModel.objects.bulk_create(
+                        [
+                            AdministratorModel(org=nested_org, user=user)
+                            for nested_org in nested_orgs
+                            if user not in nested_org.administrators.all()
+                        ]
+                    )
 
                 # make the invitation inactive
                 self.invitation.is_active = False
@@ -2894,6 +3151,7 @@ class OrgCRUDL(SmartCRUDL):
 
             obj.created_by = self.user
             obj.modified_by = self.user
+            obj.slug = Org.get_unique_slug(self.form.cleaned_data["name"])
             obj.brand = self.request.branding.get("brand", settings.DEFAULT_BRAND)
             obj.language = self.request.branding.get("language", settings.DEFAULT_LANGUAGE)
             obj.plan = self.request.branding.get("default_plan", settings.DEFAULT_PLAN)
@@ -3026,6 +3284,496 @@ class OrgCRUDL(SmartCRUDL):
                     resthook["resthook"].release(self.request.user)
 
             return super().pre_save(obj)
+
+    class Giftcards(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        form_class = GiftcardsForm
+        success_message = ""
+        success_url = "@orgs.org_giftcards"
+        collection_type = GIFTCARDS
+        fields_payload = DEFAULT_FIELDS_PAYLOAD_GIFTCARDS
+        indexes_payload = DEFAULT_INDEXES_FIELDS_PAYLOAD_GIFTCARDS
+        submit_button_name = _("Save")
+
+        def get_gear_links(self):
+            links = []
+
+            if self.has_org_perm("orgs.org_lookups"):
+                links.append(dict(title=_("Lookups"), href=reverse("orgs.org_lookups")))
+
+            return links
+
+        def get_form(self):
+            form = super().get_form()
+            self.current_collections = form.add_collection_fields(collection_type=self.collection_type)
+            return form
+
+        def get_context_data(self, **kwargs):
+            context = super(OrgCRUDL.Giftcards, self).get_context_data(**kwargs)
+            context["current_collections"] = self.current_collections
+            context["view_title"] = "Gift Card"
+            context["remove_div_title"] = "giftcard"
+            context["view_url"] = reverse("orgs.org_giftcards")
+            context["icon_slug"] = "icon-credit-2"
+            return context
+
+        @staticmethod
+        def get_collection_full_name(org_slug, org_id, name, collection_type=str(GIFTCARDS).lower()):
+            from django.template.defaultfilters import slugify
+
+            slug_new_collection = slugify(name)
+            collection_full_name = (
+                f"{settings.PARSE_SERVER_NAME}_{org_slug}_{org_id}_{collection_type}_{slug_new_collection}"
+            )
+            collection_full_name = collection_full_name.replace("-", "")
+
+            return collection_full_name
+
+        def pre_save(self, obj):
+            new_collection = self.form.data.get("collection")
+            headers = {
+                "X-Parse-Application-Id": settings.PARSE_APP_ID,
+                "X-Parse-Master-Key": settings.PARSE_MASTER_KEY,
+                "Content-Type": "application/json",
+            }
+
+            if new_collection:
+                collection_full_name = OrgCRUDL.Giftcards.get_collection_full_name(
+                    org_slug=self.object.slug,
+                    org_id=self.object.id,
+                    name=new_collection,
+                    collection_type=str(self.collection_type).lower(),
+                )
+                url = f"{settings.PARSE_URL}/schemas/{collection_full_name}"
+                data = {
+                    "className": collection_full_name,
+                    "fields": self.fields_payload,
+                    "indexes": self.indexes_payload,
+                }
+                response = requests.post(url, data=json.dumps(data), headers=headers)
+                if response.status_code == 200:
+                    self.object.add_collection_to_org(
+                        user=self.request.user, name=new_collection, collection_type=self.collection_type
+                    )
+
+            remove = self.form.data.get("remove", "false") == "true"
+            index = self.form.data.get("index", None)
+
+            if remove and index:
+                index = int(index)
+                collections = self.object.get_collections(collection_type=self.collection_type)
+
+                try:
+                    collection = collections[index]
+                except Exception:
+                    messages.error(self.request, _("Collection not found"))
+                    collection = None
+
+                if collection:
+                    collection_full_name = OrgCRUDL.Giftcards.get_collection_full_name(
+                        org_slug=self.object.slug,
+                        org_id=self.object.id,
+                        name=collection,
+                        collection_type=str(self.collection_type).lower(),
+                    )
+                    url = f"{settings.PARSE_URL}/schemas/{collection_full_name}"
+                    purge_url = f"{settings.PARSE_URL}/purge/{collection_full_name}"
+
+                    response_purge = requests.delete(purge_url, headers=headers)
+                    if response_purge.status_code in [200, 404]:
+                        response = requests.delete(url, headers=headers)
+
+                        if response.status_code in [200, 400]:
+                            self.object.remove_collection_from_org(
+                                user=self.request.user, index=index, collection_type=self.collection_type
+                            )
+            return super().pre_save(obj)
+
+    class Lookups(Giftcards):
+        class LookupsForm(GiftcardsForm):
+            def clean_collection(self):
+                new_collection = self.data.get("collection")
+                is_removing = self.data.get("remove", "false") == "true"
+
+                if not is_removing and (not new_collection or new_collection.isspace()):
+                    raise ValidationError(_("This field is required"))
+
+                if not is_removing and not regex.match(r"^[A-Za-z0-9_\- ]+$", new_collection, regex.V0):
+                    raise ValidationError(
+                        _(
+                            "Please make sure the collection name only contains "
+                            "alphanumeric characters [0-9a-zA-Z], spaces, underscores and hyphens"
+                        )
+                    )
+
+                if new_collection in self.instance.get_collections(collection_type=OrgCRUDL.Lookups.collection_type):
+                    raise ValidationError(_("This collection name has already been used"))
+
+                return new_collection[:30] if new_collection else None
+
+            class Meta:
+                model = Org
+                fields = ("id", "collection", "remove", "index")
+
+        form_class = LookupsForm
+        success_message = ""
+        success_url = "@orgs.org_lookups"
+        default_template = "orgs/org_giftcards.html"
+        collection_type = LOOKUPS
+        fields_payload = DEFAULT_FIELDS_PAYLOAD_LOOKUPS
+        indexes_payload = DEFAULT_INDEXES_FIELDS_PAYLOAD_LOOKUPS
+        submit_button_name = _("Save")
+
+        def get_gear_links(self):
+            links = []
+
+            if self.has_org_perm("orgs.org_giftcards"):
+                links.append(dict(title=_("Gift Cards"), href=reverse("orgs.org_giftcards")))
+
+            return links
+
+        def get_form(self):
+            form = super(OrgCRUDL.Lookups, self).get_form()
+            self.current_collections = form.add_collection_fields(collection_type=self.collection_type)
+            return form
+
+        def get_context_data(self, **kwargs):
+            context = super(OrgCRUDL.Lookups, self).get_context_data(**kwargs)
+            context["current_collections"] = self.current_collections
+            context["view_title"] = "Lookup"
+            context["remove_div_title"] = "lookup"
+            context["view_url"] = reverse("orgs.org_lookups")
+            context["icon_slug"] = "icon-filter"
+            return context
+
+    class ParseDataView(InferOrgMixin, OrgPermsMixin, SmartListView):
+        class CollectionPaginator(Paginator):
+            parse_headers = {
+                "X-Parse-Application-Id": settings.PARSE_APP_ID,
+                "X-Parse-REST-API-Key": settings.PARSE_REST_KEY,
+                "Content-Type": "application/json",
+            }
+
+            def __init__(self, collection, per_page, orphans=0, allow_empty_first_page=True):
+                self.collection = collection
+                super().__init__([], per_page, orphans, allow_empty_first_page)
+
+            @cached_property
+            def count(self):
+                count_url = f"{settings.PARSE_URL}/classes/{self.collection}?count=1"
+                count_response = requests.get(count_url, headers=self.parse_headers)
+                if count_response.status_code == 200 and count_response.json().get("count"):
+                    return count_response.json()["count"]
+                return 0
+
+            def page(self, number):
+                """Return a Page object for the given 1-based page number."""
+                number = self.validate_number(number)
+                skip = (number - 1) * self.per_page
+                parse_url = (
+                    f"{settings.PARSE_URL}/classes/{self.collection}" f"?order=order&limit={self.per_page}&skip={skip}"
+                )
+                response = requests.get(parse_url, headers=self.parse_headers)
+
+                results = []
+                if response.status_code == 200 and "results" in response.json():
+                    results_resp = response.json().get("results")
+                    for result in results_resp:
+                        result_obj = namedtuple("ParseResult", result.keys(), rename=True)(*result.values())
+                        results.append(result_obj)
+
+                return self._get_page(tuple(results), number, self)
+
+        paginator_class = CollectionPaginator
+        paginate_by = 200
+
+        def derive_fields(self):
+            db = self.request.GET.get("db")
+            type = self.request.GET.get("type")
+
+            collection_type = str(GIFTCARDS).lower() if type == "giftcard" else str(LOOKUPS).lower()
+
+            org = self.request.user.get_org()
+            collection = OrgCRUDL.Giftcards.get_collection_full_name(
+                org_slug=org.slug, org_id=org.id, name=db, collection_type=collection_type
+            )
+
+            parse_headers = {
+                "X-Parse-Application-Id": settings.PARSE_APP_ID,
+                "X-Parse-Master-Key": settings.PARSE_MASTER_KEY,
+                "Content-Type": "application/json",
+            }
+
+            parse_url = f"{settings.PARSE_URL}/schemas/{collection}"
+
+            response = requests.get(parse_url, headers=parse_headers)
+
+            fields = []
+            if response.status_code == 200 and "fields" in response.json():
+                fields = response.json().get("fields")
+                reserved_keywords = [
+                    "class",
+                    "for",
+                    "return",
+                    "global",
+                    "pass",
+                    "or",
+                    "raise",
+                    "def",
+                    "ACL",
+                    "createdAt",
+                    "order",
+                ]
+                fields = [item for item in sorted(fields.keys()) if item not in reserved_keywords]
+
+            return tuple(fields)
+
+        def derive_queryset(self, **kwargs):
+            db = self.request.GET.get("db")
+            type = self.request.GET.get("type")
+
+            collection_type = str(GIFTCARDS).lower() if type == "giftcard" else str(LOOKUPS).lower()
+
+            org = self.request.user.get_org()
+            collection = OrgCRUDL.Giftcards.get_collection_full_name(
+                org_slug=org.slug, org_id=org.id, name=db, collection_type=collection_type
+            )
+            return collection
+
+        def derive_title(self):
+            return self.request.GET.get("db")
+
+        def lookup_obj_attribute(self, obj, field):
+            return getattr(obj, field, None) if hasattr(obj, field) else None
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["searches"] = []
+            return context
+
+    class ParseDataImport(InferOrgMixin, OrgPermsMixin, SmartFormView):
+        class ParseDataImportForm(Form):
+            collection_type = forms.CharField()
+            collection = forms.CharField()
+            import_file = forms.FileField(help_text=_("The import file"))
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+                super().__init__(*args, **kwargs)
+
+            def clean_import_file(self):
+                # Max file size something around 150MB
+                max_file_size = 157286400
+
+                if not regex.match(r"^[A-Za-z0-9_.\-*() ]+$", self.cleaned_data["import_file"].name, regex.V0):
+                    raise forms.ValidationError(
+                        "Please make sure the file name only contains "
+                        "alphanumeric characters [0-9a-zA-Z] and "
+                        "special characters in -, _, ., (, )"
+                    )
+
+                collection_type = self.cleaned_data.get("collection_type")
+
+                if not self.cleaned_data["import_file"].name.endswith((".csv", ".xls", ".xlsx")):
+                    raise forms.ValidationError(_("The file must be a CSV or XLS."))
+
+                if self.cleaned_data["import_file"].size > max_file_size:
+                    raise forms.ValidationError(
+                        _(
+                            "Your file exceeds the 150MB file limit. Please submit a support request if you need to "
+                            "upload a file 150MB or larger."
+                        )
+                    )
+
+                try:
+                    needed_check = True if collection_type == "giftcard" else False
+                    extension = self.cleaned_data["import_file"].name.split(".")[-1]
+                    Org.get_parse_import_file_headers(
+                        ContentFile(self.cleaned_data["import_file"].read()),
+                        needed_check=needed_check,
+                        extension=extension,
+                    )
+                    self.cleaned_data["import_file"].seek(0)
+                except Exception as e:
+                    raise forms.ValidationError(str(e))
+
+                return self.cleaned_data["import_file"]
+
+            def clean_collection_type(self):
+                collection_type = self.cleaned_data.get("collection_type")
+                if collection_type not in ["lookup", "giftcard"]:
+                    raise forms.ValidationError(_("The collection type is not valid."))
+                return collection_type
+
+            def clean_collection(self):
+                collection = self.cleaned_data.get("collection")
+                collection_type = self.cleaned_data.get("collection_type")
+
+                if not collection:
+                    raise forms.ValidationError(_("You should inform the collection name."))
+
+                collection_full_name = OrgCRUDL.Giftcards.get_collection_full_name(
+                    org_slug=self.org.slug,
+                    org_id=self.org.id,
+                    name=collection,
+                    collection_type=f"{str(collection_type).lower()}s",
+                )
+                return collection_full_name
+
+        form_class = ParseDataImportForm
+        fields = ("import_file", "collection_type", "collection")
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            collection = self.request.GET.get("db")
+            collection_type = self.request.GET.get("type")
+
+            search_in = GIFTCARDS if collection_type == "giftcard" else LOOKUPS
+
+            # Checking if org has the collection added
+            org_collections = org.get_collections(collection_type=search_in)
+            if collection not in org_collections:
+                raise Http404
+
+            context["collection"] = collection
+            context["collection_type"] = collection_type
+            context["collection_title"] = collection.capitalize()
+            context["collection_type_title"] = "Gift card" if collection_type == "giftcard" else "Lookup"
+            context["dayfirst"] = org.get_dayfirst()
+
+            return context
+
+        def get_success_url(self):  # pragma: needs cover
+            return reverse(f"orgs.org_{self.request.GET.get('type')}s")
+
+        def derive_success_message(self):
+            user = self.get_user()
+            return _(f"We are preparing your import. We will e-mail you at {user.email} when it is ready.")
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def form_valid(self, form):
+            from pandas import read_csv, read_excel
+
+            from .tasks import import_data_to_parse
+
+            org = self.request.user.get_org()
+            user = self.get_user()
+
+            try:
+                import_file = form.cleaned_data["import_file"]
+                collection_type = form.cleaned_data["collection_type"]
+                collection = form.cleaned_data["collection"]
+
+                if import_file.name.endswith(".csv"):
+                    file_type = "csv"
+                elif import_file.name.endswith((".xls", ".xlsx")):
+                    file_type = "xls"
+                else:
+                    raise Exception
+
+                parse_headers = {
+                    "X-Parse-Application-Id": settings.PARSE_APP_ID,
+                    "X-Parse-Master-Key": settings.PARSE_MASTER_KEY,
+                    "Content-Type": "application/json",
+                }
+
+                parse_url = f"{settings.PARSE_URL}/schemas/{collection}"
+
+                config = self.org.config
+                collection_real_name = None
+                needed_create_header = True
+
+                required_columns = ["objectId", "updatedAt", "createdAt", "ACL"]
+                if collection_type == "giftcard":
+                    required_columns += ["active", "identifier"]
+
+                response = requests.get(parse_url, headers=parse_headers)
+                if response.status_code == 200 and "fields" in response.json():
+                    fields = response.json().get("fields")
+
+                    for key in list(fields.keys()):
+                        if key in required_columns:
+                            del fields[key]
+                        else:
+                            del fields[key]["type"]
+                            fields[key]["__op"] = "Delete"
+
+                    remove_fields = {"className": collection, "fields": fields}
+
+                    purge_url = f"{settings.PARSE_URL}/purge/{collection}"
+                    response_purge = requests.delete(purge_url, headers=parse_headers)
+
+                    if response_purge.status_code in [200, 404]:
+                        requests.put(parse_url, data=json.dumps(remove_fields), headers=parse_headers)
+                    else:
+                        raise ValidationError(
+                            _("An attempt to clear previous data was failed. The import process was interrupted.")
+                        )
+
+                COLLECTION = LOOKUPS if collection_type == "lookup" else GIFTCARDS
+                for item in config.get(COLLECTION, []):
+                    full_name = OrgCRUDL.Giftcards.get_collection_full_name(org.slug, org.id, item, COLLECTION.lower())
+                    if full_name == collection:
+                        collection_real_name = item
+                        break
+
+                # Reading file data with pandas
+                read_file = read_csv if file_type == "csv" else read_excel
+                try:
+                    spamreader = read_file(import_file, index_col=False, dtype=str)
+                except UnicodeDecodeError:
+                    import_file.seek(0)
+                    spamreader = read_file(import_file, encoding="ISO-8859-1", index_col=False, dtype=str)
+
+                # Making sure that data in each column has correct type, e.g. string, float
+                for column in spamreader.columns:
+                    if str(column).startswith("numeric_"):
+                        spamreader[column] = spamreader[column].str.replace(",", "").astype(float)
+                    else:
+                        spamreader[column] = spamreader[column].astype(str)
+
+                # Removing empty columns name from CSV files imported
+                spamreader = spamreader.loc[:, ~spamreader.columns.str.contains("^Unnamed")]
+
+                # Converting dataframe into list of rows for the next processing
+                headers = spamreader.columns.tolist()
+                rows_list = spamreader.values.tolist()
+                spamreader = [headers] + rows_list
+
+                if spamreader:
+                    import_data_to_parse.delay(
+                        org.get_branding(),
+                        user.email,
+                        list(spamreader),
+                        parse_url,
+                        parse_headers,
+                        collection,
+                        collection_type,
+                        collection_real_name,
+                        import_file.name,
+                        needed_create_header,
+                        org.timezone.zone,
+                        org.get_dayfirst(),
+                    )
+            except ValidationError as e:
+                form._errors["import_file"] = form.error_class(e.messages)
+                return self.form_invalid(form)
+            except Exception as e:
+                # this is an unexpected error, report it to sentry
+                logger = logging.getLogger(__name__)
+                logger.error(f"Exception on app import: {e.args}", exc_info=True)
+                form._errors["import_file"] = form.error_class(
+                    [_("Sorry, your file is invalid. In addition, the file must be a CSV or XLS")]
+                )
+                return self.form_invalid(form)
+
+            return super().form_valid(form)  # pragma: needs cover
 
     class Token(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
         class TokenForm(forms.ModelForm):
@@ -3222,15 +3970,28 @@ class OrgCRUDL(SmartCRUDL):
                 twilio_client = org.get_twilio_client()
                 if twilio_client:  # pragma: needs cover
                     formax.add_section("twilio", reverse("orgs.org_twilio_account"), icon="icon-channel-twilio")
+                    formax.add_section(
+                        "twilio-stats", reverse("orgs.org_twilio_stats"), icon="icon-channel-twilio", action="link"
+                    )
 
                 vonage_client = org.get_vonage_client()
                 if vonage_client:  # pragma: needs cover
                     formax.add_section("vonage", reverse("orgs.org_vonage_account"), icon="icon-vonage")
 
+            formax.add_section("opt_out_message", reverse("orgs.org_opt_out_message"), icon="icon-bubble-dots-2")
+
             if self.has_org_perm("classifiers.classifier_read"):
                 classifiers = org.classifiers.filter(is_active=True).order_by("created_on")
                 for classifier in classifiers:
                     self.add_classifier_section(formax, classifier)
+
+                if classifiers.filter(classifier_type="dialogflow").exists():
+                    formax.add_section(
+                        "duplicates_check",
+                        reverse("classifiers.classifier_check_duplicates"),
+                        icon="icon-checkbox-checked",
+                        action="link",
+                    )
 
             if self.has_org_perm("tickets.ticketer_read"):
                 from temba.tickets.types.internal import InternalType
@@ -3252,6 +4013,17 @@ class OrgCRUDL(SmartCRUDL):
 
             if self.has_org_perm("orgs.org_edit"):
                 formax.add_section("org", reverse("orgs.org_edit"), icon="icon-office")
+                formax.add_section("channels_mapping", reverse("orgs.org_channels_mapping"), icon="icon-feed")
+
+            if self.has_org_perm("orgs.org_calendar_automation_flow"):
+                formax.add_section(
+                    "calendar_automation_flow", reverse("orgs.org_calendar_automation_flow"), icon="icon-flow"
+                )
+
+            if self.has_org_perm("orgs.org_shortener_custom_domain"):
+                formax.add_section(
+                    "shortener_custom_domain", reverse("orgs.org_shortener_custom_domain"), icon="icon-earth"
+                )
 
             # only pro orgs get multiple users
             if self.has_org_perm("orgs.org_manage_accounts") and org.is_multi_user:
@@ -3259,9 +4031,13 @@ class OrgCRUDL(SmartCRUDL):
 
             if self.has_org_perm("orgs.org_languages"):
                 formax.add_section("languages", reverse("orgs.org_languages"), icon="icon-language")
+                formax.add_section("translations", reverse("orgs.org_translations"), icon="icon-language")
 
             if self.has_org_perm("orgs.org_country") and org.get_branding().get("location_support"):
                 formax.add_section("country", reverse("orgs.org_country"), icon="icon-location2")
+
+            if self.has_org_perm("orgs.org_dashboard_setup") or self.request.user.is_superuser:
+                formax.add_section("dashboard_setup", reverse("orgs.org_dashboard_setup"), icon="icon-bars-3")
 
             if self.has_org_perm("orgs.org_smtp_server"):
                 formax.add_section("email", reverse("orgs.org_smtp_server"), icon="icon-envelop")
@@ -3277,27 +4053,8 @@ class OrgCRUDL(SmartCRUDL):
             if self.has_org_perm("orgs.org_prometheus"):
                 formax.add_section("prometheus", reverse("orgs.org_prometheus"), icon="icon-prometheus", nobutton=True)
 
-            if self.has_org_perm("orgs.org_resthooks"):
-                formax.add_section(
-                    "resthooks",
-                    reverse("orgs.org_resthooks"),
-                    icon="icon-cloud-lightning",
-                    wide="true",
-                )
-
-            if self.has_org_perm("orgs.org_two_factor"):
-                if user.get_settings().two_factor_enabled:
-                    formax.add_section(
-                        "two_factor", reverse("orgs.user_two_factor_tokens"), icon="icon-two-factor", action="link"
-                    )
-                else:
-                    formax.add_section(
-                        "two_factor", reverse("orgs.user_two_factor_enable"), icon="icon-two-factor", action="link"
-                    )
-
             # show globals and archives
             formax.add_section("globals", reverse("globals.global_list"), icon="icon-global", action="link")
-            formax.add_section("archives", reverse("archives.archive_message"), icon="icon-box", action="link")
 
     class TwilioAccount(ComponentFormMixin, InferOrgMixin, OrgPermsMixin, SmartUpdateView):
 
@@ -3372,6 +4129,41 @@ class OrgCRUDL(SmartCRUDL):
                 org.connect_twilio(account_sid, account_token, user)
                 return super().form_valid(form)
 
+    class TwilioStats(OrgPermsMixin, SmartTemplateView):
+        permission = "channels.channel_read"
+
+        def get_context_data(self, **kwargs):
+            context_data = super().get_context_data(**kwargs)
+            if self.request.META.get("HTTP_X_FORMAX", 0):
+                return context_data
+
+            org = self.org
+            twilio_client = org.get_twilio_client()
+            if not twilio_client:
+                return Http404
+
+            origin_stats = org.twilio_stats
+            types = ["sms_in", "mms_in", "calls_in", "sms_out", "mms_out", "calls_out"]
+            table_stats = defaultdict(lambda: {t: 0 for t in types})
+            total_stats = {t: 0 for t in types}
+            for origin_category, items in origin_stats.items():
+                category = origin_category.removesuffix("bound").replace("-", "_")
+                for start, value in items:
+                    int_value = str(value).split(".")[0]
+                    table_stats[start][category] = int_value
+                    total_stats[category] += int(int_value)
+
+            twilio_sid = twilio_client.account_sid
+            sid_length = len(twilio_sid)
+            context_data["twilio_token"] = "%s%s" % ("\u066D" * (sid_length - 16), twilio_sid[-16:])
+            context_data["total_stats"] = total_stats
+            context_data["twilio_stats"] = sorted(
+                map(lambda data: {"month_start": data[0], **data[1]}, table_stats.items()),
+                key=lambda data: data["month_start"],
+                reverse=True,
+            )
+            return context_data
+
     class Edit(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
         class Form(forms.ModelForm):
             name = forms.CharField(max_length=128, label=_("Workspace Name"), help_text="", widget=InputWidget())
@@ -3445,12 +4237,12 @@ class OrgCRUDL(SmartCRUDL):
 
                 super().__init__(*args, **kwargs)
 
-                self.fields["from_org"].queryset = Org.objects.filter(Q(parent=org) | Q(id=org.id)).order_by(
-                    "-parent", "name", "id"
-                )
-                self.fields["to_org"].queryset = Org.objects.filter(Q(parent=org) | Q(id=org.id)).order_by(
-                    "-parent", "name", "id"
-                )
+                self.fields["from_org"].queryset = Org.objects.filter(
+                    Q(parent=org) | Q(id=org.id), is_active=True
+                ).order_by("-parent", "name", "id")
+                self.fields["to_org"].queryset = Org.objects.filter(
+                    Q(parent=org) | Q(id=org.id), is_active=True
+                ).order_by("-parent", "name", "id")
 
             def clean(self):
                 cleaned_data = super().clean()
@@ -3618,6 +4410,535 @@ class OrgCRUDL(SmartCRUDL):
             self.org = self.derive_org()
             return self.request.user.has_perm("orgs.org_country") or self.has_org_perm("orgs.org_country")
 
+    class Translations(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class TranslationsForm(forms.ModelForm):
+            provider = forms.ChoiceField(
+                choices=[
+                    ("google", "Google Translate"),
+                    ("deepl", "DeepL Translate"),
+                ],
+                widget=SelectWidget(attrs={"searchable": True}),
+                label=_("Live Translation System"),
+                help_text=_("The system that can be used to provide an approximate translation."),
+                initial="US",
+            )
+
+            api_key = forms.CharField(
+                required=False,
+                label=_("API Key"),
+                widget=InputWidget,
+                help_text=_("You can find your API Key on the system website."),
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+                super().__init__(*args, **kwargs)
+
+            def clean(self):
+                cleaned_data = super().clean()
+                provider = cleaned_data.get("provider")
+                api_key = cleaned_data.get("api_key")
+                if not api_key:
+                    return cleaned_data
+
+                _, r_status = self.org.get_translation(
+                    "validation text", "spa", provider=provider, api_key=api_key, use_config=False
+                )
+                if r_status != 200:
+                    self.add_error("api_key", "API Key is wrong or invalid.")
+
+            class Meta:
+                model = Org
+                fields = ("provider", "api_key")
+
+        success_message = ""
+        form_class = TranslationsForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["provider"] = (org.config or {}).get("translator_service", {}).get("provider", "")
+            initial["api_key"] = (org.config or {}).get("translator_service", {}).get("api_key", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+            services = {
+                "google": "Google Translate",
+                "deepl": "DeepL Translate",
+            }
+            context["translator_service"] = (org.config or {}).get("translator_service", {}).get("provider", "")
+            context["translator_service"] = services.get(context["translator_service"], "")
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            if form.cleaned_data.get("provider") and form.cleaned_data.get("api_key"):
+                current_config.update(
+                    {
+                        "translator_service": {
+                            "provider": form.cleaned_data["provider"],
+                            "api_key": form.cleaned_data["api_key"],
+                        }
+                    }
+                )
+            else:
+                try:
+                    current_config.pop("translator_service")
+                except KeyError:
+                    pass
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class ChannelsMapping(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class ChannelsMappingForm(forms.ModelForm):
+            voice_channel = forms.ChoiceField(
+                choices=[],
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+                label=_("IVR/Voice"),
+                help_text=_("The default channel for IVR/Voice."),
+                required=False,
+            )
+
+            sms_channel = forms.ChoiceField(
+                choices=[],
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+                label=_("SMS/MMS"),
+                help_text=_("The default channel for SMS/MMS."),
+                required=False,
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+                self.fields["voice_channel"].choices = [("", "")] + list(
+                    self.org.channels.filter(
+                        Q(role__contains=Channel.ROLE_CALL) | Q(role__contains=Channel.ROLE_ANSWER),
+                        schemes=["tel"],
+                        is_active=True,
+                    )
+                    .order_by("name")
+                    .values_list("uuid", "name")
+                )
+
+                self.fields["sms_channel"].choices = [("", "")] + list(
+                    self.org.channels.filter(
+                        Q(role__contains=Channel.ROLE_SEND) | Q(role__contains=Channel.ROLE_RECEIVE),
+                        schemes=["tel"],
+                        is_active=True,
+                    )
+                    .order_by("name")
+                    .values_list("uuid", "name")
+                )
+
+            def clean(self):
+                cleaned_data = super().clean()
+                voice_channel = cleaned_data.get("voice_channel")
+                sms_channel = cleaned_data.get("sms_channel")
+
+                is_voice_valid_channel = True
+                is_sms_valid_channel = True
+
+                if voice_channel:
+                    is_voice_valid_channel = self.org.channels.filter(uuid=voice_channel).first() is not None
+
+                if sms_channel:
+                    is_sms_valid_channel = self.org.channels.filter(uuid=sms_channel).first() is not None
+
+                if not is_voice_valid_channel:
+                    self.add_error("voice_channel", "Voice channel is not valid or is not on the organization anymore")
+
+                if not is_sms_valid_channel:
+                    self.add_error("sms_channel", "SMS channel is not validor is not on the organization anymore")
+
+            class Meta:
+                model = Org
+                fields = ("voice_channel", "sms_channel")
+
+        success_message = ""
+        form_class = ChannelsMappingForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["voice_channel"] = (org.config or {}).get("voice_default_channel", "")
+            initial["sms_channel"] = (org.config or {}).get("sms_default_channel", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            voice_channel = (org.config or {}).get("voice_default_channel", None)
+            if voice_channel:
+                channel = self.org.channels.filter(uuid=voice_channel).first()
+                context["voice_default_channel"] = channel.name
+
+            sms_channel = (org.config or {}).get("sms_default_channel", None)
+            if sms_channel:
+                channel = self.org.channels.filter(uuid=sms_channel).first()
+                context["sms_default_channel"] = channel.name
+
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            voice_channel = form.cleaned_data.get("voice_channel")
+            sms_channel = form.cleaned_data.get("sms_channel")
+
+            if not voice_channel:
+                try:
+                    current_config.pop("voice_default_channel")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"voice_default_channel": voice_channel})
+
+            if not sms_channel:
+                try:
+                    current_config.pop("sms_default_channel")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"sms_default_channel": sms_channel})
+
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class CalendarAutomationFlow(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class CalendarAutomationFlowForm(forms.ModelForm):
+            flow = forms.ChoiceField(
+                choices=[],
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+                label=_("Message Flow"),
+                help_text=_("The flow to be triggered on the calendar automation."),
+                required=False,
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+                self.fields["flow"].choices = [("", "")] + list(
+                    self.org.flows.filter(
+                        is_active=True,
+                        is_system=False,
+                        flow_type=Flow.TYPE_MESSAGE,
+                    )
+                    .order_by("name")
+                    .values_list("uuid", "name")
+                )
+
+            def clean(self):
+                cleaned_data = super().clean()
+                flow = cleaned_data.get("flow")
+
+                is_valid_flow = True
+                if flow:
+                    is_valid_flow = (
+                        self.org.flows.filter(
+                            uuid=flow,
+                            is_active=True,
+                            is_system=False,
+                            flow_type=Flow.TYPE_MESSAGE,
+                        ).first()
+                        is not None
+                    )
+
+                if not is_valid_flow:
+                    self.add_error(
+                        "flow", "The flow selected is not associated with this organization or is not active"
+                    )
+
+            class Meta:
+                model = Org
+                fields = ("flow",)
+
+        success_message = ""
+        form_class = CalendarAutomationFlowForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["flow"] = (org.config or {}).get("calendar_automation_flow", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            flow = (org.config or {}).get("calendar_automation_flow", None)
+            if flow:
+                flow_obj = self.org.flows.filter(uuid=flow).first()
+                context["flow"] = flow_obj.name
+
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            flow = form.cleaned_data.get("flow")
+
+            if not flow:
+                try:
+                    current_config.pop("calendar_automation_flow")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"calendar_automation_flow": flow})
+
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class ShortenerCustomDomain(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class ShortenerCustomDomainForm(forms.ModelForm):
+            domain = forms.CharField(
+                required=False,
+                label=_("Custom Domain"),
+                widget=InputWidget,
+                help_text=_(
+                    "Please enter your custom domain here. And contact your account team for further configuration."
+                ),
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+            def clean_domain(self):
+                domain = self.cleaned_data.get("domain")
+                if domain and not str(domain).startswith("https://"):
+                    domain = f"https://{domain}"
+
+                return domain
+
+            class Meta:
+                model = Org
+                fields = ("domain",)
+
+        success_message = ""
+        form_class = ShortenerCustomDomainForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["domain"] = (org.config or {}).get("shortener_custom_domain", "")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+
+            domain = (org.config or {}).get("shortener_custom_domain", None)
+            if domain:
+                context["domain"] = domain
+
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            domain = form.cleaned_data.get("domain")
+
+            if not domain:
+                try:
+                    current_config.pop("shortener_custom_domain")
+                except KeyError:
+                    pass
+            else:
+                current_config.update({"shortener_custom_domain": domain})
+
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class DashboardSetup(InferOrgMixin, OrgPermsMixin, SmartFormView):
+        class DashboardSetupForm(forms.Form):
+            dashboards = forms.MultipleChoiceField(
+                label=_("Metabase dashboards"),
+                help_text=_("The dashboards that will be displayed for this organization."),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Dashboards"}),
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+
+                super().__init__(*args, **kwargs)
+
+                self.fields["dashboards"].choices = self.org.dashboards.filter(is_active=True).values_list(
+                    "metabase_dashboard_id", "metabase_dashboard_title"
+                )
+
+        success_message = "Metabase dashboards set up successfully"
+        form_class = DashboardSetupForm
+        fields = ("dashboards",)
+        success_url = "@orgs.org_home"
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["dashboards"] = [item.get("id") for item in (org.config or {}).get("metabase_dashboards", [])]
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            org = self.request.user.get_org()
+            context["metabase_dashboards"] = ", ".join(
+                [item.get("title") for item in (org.config or {}).get("metabase_dashboards", [])]
+            )
+            return context
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            selected_dashboards = form.cleaned_data.get("dashboards", [])
+            if selected_dashboards:
+                dashboards = org.dashboards.filter(metabase_dashboard_id__in=selected_dashboards).order_by(
+                    "metabase_dashboard_title"
+                )
+                current_config.update(
+                    dict(
+                        metabase_dashboards=[
+                            dict(
+                                id=item.metabase_dashboard_id,
+                                title=item.metabase_dashboard_title,
+                            )
+                            for item in dashboards
+                        ]
+                    )
+                )
+            else:
+                try:
+                    current_config.pop("metabase_dashboards")
+                except KeyError:
+                    pass
+            org.config = current_config
+            org.save(update_fields=["config"])
+
+            response = self.render_to_response(self.get_context_data(form=form))
+            response["REDIRECT"] = self.get_success_url()
+            return response
+
+    class OptOutMessage(InferOrgMixin, OrgPermsMixin, SmartUpdateView):
+        class OptOutMessageForm(forms.ModelForm):
+            disable_opt_out = forms.BooleanField(
+                required=False,
+                label=_("Disable opt-out"),
+                widget=CheckboxWidget(),
+                help_text=_("Soft opt-out opts users out for negative messages like swear words."),
+                initial=False,
+            )
+
+            message = forms.CharField(
+                required=False,
+                label=_("Message"),
+                widget=CompletionTextarea(
+                    attrs={
+                        "style": "--textarea-height:110px",
+                        "placeholder": _("Type the message here"),
+                        "widget_only": True,
+                    }
+                ),
+            )
+
+            def __init__(self, *args, **kwargs):
+                self.org = kwargs["org"]
+                del kwargs["org"]
+                super().__init__(*args, **kwargs)
+
+            class Meta:
+                model = Org
+                fields = ("message", "disable_opt_out")
+
+        success_message = ""
+        form_class = OptOutMessageForm
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.derive_org()
+            initial["message"] = (org.config or {}).get("opt_out_message_back")
+            initial["disable_opt_out"] = (org.config or {}).get("opt_out_disabled")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def form_valid(self, form):
+            org = self.request.user.get_org()
+            current_config = org.config or {}
+            if form.cleaned_data.get("message"):
+                current_config.update(dict(opt_out_message_back=form.cleaned_data.get("message")))
+            else:
+                try:
+                    current_config.pop("opt_out_message_back")
+                except KeyError:
+                    pass
+
+            if form.cleaned_data.get("disable_opt_out"):
+                current_config.update(dict(opt_out_disabled=True))
+            else:
+                try:
+                    current_config.pop("opt_out_disabled")
+                except KeyError:
+                    pass
+            org.config = current_config
+            org.save(update_fields=["config"])
+            return super().form_valid(form)
+
+    class Translate(OrgPermsMixin, APIView):
+        def post(self, request, *args, **kwargs):
+            text = request.data.get("text")
+            source = request.data.get("source")
+            target = request.data.get("target")
+            if not all((text, target)):
+                return JsonResponse({"error": "Fields, 'text' or 'target', are not provided."}, status=400)
+            org = self.derive_org()
+            translated_text, status_code = org.get_translation(text, target, source)
+            return JsonResponse({"translated": translated_text}, status=status_code)
+
     class ClearCache(SmartUpdateView):  # pragma: no cover
         fields = ("id",)
         success_message = None
@@ -3630,6 +4951,61 @@ class OrgCRUDL(SmartCRUDL):
                 name=cache.name, count=num_deleted
             )
 
+    class SendInvite(ModalMixin, InferOrgMixin, OrgPermsMixin, SmartFormView):
+        class SentInviteForm(forms.Form):
+            # set email field readonly when email provided
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                if self.initial.get("email"):
+                    self.fields["email"].widget.attrs["readonly"] = True
+
+            email = forms.EmailField(label=_("Invite people to your organization"), widget=InputWidget, required=True)
+            user_group = forms.ChoiceField(
+                choices=(("A", _("Administrators")), ("E", _("Editors")), ("V", _("Viewers")), ("S", _("Surveyors"))),
+                required=True,
+                initial="V",
+                label=_("User group"),
+                widget=SelectWidget,
+            )
+
+        form_class = SentInviteForm
+        success_url = "@orgs.org_manage_accounts"
+        fields = ("email", "user_group")
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org, invitation_id = self.request.user.get_org(), self.request.GET.get("id")
+            invite = Invitation.objects.filter(org=org, id=invitation_id).first()
+            if invite:
+                initial["email"] = invite.email
+                initial["user_group"] = invite.user_group
+            return initial
+
+        def form_valid(self, form):
+            user = self.request.user
+            org = user.get_org()
+            email = form.cleaned_data.get("email")
+            user_group = form.cleaned_data.get("user_group")
+
+            # if they already have an invite, update it
+            invites = Invitation.objects.filter(email=email, org=org).order_by("-pk")
+            invitation = invites.first()
+
+            if invitation:
+                invites.exclude(pk=invitation.pk).delete()  # remove any old invites
+
+                invitation.user_group = user_group
+                invitation.is_active = True
+                # generate new secret for this invitation
+                invitation.secret = random_string(64)
+                invitation.save()
+            else:
+                invitation = Invitation.create(org, self.request.user, email, user_group)
+
+            invitation.send_invitation()
+
+            return super().form_valid(form)
+
 
 class TopUpCRUDL(SmartCRUDL):
     actions = ("list", "create", "read", "manage", "update")
@@ -3637,7 +5013,12 @@ class TopUpCRUDL(SmartCRUDL):
 
     class Read(OrgPermsMixin, SmartReadView):
         def derive_queryset(self, **kwargs):  # pragma: needs cover
-            return TopUp.objects.filter(is_active=True, org=self.request.user.get_org()).order_by("-expires_on")
+            query = TopUp.objects.filter(is_active=True, org=self.request.user.get_org())
+            if settings.CREDITS_EXPIRATION:
+                query = query.order_by("-expires_on")
+            else:
+                query = query.order_by("-created_on")
+            return query
 
     class List(OrgPermsMixin, SmartListView):
         def derive_queryset(self, **kwargs):
@@ -3650,6 +5031,9 @@ class TopUpCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
             context["org"] = self.request.user.get_org()
 
+            if settings.CREDITS_EXPIRATION:
+                context["credits_expiration"] = True
+
             now = timezone.now()
             context["now"] = now
             context["expiration_period"] = now + timedelta(days=30)
@@ -3659,12 +5043,13 @@ class TopUpCRUDL(SmartCRUDL):
 
             def compare(topup1, topup2):  # pragma: no cover
 
-                # non expired first
-                now = timezone.now()
-                if topup1.expires_on > now and topup2.expires_on <= now:
-                    return -1
-                elif topup2.expires_on > now and topup1.expires_on <= now:
-                    return 1
+                if settings.CREDITS_EXPIRATION:
+                    # non expired first
+                    now = timezone.now()
+                    if topup1.expires_on > now and topup2.expires_on <= now:
+                        return -1
+                    elif topup2.expires_on > now and topup1.expires_on <= now:
+                        return 1
 
                 # then push those without credits remaining to the bottom
                 if topup1.credits_remaining is None:
@@ -3678,11 +5063,12 @@ class TopUpCRUDL(SmartCRUDL):
                 elif topup2.credits_remaining and not topup1.credits_remaining:
                     return 1
 
-                # sor the rest by their expiration date
-                if topup1.expires_on > topup2.expires_on:
-                    return -1
-                elif topup1.expires_on < topup2.expires_on:
-                    return 1
+                if settings.CREDITS_EXPIRATION:
+                    # sor the rest by their expiration date
+                    if topup1.expires_on > topup2.expires_on:
+                        return -1
+                    elif topup1.expires_on < topup2.expires_on:
+                        return 1
 
                 # if we end up with the same expiration, show the oldest first
                 return topup2.id - topup1.id
@@ -3709,7 +5095,9 @@ class TopUpCRUDL(SmartCRUDL):
 
         def save(self, obj):
             obj.org = Org.objects.get(pk=self.request.GET["org"])
-            return TopUp.create(self.request.user, price=obj.price, credits=obj.credits, org=obj.org)
+            return TopUp.create(
+                self.request.user, price=obj.price, credits=obj.credits, org=obj.org, comment=obj.comment
+            )
 
         def post_save(self, obj):
             obj = super().post_save(obj)
@@ -3732,9 +5120,13 @@ class TopUpCRUDL(SmartCRUDL):
         This is only for root to be able to manage topups on an account
         """
 
-        fields = ("credits", "price", "comment", "created_on", "expires_on")
         success_url = "@orgs.org_manage"
-        default_order = "-expires_on"
+        fields = ("credits", "price", "comment", "created_on")
+        if settings.CREDITS_EXPIRATION:
+            fields = fields + ("expires_on",)
+            default_order = "-expires_on"
+        else:
+            default_order = "-created_on"
 
         def lookup_field_link(self, context, field, obj):
             return reverse("orgs.topup_update", args=[obj.id])
@@ -3750,6 +5142,8 @@ class TopUpCRUDL(SmartCRUDL):
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
+            for obj in context["object_list"]:
+                obj.comment = obj.comment if obj.comment else "-"
             context["org"] = self.org
             return context
 

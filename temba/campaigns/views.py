@@ -1,3 +1,5 @@
+import json
+
 from smartmin.views import (
     SmartCreateView,
     SmartCRUDL,
@@ -11,16 +13,19 @@ from smartmin.views import (
 from django import forms
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import Sum
 from django.http import Http404, HttpResponseRedirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from temba.contacts.models import ContactField, ContactGroup
 from temba.flows.models import Flow
 from temba.msgs.models import Msg
 from temba.orgs.views import MenuMixin, ModalMixin, OrgFilterMixin, OrgObjPermsMixin, OrgPermsMixin
-from temba.utils import languages
+from temba.utils import build_flow_parameters, flow_params_context, languages
 from temba.utils.fields import CompletionTextarea, InputWidget, SelectWidget, TembaChoiceField
+from temba.utils.gsm7 import GSM_REPLACEMENTS
 from temba.utils.views import BulkActionMixin, SpaMixin
 
 from .models import Campaign, CampaignEvent
@@ -49,7 +54,7 @@ class CampaignForm(forms.ModelForm):
 
 class CampaignCRUDL(SmartCRUDL):
     model = Campaign
-    actions = ("create", "read", "update", "list", "archived", "archive", "activate", "menu")
+    actions = ("create", "read", "update", "list", "archived", "archive", "activate", "menu", "monitoring")
 
     class Menu(MenuMixin, SmartTemplateView):
         def derive_menu(self):
@@ -143,20 +148,20 @@ class CampaignCRUDL(SmartCRUDL):
             links = []
 
             if self.object.is_archived:
+                if self.has_org_perm("orgs.org_export"):
+                    links.append(
+                        dict(
+                            title=_("Export"),
+                            href=f"{reverse('orgs.org_export')}?campaign={self.object.id}&archived=1",
+                        )
+                    )
+
                 if self.has_org_perm("campaigns.campaign_activate"):
                     links.append(
                         dict(
                             title="Activate",
                             js_class="posterize activate-campaign",
                             href=reverse("campaigns.campaign_activate", args=[self.object.id]),
-                        )
-                    )
-
-                if self.has_org_perm("orgs.org_export"):
-                    links.append(
-                        dict(
-                            title=_("Export"),
-                            href=f"{reverse('orgs.org_export')}?campaign={self.object.id}&archived=1",
                         )
                     )
 
@@ -168,6 +173,7 @@ class CampaignCRUDL(SmartCRUDL):
                             title=_("New Event"),
                             href=f"{reverse('campaigns.campaignevent_create')}?campaign={self.object.pk}",
                             modax=_("New Event"),
+                            style="button-primary",
                         )
                     )
                 if self.has_org_perm("orgs.org_export"):
@@ -194,6 +200,15 @@ class CampaignCRUDL(SmartCRUDL):
                         )
                     )
 
+                if self.has_org_perm("flows.flow_monitoring"):
+                    links.append(
+                        dict(
+                            id="Monitoring",
+                            title=_("Monitoring"),
+                            href=reverse("campaigns.campaign_monitoring", args=[self.object.pk]),
+                        )
+                    )
+
             user = self.get_user()
             if user.is_superuser or user.is_staff:
                 links.append(
@@ -205,6 +220,11 @@ class CampaignCRUDL(SmartCRUDL):
                 )
 
             return links
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["gsm_replacements"] = json.dumps(GSM_REPLACEMENTS)
+            return context
 
     class Create(OrgPermsMixin, ModalMixin, SmartCreateView):
         fields = ("name", "group")
@@ -269,6 +289,7 @@ class CampaignCRUDL(SmartCRUDL):
     class Archived(BaseList):
         fields = ("name",)
         bulk_actions = ("restore",)
+        search_fields = ("name__icontains", "group__name__icontains")
 
         def derive_title(self):
             return _("Archived Campaigns")
@@ -297,26 +318,105 @@ class CampaignCRUDL(SmartCRUDL):
             obj.apply_action_restore(self.request.user, Campaign.objects.filter(id=obj.id))
             return obj
 
+    class Monitoring(OrgPermsMixin, SmartReadView):
+        refresh = 60000
+        template_name = "flows/monitoring.haml"
+        permission = "flows.flow_monitoring"
+        select_data_sql = """
+        SELECT id,
+          min(cast(t.flow_data ->> 'start_time' as timestamp))     as start_time,
+          max(cast(t.flow_data ->> 'updated_time' as timestamp))   as updated_time,
+          sum(cast(t.flow_data ->> 'invalid_contacts' as integer)) as invalid_contacts,
+          sum(cast(t.flow_data ->> 'reached_contacts' as integer)) as reached_contacts,
+          sum(cast(t.flow_data ->> 'bounces' as integer))          as bounces,
+          sum(cast(t.flow_data ->> 'inbound' as integer))          as inbound,
+          sum(cast(t.flow_data ->> 'opt_outs' as integer))         as opt_outs,
+          max(cast(t.flow_data ->> 'has_running' as integer))      as has_running,
+          sum(cast(t.flow_data ->> 'carrier_errors' as integer))   as carrier_errors,
+          sum(cast(t.flow_data ->> 'ccl_errors' as integer))       as ccl_errors
+        FROM (
+          SELECT cp.id id, (
+            SELECT row_to_json(flow_data)
+            FROM (
+              SELECT min(fs.created_on)                                       as start_time,
+                     max(fs.modified_on)                                      as updated_time,
+                     count(ct.id) filter ( where ct.is_active = false )       as invalid_contacts,
+                     count(fr.id) filter ( where fr.status = 'C' )            as reached_contacts,
+                     count(fr.id) filter ( where fr.responded = true )        as bounces,
+                     max(case when fr.status in ('S', 'P') then 1 else 0 end) as has_running,
+                     count(ct.id) filter ( where ct.status = 'S' )            as opt_outs,
+                     count(fr.id) filter ( where fr.status = 'F')             as carrier_errors,
+                     count(fr.id) filter ( where fr.status in ('E', 'I'))     as ccl_errors,
+                     sum((
+                       SELECT count(*) filter ( where evt->>'type' = 'msg_received' )
+                       FROM jsonb_array_elements(fr.events) evt)
+                     ) as inbound
+              FROM flows_flowstart as fs
+              LEFT JOIN flows_flowrun as fr on fs.id = fr.start_id
+              LEFT JOIN contacts_contact as ct on fr.contact_id = ct.id
+              WHERE fs.campaign_event_id = ce.id
+              GROUP BY fs.campaign_event_id
+            ) flow_data) flow_data
+          FROM campaigns_campaign as cp LEFT JOIN campaigns_campaignevent as ce on ce.campaign_id = cp.id
+          WHERE cp.id = %s AND ce.event_type = 'F'
+          GROUP BY cp.id, ce.id
+        ) t GROUP BY t.id;
+        """
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["current_time"] = timezone.now()
+
+            campaign = self.get_object()
+            data = Campaign.objects.using("readonly").raw(self.select_data_sql, params=[campaign.id])
+            agg_events = campaign.events.using("readonly").aggregate(total_contacts=Sum("flow_starts__contact_count"))
+            total_contacts = agg_events.get("total_contacts") or 0
+            try:
+                processed_contacts = sum(
+                    [data[0].reached_contacts or 0, data[0].ccl_errors or 0, data[0].carrier_errors or 0]
+                )
+                context["start_time"] = data[0].start_time or "-"
+                context["updated_time"] = data[0].updated_time or "-"
+                context["end_time"] = data[0].updated_time if not data[0].has_running else None
+                context["total_contacts"] = total_contacts
+                context["invalid_contacts"] = data[0].invalid_contacts or 0
+                context["reached_contacts"] = data[0].reached_contacts or 0
+                context["remaining_contacts"] = total_contacts - processed_contacts
+                context["bounces"] = data[0].bounces or 0
+                context["inbound"] = data[0].inbound or 0
+                context["opt_outs"] = data[0].opt_outs or 0
+                context["ccl_errors"] = data[0].ccl_errors or 0
+                context["carrier_errors"] = data[0].carrier_errors or 0
+            except IndexError:
+                context.update(
+                    {
+                        "start_time": "-",
+                        "updated_time": "-",
+                        "end_time": None,
+                        "total_contacts": 0,
+                        "invalid_contacts": 0,
+                        "reached_contacts": 0,
+                        "remaining_contacts": 0,
+                        "bounces": 0,
+                        "inbound": 0,
+                        "opt_outs": 0,
+                        "ccl_errors": 0,
+                        "carrier_errors": 0,
+                    }
+                )
+            return context
+
 
 class CampaignEventForm(forms.ModelForm):
-
     event_type = forms.ChoiceField(
         choices=((CampaignEvent.TYPE_MESSAGE, "Send a message"), (CampaignEvent.TYPE_FLOW, "Start a flow")),
         required=True,
-        widget=SelectWidget(attrs={"placeholder": _("Select the event type"), "widget_only": True}),
+        widget=SelectWidget,
     )
 
-    direction = forms.ChoiceField(
-        choices=(("B", "Before"), ("A", "After")),
-        required=True,
-        widget=SelectWidget(attrs={"placeholder": _("Relative date direction"), "widget_only": True}),
-    )
+    direction = forms.ChoiceField(choices=(("B", "Before"), ("A", "After")), required=True, widget=SelectWidget)
 
-    unit = forms.ChoiceField(
-        choices=CampaignEvent.UNIT_CHOICES,
-        required=True,
-        widget=SelectWidget(attrs={"placeholder": _("Select a unit"), "widget_only": True}),
-    )
+    unit = forms.ChoiceField(choices=CampaignEvent.UNIT_CHOICES, required=True, widget=SelectWidget)
 
     flow_to_start = TembaChoiceField(
         queryset=Flow.objects.filter(is_active=True),
@@ -344,11 +444,7 @@ class CampaignEventForm(forms.ModelForm):
         ),
     )
 
-    delivery_hour = forms.ChoiceField(
-        choices=CampaignEvent.get_hour_choices(),
-        required=False,
-        widget=SelectWidget(attrs={"placeholder": _("Select hour for delivery"), "widget_only": True}),
-    )
+    delivery_hour = forms.ChoiceField(choices=CampaignEvent.get_hour_choices(), required=False, widget=SelectWidget)
 
     flow_start_mode = forms.ChoiceField(
         choices=(
@@ -356,7 +452,8 @@ class CampaignEventForm(forms.ModelForm):
             (CampaignEvent.MODE_SKIP, _("Skip this event")),
         ),
         required=False,
-        widget=SelectWidget(attrs={"widget_only": True}),
+        label=_("If the contact is already active in a flow"),
+        widget=SelectWidget,
     )
 
     message_start_mode = forms.ChoiceField(
@@ -394,6 +491,13 @@ class CampaignEventForm(forms.ModelForm):
                 self.add_error("flow_to_start", _("This field is required."))
             if not data.get("flow_start_mode"):
                 self.add_error("flow_start_mode", _("This field is required."))
+
+            # validate flow parameters
+            flow_params_values = [
+                self.data.get(field) for field in self.data.keys() if "flow_parameter_value" in field
+            ]
+            if flow_params_values and not all(flow_params_values):
+                self.add_error(None, _("Flow Parameters are not provided."))
 
         return data
 
@@ -485,14 +589,7 @@ class CampaignEventForm(forms.ModelForm):
                 initial = message.get(lang_code, "")
 
             field = forms.CharField(
-                widget=CompletionTextarea(
-                    attrs={
-                        "placeholder": _(
-                            "Hi @contact.name! This is just a friendly reminder to apply your fertilizer."
-                        ),
-                        "widget_only": True,
-                    }
-                ),
+                widget=CompletionTextarea(attrs={"widget_only": True}),
                 required=False,
                 label=lang_name,
                 initial=initial,
@@ -537,7 +634,8 @@ class CampaignEventForm(forms.ModelForm):
     class Meta:
         model = CampaignEvent
         fields = "__all__"
-        widgets = {"offset": InputWidget(attrs={"widget_only": True})}
+        exclude = ("extra",)
+        widgets = {"offset": InputWidget}
 
 
 class CampaignEventCRUDL(SmartCRUDL):
@@ -579,6 +677,7 @@ class CampaignEventCRUDL(SmartCRUDL):
             scheduled = scheduled_event_fires[:25]
             context["scheduled_event_fires"] = scheduled
             context["scheduled_event_fires_count"] = scheduled_event_fires.count() - len(scheduled)
+            context["gsm_replacements"] = json.dumps(GSM_REPLACEMENTS)
 
             return context
 
@@ -592,7 +691,9 @@ class CampaignEventCRUDL(SmartCRUDL):
                     dict(
                         id="event-update",
                         title=_("Edit"),
-                        href=reverse("campaigns.campaignevent_update", args=[campaign_event.pk]),
+                        style="button-primary",
+                        js_class="update-event",
+                        href=reverse("campaigns.campaignevent_update", args=[campaign_event.id]),
                         modax=_("Edit Event"),
                     )
                 )
@@ -603,7 +704,7 @@ class CampaignEventCRUDL(SmartCRUDL):
                         id="event-delete",
                         title="Delete",
                         href=reverse("campaigns.campaignevent_delete", args=[campaign_event.id]),
-                        modax=_("Delete Event"),
+                        js_class="event-delete",
                     )
                 )
 
@@ -665,6 +766,12 @@ class CampaignEventCRUDL(SmartCRUDL):
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
             context["background_warning"] = CampaignEventCRUDL.BACKGROUND_WARNING
+            obj = self.get_object()
+            if obj.extra:
+                context["flow_parameters_fields"] = "|".join([f"@trigger.params.{key}" for key in obj.extra.keys()])
+                context["flow_parameters_values"] = "|".join(obj.extra.values())
+            params_context = flow_params_context(self.request)
+            context.update(params_context)
             return context
 
         def derive_fields(self):
@@ -731,6 +838,13 @@ class CampaignEventCRUDL(SmartCRUDL):
                 obj = obj.recreate()
                 obj.schedule_async()
 
+            if obj.event_type == CampaignEvent.TYPE_FLOW:
+                flow_params_fields = [field for field in self.request.POST.keys() if "flow_parameter_field" in field]
+                flow_params_values = [field for field in self.request.POST.keys() if "flow_parameter_value" in field]
+
+                params = build_flow_parameters(self.request.POST, flow_params_fields, flow_params_values)
+                obj.extra = params if params else None
+
             return obj
 
         def get_success_url(self):
@@ -757,6 +871,8 @@ class CampaignEventCRUDL(SmartCRUDL):
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
             context["background_warning"] = CampaignEventCRUDL.BACKGROUND_WARNING
+            params_context = flow_params_context(self.request)
+            context.update(params_context)
             return context
 
         def pre_process(self, request, *args, **kwargs):
@@ -800,6 +916,7 @@ class CampaignEventCRUDL(SmartCRUDL):
             initial["event_type"] = "M"
             initial["message_start_mode"] = "I"
             initial["delivery_hour"] = "-1"
+            initial["flow_start_mode"] = "I"
 
             # default to our first date field
             initial["relative_to"] = ContactField.all_fields.filter(
@@ -817,6 +934,14 @@ class CampaignEventCRUDL(SmartCRUDL):
         def pre_save(self, obj):
             obj = super().pre_save(obj)
             obj.campaign = Campaign.objects.get(org=self.request.user.get_org(), pk=self.request.GET.get("campaign"))
+
+            if obj.event_type == CampaignEvent.TYPE_FLOW:
+                flow_params_fields = [field for field in self.request.POST.keys() if "flow_parameter_field" in field]
+                flow_params_values = [field for field in self.request.POST.keys() if "flow_parameter_value" in field]
+
+                params = build_flow_parameters(self.request.POST, flow_params_fields, flow_params_values)
+                obj.extra = params if params else None
+
             self.form.pre_save(self.request, obj)
             return obj
 

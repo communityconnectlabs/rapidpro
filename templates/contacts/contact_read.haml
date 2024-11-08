@@ -26,7 +26,7 @@
       .lbl-group.linked.inverted.bg-secondary.mr-2.mb-2(onclick="goto(event)" href="{% url 'contacts.contact_blocked' %}")
         %temba-icon(name="slash")
         -trans "Blocked"
-  
+
     -elif contact.status == 'S'
       .lbl-group.linked.inverted.bg-secondary.mr-2.mb-2(onclick="goto(event)" href="{% url 'contacts.contact_stopped' %}")
         %temba-icon(name="alert-octagon")
@@ -68,12 +68,12 @@
             .flex.flex-col.p-2
               .contact-field{data-id:'{{field.id}}'}
                 .contact-field-value.editable.cursor-pointer.hover-linked.font-bold.text-gray-600
-                  {{field.value|truncatechars:20}}      
+                  {{field.value|truncatechars:20}}
               .whitespace-nowrap.pr-12.contact-field{data-id:'{{field.id}}'}
                 .contact-field-value.tracking-wider.font-normal.text-xs
                   {{field.label|title}}
-        
-      
+
+
 
   %table.list.tight.toggle.stateful#contact-details
     %thead
@@ -122,8 +122,25 @@
             .contact-field
               .contact-field-value
                 {{contact.anon_identifier}}
-  
-    
+
+      -if contact.status == 'S' and opt_out_message and opt_out_datetime
+        %tr
+          %td
+            .whitespace-nowrap.pr-24.contact-field
+              .contact-field-value.uppercase.tracking-wider.font-normal.text-xs
+                -trans "Opt-Out Message"
+          %td.w-full
+            .contact-field-value
+              {{ opt_out_message }}
+        %tr
+          %td
+            .whitespace-nowrap.pr-24.contact-field
+              .contact-field-value.uppercase.tracking-wider.font-normal.text-xs
+                -trans "Opt-Out Timestamp"
+          %td.w-full
+            .contact-field-value
+              {% format_datetime opt_out_datetime %}
+
       -for field in all_contact_fields
         %tr
           %td
@@ -134,7 +151,7 @@
             .contact-field{data-id:'{{field.id}}'}
               .contact-field-value.editable.cursor-pointer.hover-linked
                 {{field.value}}
-      
+
       -for urn in contact_urns
         -if not user_org.is_anon
           %tr
@@ -158,7 +175,7 @@
                   .linked{onclick:"goto(event)", href:'http://twitter.com/{{urn.display}}'}
                     {{urn|format_urn:user_org}}
                 -else
-                  {{urn|format_urn:user_org}}      
+                  {{urn|format_urn:user_org}}
 
   -if open_tickets
     %table.list.tickets.mt-6
@@ -181,7 +198,7 @@
   -if upcoming_events
     -if upcoming_events|length > 3
       :css
-        tbody:nth-child(1) {
+        table.upcoming tbody:first-of-type {
           display: none;
         }
 
@@ -195,36 +212,34 @@
 
         %tr.item{class:"{% if evt.event_type == 'M' %}msg{%else%}non-msg{%endif%}"}
           %td.icon
+            {% if evt.trigger_url %}<a href="{{ evt.trigger_url }}" data-toggle="tooltip" data-placement="top" title="{{ evt.trigger_name }}">{% endif %}
             -if evt.event_type == 'M'
               %span.glyph.icon-bubble-right
             -elif evt.event_type == 'F'
               %span.glyph.icon-flow
             -else
               %span.glyph.icon-clock
-
+            {% if evt.trigger_url %}</a>{% endif %}
           %td.details.w-full
-
             .activity-scheduled
               -if evt.event_type == 'M'
                 .activity-body
                   {{evt.message}}
-
               -elif evt.event_type == 'F'
                 -trans "Start"
                 %a.href{ href: "{% url 'flows.flow_editor' evt.flow_uuid %}" }= evt.flow_name
           %td.whitespace-nowrap.text-right
             .pr-6
               {{ evt.scheduled|naturaltime }}
-
               .repeats
                 -if evt.repeat_period == 'D'
                   -trans 'repeats daily'
                 -elif evt.repeat_period == 'W'
                   -trans 'repeats weekly'
-
     -if upcoming_events|length > 3
       %a.pull-right.show-all.upcoming
         more
+
 
   %table.list.activity.history.mt-6.light
     %thead
@@ -241,8 +256,7 @@
     %tr.poll{ ic-src:"/contact/history/{{contact.uuid}}/?after={{recent_start}}",
               ic-trigger-on:"scrolled-into-view",
               ic-poll:"5s",
-              ic-target:"table .recent",
-              ic-poll-repeats:"30" }
+              ic-target:"table .recent"}
 
     %tbody.recent
 
@@ -263,6 +277,10 @@
     :css
       .urn-link {
         display: inline-block;
+      }
+      #gear-container {
+        z-index: 1000;
+        position: relative;
       }
 
       .page-content {
@@ -286,6 +304,27 @@
         }
 
         .show-all {
+          margin-top: 0px;
+          margin-right:10px;
+          color: #d1d1d1;
+
+          &.expanded {
+            .icon-arrow-down {
+              .rotate(2);
+            }
+          }
+          .icon-arrow-down {
+            margin-top:2px;
+            margin-right: 3px;
+          }
+
+          &:hover {
+            color: #c1c1c1;
+            cursor: pointer;
+          }
+        }
+
+        .hide-all {
           margin-top:0px;
           margin-right:10px;
           color: #d1d1d1;
@@ -347,6 +386,12 @@
               }
             }
           }
+
+          tr.in {
+            background-color: rgba(86, 157, 155, 0.2);
+            font-style: italic;
+          }
+
 
           tr.end-call {
             background: #ddd;
@@ -444,7 +489,8 @@
             border: 0px solid;
             text-align:right;
             min-width: 150px;
-            
+            white-space: nowrap;
+
             .time {
               margin-right: 0px;
             }
@@ -475,7 +521,6 @@
             margin-right: 3px;
           }
         }
-
     {% endlessblock %}
 
 -block extra-script
@@ -495,8 +540,6 @@
         }
       })
 
-
-
       $(".flow-event-display-selector a").on('click', function() {
         $(this).parent('.flow-event-display-selector').children('a').removeClass('is-active');
         $(this).addClass('is-active');
@@ -512,7 +555,7 @@
 
       $('.show-all.upcoming').live('click', function() {
         $(this).hide();
-        $('table.activity.upcoming tbody:nth-child(1)').show();
+        $('table.list.upcoming tbody:first-of-type').show();
       });
 
       $('.show-all.fields').live('click', function() {
@@ -562,8 +605,7 @@
       }
     }
 
-  %script
-
+  :javascript
     {% if org_perms.contacts.contact_update %}
     $('.contact-field-value.editable').live('click', function(evt) {
       var endpoint = '{% url "contacts.contact_update_fields" object.pk %}';
@@ -575,16 +617,6 @@
       // reset our modal
       window.setTimeout(function(){ modax.endpoint = endpoint;}, 1000);
     });
-
-    {% endif %}
-
-    {% if org_perms.contacts.contact_update %}
-    function removeContactFromGroup(groupId, contactId){
-      var elementId = '#group_' + groupId + '_' + contactId;
-      $.post('{% url 'contacts.contact_read' contact.uuid %}' + '?action=remove_from_group', {contact: contactId, group: groupId}, function() {
-        $(elementId).remove();
-      });
-    }
     {% endif %}
 
     {% if org_perms.contacts.contact_delete %}
@@ -599,3 +631,35 @@
       modal.show();
     });
     {% endif %}
+
+  :javascript
+    {% if org_perms.msgs.broadcast_send %}
+    let sendModal = document.querySelector("#send-message");
+    let doNotContactDialog = document.createElement("temba-dialog");
+    let dialogBody = document.createElement("div");
+    doNotContactDialog.id = "do-not-contact-dialog";
+    doNotContactDialog.header = gettext("Out of Business Hours Warning");
+    doNotContactDialog.primaryButtonName = "Confirm";
+    doNotContactDialog.destructive = true;
+    dialogBody.className = "body";
+    dialogBody.innerHTML = `<p style="margin: 20px;">${gettext("You are trying to send a message out of compliance hours (8AM - 9PM). Are you sure you want to continue?")}</p>`;
+    doNotContactDialog.body = dialogBody;
+    document.body.append(doNotContactDialog);
+    let doNotContact = "{{ user_org.do_not_contact }}" === "True";
+    if (doNotContact) {
+      let sendModalSubmit = sendModal.submit.bind(sendModal);
+      doNotContactDialog.addEventListener("temba-button-clicked", function(event) {
+        if (!event.detail.button.secondary) {
+          doNotContactDialog.open = false;
+          sendModalSubmit();
+        }
+      });
+      sendModal.submit = () => {
+        doNotContactDialog.open = true;
+      }
+    }
+    {% endif %}
+
+    $(function () {
+      $('[data-toggle="tooltip"]').tooltip()
+    })

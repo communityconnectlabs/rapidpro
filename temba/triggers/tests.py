@@ -1,4 +1,5 @@
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import pytz
@@ -13,6 +14,7 @@ from temba.flows.models import Flow
 from temba.schedules.models import Schedule
 from temba.tests import CRUDLTestMixin, TembaTest
 
+from ..utils.dates import datetime_to_str
 from .models import Trigger
 from .types import KeywordTriggerType
 
@@ -1379,3 +1381,56 @@ class TriggerCRUDLTest(TembaTest, CRUDLTestMixin):
             referral_url, allow_viewers=True, allow_editors=True, context_objects=[trigger3, trigger4]
         )
         self.assertListFetch(catchall_url, allow_viewers=True, allow_editors=True, context_objects=[trigger5])
+
+    def test_create_large_send(self):
+        self.login(self.admin)
+        flow = self.create_flow()
+        summary_url = reverse("triggers.trigger_large_send_schedule_summary")
+        create_url = reverse("triggers.trigger_create_large_send")
+
+        contact_1 = self.create_contact("Contact 1", phone="+25078999775")
+        contact_2 = self.create_contact("Contact 2", phone="+25022299750")
+        contact_3 = self.create_contact("Contact 3", phone="+25029000333")
+        contact_4 = self.create_contact("Contact 4", phone="+25029000335")
+        contact_5 = self.create_contact("Contact 5", phone="+25029000338")
+
+        group_1 = self.create_group("Group 1", [contact_1, contact_2])
+        group_2 = self.create_group("Group 2", [contact_3, contact_4, contact_5])
+        group_3 = self.create_group("Group 3", [contact_4])
+
+        now = timezone.now()
+        tomorrow = now + timedelta(days=1)
+        batch_interval = 10  # 10 minutes
+        chunk_size = 2
+
+        form = {
+            "chunk_size": chunk_size,
+            "batch_interval": batch_interval,
+            "start_time": datetime_to_str(tomorrow, "%Y-%m-%d %H:%M", self.org.timezone),
+            "groups": ",".join(map(str, [group_1.id, group_2.id, group_3.id])),
+        }
+
+        # test summary endpoint
+        response = self.client.post(summary_url, form)
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content["total_contacts"], 5)  # removed duplicates
+        self.assertEqual(content["max_contacts_per_group"], 3)
+        self.assertEqual(len(content["schedule_time_list"]), 2)
+
+        # test form validation
+        required_fields = ["flow", "groups", "chunk_size", "start_time", "batch_interval"]
+        error_msg = "This field is required."
+        form_errors = dict.fromkeys(required_fields, error_msg)
+
+        self.assertCreateSubmit(create_url, {}, form_errors=form_errors)
+        form_errors["chunk_size"] = "Enter a whole number."
+        self.assertCreateSubmit(create_url, {"chunk_size": "string"}, form_errors=form_errors)
+
+        # test created triggers
+        form["flow"] = flow.id
+        form["groups"] = [group_1.id, group_2.id, group_3.id]
+        self.client.post(create_url, form)
+        triggers = Trigger.objects.count()
+        self.assertEqual(triggers, chunk_size)

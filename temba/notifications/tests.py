@@ -206,6 +206,7 @@ class NotificationTest(TembaTest):
             responded_only=True,
             extra_urns=(),
             group_memberships=(),
+            extra_queries={},
         )
         export.perform()
 

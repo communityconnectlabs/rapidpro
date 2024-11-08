@@ -1,0 +1,380 @@
+-extends "smartmin/list.html"
+-load smartmin sms contacts temba
+-load i18n humanize
+
+-block page-title
+  -if current_group
+    {{current_group.name}}
+  -else
+    {{title}}
+
+-block page-top
+
+-block title-icon
+  %span.title-icon
+    .glyph.icon-users
+
+-block content
+
+  #pjax
+    -block pjax
+      .lp-frame
+
+        .left
+          -if org_perms.contacts.contactimport_create
+            .button-primary.block(onclick="goto(event)" href="{% url 'contacts.contact_list' %}")
+              -trans "Contacts"
+
+          .lp-nav.upper
+            -for folder in folders
+              .lp-nav-item(class="{% if request.get_full_path == folder.url %}font-normal{% endif %}")
+                .name(onclick="goto(event)" href='{{folder.url}}')
+                  {{folder.label}}
+                .count(onclick="goto(event)" href='{{folder.url}}')
+                  {{ folder.count | intcomma }}
+
+          .lp-nav.upper
+            .font-normal.uppercase.text-xs.pb-1.text-gray-500
+              - trans "Smart Groups"
+            .inner-scroll
+              -for group in groups
+                -if group.is_dynamic
+                  .lp-nav-item(class="{% if current_group.id == group.pk %}font-normal{% endif %}")
+                    .name(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                      {{group.label}}
+                    .count(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                      {{ group.count | intcomma }}
+
+          .lp-nav.lower
+            .font-normal.uppercase.text-xs.text-gray-500.pb-1
+              - trans "Groups"
+            .inner-scroll
+              -for group in groups
+                -if not group.is_dynamic
+                  .lp-nav-item(class="{% if current_group.id == group.pk %}font-normal{% endif %}")
+                    .name(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                      {{group.label}}
+                    .count(onclick="goto(event)" href='{% url "contacts.contact_invite_participants"  %}?group={{group.uuid}}')
+                      {{ group.count | intcomma }}
+
+        .right
+          - if has_contacts
+            - block contacts-list
+              .flex.w-full.mb-4.flex-col.flex-wrap.justify-start.-mt-2(style="min-height:41px")
+
+                - block action-buttons
+                  .flex-grow.ml-1.self-start.items-start
+                    .flex.flex-col.pr-12
+                      .page-title.leading-tight
+                        -block title
+                          {{title}}
+                        .subtitle
+                          -block subtitle
+
+                  .list-buttons-container.mr-2.mt-2.flex-grow.h-full.visible
+                    %form.controls{method:"POST"}
+                      - csrf_token
+                        %label.m-0.control-label
+                          %trans Opt-in flow
+                        %div(style="display: flex;")
+                          %temba-select#id_opt_in_flow.w-96{float:'left', name:'optin_flow_uuid', data-url-template:"{% url 'flows.flow_broadcast' '0' %}", placeholder:'{{_("Opt-in flow")}}'}
+                            %temba-option
+                            - for flow in flows
+                              %temba-option{value:'{{flow.uuid}}', name: '{{ flow.name }}', '{% if flow.uuid == optin_flow %}selected{% endif %}'}
+                          %button#id_save_flow_btn.button.button-primary{type:'submit'}
+                            %trans Save
+                        %a#id_open_in_flow_editor.btn-block{'data-href-template':"{% url 'flows.flow_editor' 'uuid' %}", 'target': "_blank"}
+                          -trans "Open in the flow editor"
+
+                  .table-container
+                    %table.list.object-list.lined
+                      - if object_list
+                        %tr.contacts
+                          %th
+                          %th
+                          -for field in contact_fields
+                            -if field.show_in_table
+                              %th
+                                -if sort_field == field.key
+                                  -if sort_direction == 'desc'
+                                    %a.sort-link(href="sort_on={{ field.key }}{% if search %}&search={{ search|escape }}{% endif %}")
+                                      %div
+                                        {{ field.label }}
+                                        %span.sort.icon.icon-arrow-down-2.sort-asc.visible
+                                  -else
+                                    %a.sort-link{href:"sort_on=-{{ field.key }}{% if search %}&search={{ search|escape }}{% endif %}"}
+                                      %div
+                                        {{ field.label }}
+                                        %span.sort.icon.icon-arrow-up5.sort-desc.visible
+                                -else
+                                  %a.sort-link{href:"sort_on=-{{ field.key }}{% if search %}&search={{ search|escape }}{% endif %}"}
+                                    %div
+                                      {{ field.label }}
+                                      %span.sort.icon.icon-arrow-down-2.sort-desc
+                          %th
+                            - if object_list
+
+                              -if sort_field == 'created_on'
+                                -if sort_direction == 'desc'
+                                  %a.sort-link{href:"sort_on=created_on{% if search %}&search={{ search|escape }}{% endif %}"}
+                                    %div
+                                      -trans "Created On"
+                                      %span.sort.icon.icon-arrow-down-2.sort-asc.visible
+                                -else
+                                  %a.sort-link{href:"sort_on=-created_on{% if search %}&search={{ search|escape }}{% endif %}"}
+                                    %div
+                                      -trans "Created On"
+                                      %span.sort.icon.icon-arrow-up5.sort-desc.visible
+                              -else
+                                %a.sort-link{href:"sort_on=-created_on{% if search %}&search={{ search|escape }}{% endif %}"}
+                                  %div
+                                    -trans "Created On"
+                                    %span.sort.icon.icon-arrow-down-2.sort-desc
+                            %th.invite-column
+
+                      %tbody
+                        - for object in contacts
+                          %tr.contact.select-row.object-row{'class':'{% cycle row1 row2 %}', 'data-uuid': '{{object.uuid}}', 'data-object-id': '{{object.id}}'}
+
+                            %td.value-text.field_name
+                              {{ object|name:user_org }}
+
+                            %td.value-phone.field_phone
+                              %nobr
+                                {{ object|urn:user_org }}
+
+                            -for field in contact_fields
+                              -if field.show_in_table
+                                %td.field
+                                  {{ object|contact_field:field.key }}
+
+                            %td.field_received
+                              %nobr
+                                {% short_datetime object.created_on %}
+
+                            %td.invite-column.value-received.field_received
+                              - if object|has_connection
+                                %a.invite.button.button-primary(
+                                  href="{% url 'contacts.contact_invite_participants' %}"
+                                  data-uuid="{{object.uuid}}"
+                                  status="active"
+                                )
+                                  -trans "Invite"
+
+                        -empty
+                          %tr
+                            %td{colspan:3}
+                              -trans "No matching contacts."
+                            -for field in contact_fields
+                              -if field.show_in_table
+                                %td.field
+                            %td
+
+                  .flex.flex-col.mb-16
+                    -include "includes/pagination.haml"
+
+                    -if paginator.is_es_search and not page_obj.has_next_page and page_obj.number == paginator.num_pages and paginator.count > 10000
+                      .text-gray-400.text-sm.self-end.mt-2
+                        -trans "To view more than 10,000 search results, save it as a group."
+
+          - else
+            - include "contacts/empty_include.haml"
+
+-block post-content
+  - if org_perms.msgs.broadcast_send and not reply_disabled
+    -#- include "msgs/msg_send_modal.haml"
+
+  -if org_perms.contacts.contact_delete
+    .contact-deletion.hide
+      .title
+        -trans "Delete Contacts"
+
+      .body
+        %p
+          -trans "Are you sure you want to delete these contacts?"
+        %p
+          -trans "Once they are deleted, they will be gone forever. There is no way to undo this operation."
+
+-block extra-style
+  :css
+    .table-container {
+      position: relative;
+      overflow-x: auto;
+      max-width: calc(100vw - 330px);
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+      border-radius: 0.5rem;
+      margin: 0 2.5px;
+    }
+
+    .table-container table {
+      overflow: unset;
+    }
+
+    tr.contacts th a span.icon {
+      visibility: hidden;
+      text-decoration: none;
+      font-size: 14px;
+      margin-top: -1px;
+    }
+
+    tr.contacts th a {
+      text-decoration: none;
+      font-weight:500;
+      color: #717171;
+      font-size: 0.75rem;
+    }
+
+    tr.contacts th:hover a span.icon {
+      visibility: visible;
+      font-size: 14px;
+    }
+    tr.contacts th a span.icon.visible {
+      visibility: visible;
+    }
+
+    .span9 .contact_list tr.contacts {
+      border-top: none;
+    }
+
+    .span9 .object-list tbody td.value-text {
+      min-width: 30px;
+    }
+
+    .modal .modal-body .control-group .control-label {
+      display:none;
+    }
+
+    .search-error {
+      color: #da4f49;
+    }
+
+    .pagination-notification {
+      background: #ecf0f1;
+      padding: 10px;
+    }
+
+    .group_labels {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .group_labels > .hidden_group {
+      display: none;
+    }
+
+    .group_labels:hover > .hidden_group {
+      display: block;
+    }
+
+    .page-content {
+      align-self: auto;
+      max-width: 100%;
+    }
+
+    #id_save_flow_btn {
+      margin-top: 6px;
+      margin-left: 5px;
+      height: 36px;
+    }
+
+    .invite-column {
+      display: table-cell !important;
+      width: 100px;
+      position: sticky;
+      position: -webkit-sticky;
+      right: 0;
+    }
+
+    td.invite-column {
+      background: white;
+    }
+
+    .control-label {
+      margin-bottom: 5px;
+      margin-left: 4px;
+      display: block;
+      font-weight: 400;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      line-height: normal;
+      color: rgb(119, 119, 119);
+    }
+
+    #id_open_in_flow_editor {
+      margin-left: 4px;
+    }
+
+-block extra-script
+  {{ block.super }}
+
+  :javascript
+    $('.select-row').live('mouseover', function(){
+      url = '/contact/read/' + $(this).data('uuid');
+
+      $(this).find('td').not('.invite-column').each(function(){
+        $(this).attr('onClick', "document.location.href=url;");
+      });
+    });
+
+    /* Invite functional for selected opt-in flow */
+    var flowSelect = document.getElementById("id_opt_in_flow");
+    var flowEditLink = document.getElementById("id_open_in_flow_editor");
+    var inviteLinks = $('a.invite');
+
+    flowEditLink.onmousedown = () => {
+      var hrefTemplate = flowEditLink.getAttribute('data-href-template');
+      var flowUUID = flowSelect.values[0].value;
+      if (flowUUID) {
+        flowEditLink.setAttribute('href', hrefTemplate.replace('uuid', flowUUID));
+      }
+    };
+
+    inviteLinks.click(function(evt) {
+      evt.preventDefault();
+      var clickedLink = $(this);
+      if (clickedLink.attr('status') !== 'active') {
+        return;
+      }
+
+      clickedLink.removeClass('btn btn-primary').html('Invite Sent').attr('status', 'clicked');
+      
+      $.ajax({
+        type: "GET", data: {'contact_uuid': clickedLink.attr('data-uuid')}
+      }).done(function (data) {
+        if (data.sent === false) {
+          /* Reloading page to display error */
+          location.reload(true);
+        }
+      }).fail(function (jqXHR, textStatus, errorThrown) { 
+        console.log(textStatus);
+      });
+
+      setTimeout(function() {clickedLink.addClass('btn btn-primary').html('Invite').attr('status', 'active')}, 5000)
+    });
+
+    document.querySelectorAll(".sort-link").forEach(el => {
+      el.onclick = (e) => {
+        e.preventDefault();
+        var sort_href = el.getAttribute('href');
+        var params = {};
+
+        /* Parse params from current query */
+        location.search.slice(1).split('&').forEach(function(param) {
+          var param_pair = param.split('=');
+          params[param_pair[0]] = param_pair[1];
+        });
+        /* Parse params from sort url */
+        sort_href.split('&').forEach(function (param){
+          var param_pair = param.split('=');
+          params[param_pair[0]] = param_pair[1];
+        });
+
+        /* Build new query */
+        var new_query = [];
+        for (var key in params) {
+          new_query.push(key + "=" + params[key]);
+        }
+        location.search = "?" + new_query.join('&');
+      };
+    });

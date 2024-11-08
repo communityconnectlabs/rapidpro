@@ -1,8 +1,14 @@
 import logging
+import os
+import re
+import time
 from datetime import datetime, timedelta
 
+import boto3
 import pytz
+import requests
 from django_redis import get_redis_connection
+from sorl.thumbnail import get_thumbnail
 
 from django.conf import settings
 from django.db.models import F
@@ -15,9 +21,11 @@ from temba.utils import chunk_list
 from temba.utils.celery import nonoverlapping_task
 
 from .models import (
+    ExportFlowImagesTask,
     ExportFlowResultsTask,
     Flow,
     FlowCategoryCount,
+    FlowImage,
     FlowNodeCount,
     FlowPathCount,
     FlowRevision,
@@ -26,6 +34,7 @@ from .models import (
     FlowSession,
     FlowStart,
     FlowStartCount,
+    MergeFlowsTask,
 )
 
 FLOW_TIMEOUT_KEY = "flow_timeouts_%y_%m_%d"
@@ -52,6 +61,16 @@ def export_flow_results_task(export_id):
     Export a flow to a file and e-mail a link to the user
     """
     ExportFlowResultsTask.objects.select_related("org", "created_by").get(id=export_id).perform()
+
+
+@shared_task(track_started=True, name="download_flow_images_task")
+def download_flow_images_task(id):
+    """
+    Download flow images to a zip file and e-mail a link to the user
+    """
+    export_task = ExportFlowImagesTask.objects.filter(pk=id).first()
+    if export_task:
+        export_task.perform()
 
 
 @nonoverlapping_task(track_started=True, name="squash_flowcounts", lock_timeout=7200)
@@ -155,3 +174,117 @@ def trim_flow_starts():
             logger.debug(f" > Deleted {num_deleted} flow starts")
 
     logger.info(f"Deleted {num_deleted} completed non-user created flow starts in {timesince(start)}")
+
+
+@shared_task(track_started=True, name="delete_flowimage_downloaded_files")
+def delete_flowimage_downloaded_files():
+    print("> Running garbage collector for Flow Images zip files")
+    counter_files = 0
+    start = time.time()
+
+    s3 = (
+        boto3.resource(
+            "s3", aws_access_key_id=settings.AWS_ACCESS_KEY_ID, aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+        )
+        if settings.DEFAULT_FILE_STORAGE == "storages.backends.s3boto3.S3Boto3Storage"
+        else None
+    )
+    download_tasks = (
+        ExportFlowImagesTask.objects.filter(cleaned=False, file_downloaded=True).only("id").order_by("created_on")
+    )
+    for item in download_tasks:
+        try:
+            file_path = item.file_path
+            if s3 and settings.AWS_BUCKET_DOMAIN in file_path:
+                key = file_path.replace("https://%s/" % settings.AWS_BUCKET_DOMAIN, "")
+                obj = s3.Object(settings.AWS_STORAGE_BUCKET_NAME, key)
+                obj.delete()
+            else:
+                expected_fpath = file_path.replace(settings.MEDIA_URL, "")
+                file_path = os.path.join(settings.MEDIA_ROOT, expected_fpath)
+                os.remove(file_path)
+            item.cleaned = True
+            item.save(update_fields=["cleaned"])
+            counter_files += 1
+        except Exception:
+            pass
+    print("> Garbage collection finished in %0.3fs for %s file(s)" % (time.time() - start, counter_files))
+
+
+@nonoverlapping_task(track_started=True, name="generate_missing_gif_thumbnails")
+def create_flow_image_thumbnail():
+    images = FlowImage.objects.filter(path__endswith=".gif", path_thumbnail__isnull=True)
+    for image in images:
+        image_thumbnail = get_thumbnail(image.path, "50x50", crop="center", quality=99, format="PNG")
+        image.path_thumbnail = image_thumbnail.url
+        image.save(update_fields=["path_thumbnail"])
+
+
+def merge_flow_failed(self, exc, task_id, args, kwargs, einfo):
+    task_ = MergeFlowsTask.objects.filter(uuid=args[0]).first()
+    if task_:
+        task_.status = MergeFlowsTask.STATUS_FAILED
+        task_.save()
+
+
+@shared_task(track_started=True, name="merge_flows", on_failure=merge_flow_failed)
+def merge_flows_task(uuid):
+    task_ = MergeFlowsTask.objects.filter(uuid=uuid).first()
+    if task_:
+        task_.process_merging()
+
+
+@nonoverlapping_task(track_started=True, name="start_active_merge_flows")
+def start_active_merge_flows():
+    for task_ in MergeFlowsTask.objects.filter(status=MergeFlowsTask.STATUS_ACTIVE):
+        task_.process_merging()
+
+
+@nonoverlapping_task(name="validate_flow_links")
+def validate_flow_links(flow_id):
+    try:
+        # mark that flow links are being validated
+        flow = Flow.objects.get(id=flow_id)
+        definition = flow.get_definition()
+        flow.metadata["validated_links"] = {
+            "revision": definition.get("revision", 0),
+            "validating": True,
+        }
+        flow.save(update_fields=["metadata"])
+
+        # validating the flow links
+        links = []
+        for node in definition.get("nodes", []):
+            for action in node.get("actions", []):
+                if action["type"] == "send_msg":
+                    text = action["text"]
+                    action_links = re.findall(r"(https?://[^\s]+)", text)
+                    links.extend(
+                        [
+                            {
+                                "node_uuid": node["uuid"],
+                                "action_uuid": action["uuid"],
+                                "link": link,
+                            }
+                            for link in action_links
+                        ]
+                    )
+        for link in links:
+            link["status_code"] = 400
+            try:
+                response = requests.get(link["link"])
+                link["status_code"] = response.status_code
+                if not response.ok:
+                    link["error"] = response.reason
+            except (requests.ConnectionError, requests.HTTPError, requests.RequestException) as e:
+                link["error"] = e.__doc__
+
+        # saving the validation result
+        flow.metadata["validated_links"] = {
+            "processed_on": timezone.now(),
+            "revision": definition.get("revision", 0),
+            "links": links,
+        }
+        flow.save(update_fields=["metadata"])
+    except Flow.DoesNotExist:
+        pass

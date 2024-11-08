@@ -22,3 +22,13 @@ class UniqueForOrgValidator(UniqueValidator):
         self.org = serializer_field.context["org"]
 
         super().__call__(value, serializer_field)
+
+
+def is_uuid_valid(val):
+    from uuid import UUID
+
+    try:
+        UUID(str(val))
+        return True
+    except ValueError:
+        return False

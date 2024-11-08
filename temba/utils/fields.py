@@ -75,6 +75,15 @@ class SelectWidget(forms.Select):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
         return option
 
+    def value_from_datadict(self, data, files, name):
+        getter = data.get
+        if self.attrs.get("multi", False):
+            try:
+                getter = data.getlist
+            except AttributeError:
+                pass
+        return getter(name)
+
     def format_value(self, value):
         def format_single(v):
             if isinstance(v, (dict)):

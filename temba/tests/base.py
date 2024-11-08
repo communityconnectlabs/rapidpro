@@ -13,7 +13,7 @@ from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 
 from temba.archives.models import Archive
@@ -39,6 +39,7 @@ def add_testing_flag_to_context(*args):
 class TembaTestMixin:
     databases = ("default", "readonly")
 
+    @override_settings(CREDITS_EXPIRATION=True)
     def setUpOrgs(self):
         # make sure we start off without any service users
         Group.objects.get(name="Service Users").user_set.clear()
@@ -313,6 +314,9 @@ class TembaTestMixin:
         if status in (Msg.STATUS_WIRED, Msg.STATUS_SENT, Msg.STATUS_DELIVERED) and not sent_on:
             sent_on = timezone.now()
 
+        if not attachments:
+            attachments = list()
+
         metadata = {}
         if quick_replies:
             metadata["quick_replies"] = quick_replies
@@ -539,7 +543,7 @@ class TembaTestMixin:
 
     def create_contact_import(self, path):
         with open(path, "rb") as f:
-            mappings, num_records = ContactImport.try_to_parse(self.org, f, path)
+            mappings, num_records, num_duplicates = ContactImport.try_to_parse(self.org, f, path)
             return ContactImport.objects.create(
                 org=self.org,
                 original_filename=path,

@@ -1,9 +1,16 @@
+import itertools
 import logging
+import os
 import time
+import zipfile
 from array import array
 from collections import defaultdict
 from datetime import datetime
+from io import BytesIO
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
+import boto3
 import iso8601
 import pytz
 import regex
@@ -17,8 +24,10 @@ from django.contrib.auth.models import Group, User
 from django.contrib.postgres.fields import ArrayField
 from django.core.files.temp import NamedTemporaryFile
 from django.db import models, transaction
-from django.db.models import Max, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import TruncDate
+from django.dispatch import receiver
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -28,11 +37,14 @@ from temba.channels.models import Channel, ChannelConnection
 from temba.classifiers.models import Classifier
 from temba.contacts.models import Contact, ContactField, ContactGroup
 from temba.globals.models import Global
+from temba.links.models import LinkContacts
 from temba.msgs.models import Label
 from temba.orgs.models import Org
 from temba.templates.models import Template
 from temba.tickets.models import Ticketer, Topic
 from temba.utils import analytics, chunk_list, json, on_transaction_commit, s3
+from temba.utils.dates import datetime_to_str
+from temba.utils.email import send_template_email
 from temba.utils.export import BaseExportAssetStore, BaseExportTask
 from temba.utils.models import (
     JSONAsTextField,
@@ -42,11 +54,14 @@ from temba.utils.models import (
     TembaModel,
     generate_uuid,
 )
-from temba.utils.uuid import uuid4
+from temba.utils.uuid import is_valid_uuid, uuid4
 
 from . import legacy
 
 logger = logging.getLogger(__name__)
+
+FLOW_DEFAULT_EXPIRES_AFTER = 60 * 12
+START_FLOW_BATCH_SIZE = 500
 
 
 class FlowException(Exception):
@@ -496,6 +511,13 @@ class Flow(TembaModel):
 
         return {"icon": icon, "type": self.flow_type}
 
+    def get_trigger_params(self):
+        flow_json = self.get_definition()
+        rule = r"@trigger.params.([a-zA-Z0-9_]+)"
+        matches = regex.finditer(rule, json.dumps(flow_json), regex.MULTILINE | regex.IGNORECASE)
+        params = [match.group() for match in matches]
+        return list(set(params))
+
     def get_category_counts(self):
         keys = [r["key"] for r in self.metadata["results"]]
         counts = (
@@ -556,6 +578,9 @@ class Flow(TembaModel):
         Gets the number of contacts to have taken each flow segment.
         """
         return FlowPathCount.get_totals(self)
+
+    def get_images_count(self):
+        return self.flow_images.filter(is_active=True).count()
 
     def get_activity(self):
         """
@@ -735,7 +760,9 @@ class Flow(TembaModel):
 
         return recent
 
-    def async_start(self, user, groups, contacts, query=None, restart_participants=False, include_active=True):
+    def async_start(
+        self, user, groups, contacts, query=None, restart_participants=False, include_active=True, params=None
+    ):
         """
         Causes us to schedule a flow to start in a background thread.
         """
@@ -750,6 +777,7 @@ class Flow(TembaModel):
             include_active=include_active,
             created_by=user,
             query=query,
+            extra=params,
         )
 
         contact_ids = [c.id for c in contacts]
@@ -1051,7 +1079,43 @@ class Flow(TembaModel):
         self.exit_counts.all().delete()
         self.labels.clear()
 
+        from temba.reports.models import CollectedFlowResultsData
+
+        CollectedFlowResultsData.objects.filter(flow=self).delete()
+
         super().delete()
+
+    def update_related_flows(self):
+        dependent_flows = self.dependent_flows.all()
+
+        def flow_dependency_filter(dependency):
+            if dependency.get("type") == "flow":
+                return dependency.get("uuid") == self.uuid
+            return False
+
+        def flow_node_filter(node):
+            flow_types = ("enter_flow", "start_session")
+            if "actions" in node and len(node["actions"]) > 0 and node["actions"][0]["type"] in flow_types:
+                return node["actions"][0]["flow"]["uuid"] == self.uuid
+            return False
+
+        def general_flow_update(flow):
+            dependencies = filter(flow_dependency_filter, flow.metadata.get("dependencies", []))
+            for dependency in dependencies:
+                dependency.update({"name": self.name})
+            flow.save()
+
+        def next_flow_update(flow):
+            flow_revision = flow.revisions.order_by("revision").last()
+            nodes = filter(flow_node_filter, flow_revision.definition.get("nodes", []))
+            for node in nodes:
+                action = node["actions"][0]
+                action.update({"flow": {"uuid": self.uuid, "name": self.name}})
+            flow_revision.save()
+
+        for flow in dependent_flows:
+            self.update = next_flow_update(flow)
+            general_flow_update(flow)
 
     def __str__(self):
         return self.name
@@ -1060,6 +1124,127 @@ class Flow(TembaModel):
         ordering = ("-modified_on",)
         verbose_name = _("Flow")
         verbose_name_plural = _("Flows")
+
+
+class FlowImage(models.Model):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    org = models.ForeignKey(Org, related_name="flow_images", db_index=False, on_delete=models.CASCADE)
+    flow = models.ForeignKey(Flow, related_name="flow_images", on_delete=models.CASCADE)
+    contact = models.ForeignKey(Contact, related_name="flow_images", on_delete=models.CASCADE)
+    name = models.CharField(help_text="Image name", max_length=255)
+    path = models.CharField(help_text="Image URL", max_length=255)
+    path_thumbnail = models.CharField(help_text="Image thumbnail URL", max_length=255, null=True)
+    exif = models.TextField(blank=True, null=True, help_text=_("A JSON representation the exif"))
+    created_on = models.DateTimeField(
+        default=timezone.now, editable=False, blank=True, help_text="When this item was originally created"
+    )
+    modified_on = models.DateTimeField(
+        default=timezone.now, editable=False, blank=True, help_text="When this item was last modified"
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Whether this item is active, use this instead of deleting"
+    )
+
+    @classmethod
+    def apply_action_archive(cls, user, objects):
+        changed = []
+        for item in objects:
+            item.archive()
+            changed.append(item.pk)
+        return changed
+
+    @classmethod
+    def apply_action_restore(cls, user, objects):
+        changed = []
+        for item in objects:
+            item.restore()
+            changed.append(item.pk)
+        return changed
+
+    @classmethod
+    def apply_action_delete(cls, user, objects):
+        changed = []
+        for item in objects:
+            changed.append(item.pk)
+            item.delete()
+        return changed
+
+    def archive(self):
+        self.is_active = False
+        self.save(update_fields=["is_active"])
+
+    def restore(self):
+        self.is_active = True
+        self.save(update_fields=["is_active"])
+
+    def get_exif(self):
+        return json.loads(self.exif) if self.exif else dict()
+
+    def get_url(self):
+        if "amazonaws.com" in self.path or self.path.startswith("http"):
+            return self.path
+        protocol = "https" if settings.IS_PROD else "http"
+        image_url = "%s://%s/%s" % (protocol, settings.AWS_BUCKET_DOMAIN, self.path)
+        return image_url
+
+    def get_full_path(self):
+        url_path = urlparse(self.path)
+        if all([url_path.scheme, url_path.netloc]):
+            return self.path
+        return "%s/%s" % (settings.MEDIA_ROOT, self.path)
+
+    def get_permalink(self):
+        protocol = "https" if settings.IS_PROD else "http"
+        return "%s://%s%s" % (protocol, settings.HOSTNAME, reverse("flows.flowimage_read", args=[self.uuid]))
+
+    def set_deleted(self):
+        self.is_active = False
+        self.save(update_fields=["is_active"])
+
+    def is_playable(self):
+        extension = self.path.split(".")[-1]
+        return True if extension in ["avi", "flv", "wmv", "mp4", "mov", "3gp"] else False
+
+    def get_content_type(self):
+        if self.is_playable():
+            extension = self.path.split(".")[-1]
+            mime_types = {
+                "avi": "video/x-msvideo",
+                "flv": "video/x-flv",
+                "wmv": "video/x-ms-wmv",
+                "mp4": "video/mp4",
+                "mov": "video/quicktime",
+                "3gp": "video/3gpp",
+            }
+            return mime_types.get(extension, "video/mp4")
+        else:
+            return None
+
+    def __str__(self):
+        return self.name
+
+
+# Removing images files for Flow Images
+@receiver(models.signals.post_delete, sender=FlowImage)
+def auto_delete_file_on_delete(sender, instance, **kwargs):
+    """
+    Deletes file from filesystem
+    when corresponding `MediaFile` object is deleted.
+    """
+    s3 = (
+        boto3.resource(
+            "s3", aws_access_key_id=settings.AWS_ACCESS_KEY_ID, aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+        )
+        if settings.DEFAULT_FILE_STORAGE == "storages.backends.s3boto3.S3Boto3Storage"
+        else None
+    )
+    if instance.path:
+        if os.path.isfile(instance.get_full_path()):
+            os.remove(instance.get_full_path())
+        elif s3 and "s3.amazonaws.com" in instance.path:
+            key = instance.path.replace("https://%s/" % settings.AWS_BUCKET_DOMAIN, "")
+            obj = s3.Object(settings.AWS_STORAGE_BUCKET_NAME, key)
+            obj.delete()
 
 
 class FlowSession(models.Model):
@@ -1197,6 +1382,7 @@ class FlowRun(RequireUpdateFieldsMixin, models.Model):
     RESULT_VALUE = "value"
     RESULT_INPUT = "input"
     RESULT_CREATED_ON = "created_on"
+    RESULT_CORRECTED = "corrected"
 
     PATH_STEP_UUID = "uuid"
     PATH_NODE_UUID = "node_uuid"
@@ -1237,6 +1423,9 @@ class FlowRun(RequireUpdateFieldsMixin, models.Model):
     # path taken by this run through the flow
     path = JSONAsTextField(null=True, default=list)
 
+    # engine events generated by this run
+    events = JSONField(null=True)
+
     # current node location of this run in the flow
     current_node_uuid = models.UUIDField(null=True)
 
@@ -1257,12 +1446,14 @@ class FlowRun(RequireUpdateFieldsMixin, models.Model):
                 "input": result.get(FlowRun.RESULT_INPUT),
                 "value": result[FlowRun.RESULT_VALUE],
                 "category": result.get(FlowRun.RESULT_CATEGORY),
+                "corrected": result.get(FlowRun.RESULT_CORRECTED),
             }
 
         return {
             "id": self.id,
             "uuid": str(self.uuid),
             "flow": {"uuid": str(self.flow.uuid), "name": self.flow.name},
+            "trigger_params": getattr(self.session, "output", {}).get("trigger", {}).get("params", {}),
             "contact": {"uuid": str(self.contact.uuid), "name": self.contact.name},
             "responded": self.responded,
             "path": [convert_step(s) for s in self.path],
@@ -1379,7 +1570,7 @@ class FlowRevision(SmartModel):
 
     @classmethod
     def validate_legacy_definition(cls, definition):
-        if definition["flow_type"] not in (Flow.TYPE_MESSAGE, Flow.TYPE_VOICE, Flow.TYPE_SURVEY, "F"):
+        if definition.get("flow_type") not in (Flow.TYPE_MESSAGE, Flow.TYPE_VOICE, Flow.TYPE_SURVEY, "F"):
             raise ValueError("unsupported flow type")
 
         # should always have a base_language
@@ -1661,6 +1852,7 @@ class ExportFlowResultsTask(BaseExportTask):
     GROUP_MEMBERSHIPS = "group_memberships"
     RESPONDED_ONLY = "responded_only"
     EXTRA_URNS = "extra_urns"
+    EXTRA_QUERIES = "extra_queries"
     FLOWS = "flows"
 
     MAX_GROUP_MEMBERSHIPS_COLS = 25
@@ -1671,12 +1863,23 @@ class ExportFlowResultsTask(BaseExportTask):
     config = JSONAsTextField(null=True, default=dict, help_text=_("Any configuration options for this flow export"))
 
     @classmethod
-    def create(cls, org, user, flows, contact_fields, responded_only, extra_urns, group_memberships):
+    def create(
+        cls,
+        org,
+        user,
+        flows,
+        contact_fields,
+        responded_only,
+        extra_urns,
+        group_memberships,
+        extra_queries,
+    ):
         config = {
             ExportFlowResultsTask.CONTACT_FIELDS: [c.id for c in contact_fields],
             ExportFlowResultsTask.RESPONDED_ONLY: responded_only,
             ExportFlowResultsTask.EXTRA_URNS: extra_urns,
             ExportFlowResultsTask.GROUP_MEMBERSHIPS: [g.id for g in group_memberships],
+            ExportFlowResultsTask.EXTRA_QUERIES: extra_queries,
         }
 
         export = cls.objects.create(org=org, created_by=user, modified_by=user, config=config)
@@ -1698,6 +1901,7 @@ class ExportFlowResultsTask(BaseExportTask):
             columns.append(extra_urn["label"])
 
         columns.append("Name")
+        columns.append("Groups")
 
         for gr in groups:
             columns.append("Group:%s" % gr.name)
@@ -1715,6 +1919,16 @@ class ExportFlowResultsTask(BaseExportTask):
             columns.append(f"{field_name} (Category) - {flow_name}")
             columns.append(f"{field_name} (Value) - {flow_name}")
             columns.append(f"{field_name} (Text) - {flow_name}")
+            columns.append(f"{field_name} (Corrected) - {flow_name}")
+
+        flow_params_fields = set()
+        for flow in self.flows.all():
+            for flow_param in flow.get_trigger_params():
+                if str(flow_param).startswith("@trigger.params."):
+                    flow_params_fields.add(flow_param[16:])
+        setattr(self, "flow_params_fields", sorted(flow_params_fields))
+        for flow_param in getattr(self, "flow_params_fields", []):
+            columns.append(f"Flow Parameter ({flow_param})")
 
         return columns
 
@@ -1726,12 +1940,25 @@ class ExportFlowResultsTask(BaseExportTask):
         self.append_row(sheet, columns)
         return sheet
 
+    def _add_links_sheet(self, book):
+        name = "Links (%d)" % (book.num_links_sheets + 1) if book.num_links_sheets > 0 else "Links"
+        index = book.num_runs_sheets + book.num_msgs_sheets + book.num_links_sheets
+        sheet = book.add_sheet(name, index)
+        book.num_msgs_sheets += 1
+
+        headers = ["Contact UUID", "Name", "Date", "Destination Link"]
+
+        self.append_row(sheet, headers)
+        return sheet
+
     def write_export(self):
         config = self.config
         responded_only = config.get(ExportFlowResultsTask.RESPONDED_ONLY, True)
         contact_field_ids = config.get(ExportFlowResultsTask.CONTACT_FIELDS, [])
         extra_urns = config.get(ExportFlowResultsTask.EXTRA_URNS, [])
         group_memberships = config.get(ExportFlowResultsTask.GROUP_MEMBERSHIPS, [])
+        extra_queries = config.get(ExportFlowResultsTask.EXTRA_QUERIES, {})
+        setattr(self, "extra_queries", extra_queries)
 
         contact_fields = (
             ContactField.user_fields.active_for_org(org=self.org).filter(id__in=contact_field_ids).using("readonly")
@@ -1768,10 +1995,12 @@ class ExportFlowResultsTask(BaseExportTask):
         book = XLSXBook()
         book.num_runs_sheets = 0
         book.num_msgs_sheets = 0
+        book.num_links_sheets = 0
 
         # the current sheets
         book.current_runs_sheet = self._add_runs_sheet(book, runs_columns)
         book.current_msgs_sheet = None
+        book.current_links_sheet = None
 
         # for tracking performance
         total_runs_exported = 0
@@ -1802,6 +2031,9 @@ class ExportFlowResultsTask(BaseExportTask):
 
                 self.modified_on = timezone.now()
                 self.save(update_fields=["modified_on"])
+
+        for flow in flows:
+            self._write_related_trackable_links(book, flow)
 
         temp = NamedTemporaryFile(delete=True)
         book.finalize(to_file=temp)
@@ -1835,9 +2067,42 @@ class ExportFlowResultsTask(BaseExportTask):
             yield matching
 
         # secondly get runs from database
-        runs = FlowRun.objects.filter(flow__in=flows).order_by("modified_on").using("readonly")
+        runs = (
+            FlowRun.objects.filter(flow__in=flows)
+            .exclude(contact__is_active=False)
+            .order_by("modified_on")
+            .using("readonly")
+        )
         if responded_only:
             runs = runs.filter(responded=True)
+
+        # filter runs by extra queries
+        extra_queries = getattr(self, "extra_queries", {})
+        if extra_queries.get("response"):
+            response_queries = extra_queries.get("response", {})
+            if response_queries.get("after"):
+                after = self.org.parse_datetime(response_queries.get("after"))
+                runs = runs.filter(modified_on__gte=after)
+
+            if response_queries.get("before"):
+                before = self.org.parse_datetime(response_queries.get("before"))
+                runs = runs.filter(modified_on__lte=before)
+
+            if response_queries.get("query"):
+                from .search.parser import FlowRunSearch
+
+                runs_search = FlowRunSearch(query=response_queries.get("query"), base_queryset=runs)
+                filtered_runs, error = runs_search.search()
+                if not error:
+                    runs = filtered_runs
+
+        if extra_queries.get("contact", {}).get("query"):
+            from temba.contacts.search.elastic import query_contact_ids
+
+            contact_query = extra_queries["contact"]["query"]
+            contact_ids = query_contact_ids(self.org, contact_query, active_only=False)
+            runs = runs.filter(contact_id__in=contact_ids)
+
         run_ids = array(str("l"), runs.values_list("id", flat=True))
 
         logger.info(
@@ -1880,6 +2145,8 @@ class ExportFlowResultsTask(BaseExportTask):
 
         for run in runs:
             contact = contacts_by_uuid.get(run["contact"]["uuid"])
+            if not contact:
+                continue
 
             # get this run's results by node name(ruleset label)
             run_values = run["values"]
@@ -1899,6 +2166,7 @@ class ExportFlowResultsTask(BaseExportTask):
                 contact_values.append(urn_display)
 
             contact_values.append(self.prepare_value(contact.name))
+            contact_values.append(", ".join(contact.all_groups.values_list("name", flat=True)))
             contact_groups_ids = [g.id for g in contact.all_groups.all()]
             for gr in groups:
                 contact_values.append(gr.id in contact_groups_ids)
@@ -1917,7 +2185,12 @@ class ExportFlowResultsTask(BaseExportTask):
                 node_category = node_result.get("category", "")
                 node_value = node_result.get("value", "")
                 node_input = node_result.get("input", "")
-                result_values += [node_category, node_value, node_input]
+                node_corrected = node_result.get("corrected", "")
+                result_values += [node_category, node_value, node_input, node_corrected]
+
+            flow_params_values, trigger_params = [], run.get("trigger_params", {})
+            for flow_params_field in getattr(self, "flow_params_fields", []):
+                flow_params_values.append(trigger_params.get(flow_params_field, ""))
 
             if book.current_runs_sheet.num_rows >= self.MAX_EXCEL_ROWS:  # pragma: no cover
                 book.current_runs_sheet = self._add_runs_sheet(book, runs_columns)
@@ -1935,9 +2208,37 @@ class ExportFlowResultsTask(BaseExportTask):
                 iso8601.parse_date(run["exited_on"]) if run["exited_on"] else None,
                 run["uuid"],
             ]
-            runs_sheet_row += result_values
+            runs_sheet_row += result_values + flow_params_values
 
             self.append_row(book.current_runs_sheet, runs_sheet_row)
+
+    def _write_related_trackable_links(self, book, flow):
+        additional_filters = {}
+        if flow.is_archived:
+            additional_filters["created_on__lt"] = flow.modified_on
+
+        links = LinkContacts.objects.filter(
+            link__related_flow=flow, is_active=True, **additional_filters
+        ).select_related("contact", "link")
+
+        if not links:
+            return
+
+        if not book.current_links_sheet or book.current_links_sheet.num_rows >= self.MAX_EXCEL_ROWS:
+            book.current_links_sheet = self._add_links_sheet(book)
+
+        for clicked_link in links:
+            self.append_row(
+                book.current_links_sheet,
+                [
+                    str(clicked_link.contact.uuid),
+                    clicked_link.contact.get_display(),
+                    datetime_to_str(
+                        clicked_link.created_on, format="%m-%d-%Y %H:%M:%S", tz=clicked_link.link.org.timezone
+                    ),
+                    clicked_link.link.destination,
+                ],
+            )
 
 
 @register_asset_store
@@ -1947,6 +2248,329 @@ class ResultsExportAssetStore(BaseExportAssetStore):
     directory = "results_exports"
     permission = "flows.flow_export_results"
     extensions = ("xlsx",)
+
+
+class ExportFlowImagesTask(BaseExportTask):
+    """
+    Container for managing our flow images download requests
+    """
+
+    analytics_key = "flowimages_download"
+    email_subject = "Your download file from %s is ready"
+    email_template = "flowimages/email/flowimages_download"
+
+    files = models.TextField(help_text=_("Array as text of the files ID to download in a zip file"))
+
+    file_path = models.CharField(null=True, help_text=_("Path to downloadable file"), max_length=255)
+    file_downloaded = models.BooleanField(default=False, null=True, help_text=_("If the file was downloaded"))
+    cleaned = models.BooleanField(default=False, null=True, help_text=_("If the file was removed after downloaded"))
+
+    @classmethod
+    def create(cls, org, user, files):
+        dict_files = json.dumps(dict(files=files))
+        return cls.objects.create(org=org, created_by=user, modified_by=user, files=dict_files)
+
+    def write_export(self):
+        files = json.loads(self.files)
+        files_obj = FlowImage.objects.filter(id__in=files.get("files")).order_by("-created_on")
+
+        stream = BytesIO()
+        zf = zipfile.ZipFile(stream, "w")
+
+        for file in files_obj:
+            fpath = file.get_full_path()
+            url_path = urlparse(fpath)
+            if all([url_path.scheme, url_path.netloc]):
+                with NamedTemporaryFile(delete=True) as local_copy:
+                    local_copy.write(urlopen(fpath).read())
+                    local_copy.flush()
+                    zf.write(local_copy.name, arcname=os.path.basename(url_path.path))
+            else:
+                fdir, fname = os.path.split(fpath)
+                # Add file, at correct path
+                zf.write(fpath, arcname=fname)
+
+        zf.close()
+
+        temp = NamedTemporaryFile(delete=True)
+        temp.write(stream.getvalue())
+        temp.flush()
+        return temp, "zip"
+
+
+@register_asset_store
+class FlowImagesExportAssetStore(BaseExportAssetStore):
+    model = ExportFlowImagesTask
+    key = "flowimages_download"
+    directory = "flowimages_download"
+    permission = "flows.flowimage_download"
+    extensions = ("zip",)
+
+
+class MergeFlowsTask(TembaModel):
+    STATUS_ACTIVE = "A"
+    STATUS_PROCESSING = "P"
+    STATUS_COMPLETED = "C"
+    STATUS_FAILED = "F"
+    STATUS_CHOICES = (
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    )
+
+    source = models.ForeignKey("Flow", on_delete=models.CASCADE, related_name="merge_targets")
+    target = models.ForeignKey("Flow", on_delete=models.CASCADE, related_name="merge_sources")
+    merge_name = models.CharField(max_length=64, help_text=_("New name for target flow that contain merged data."))
+    merging_metadata = JSONField(null=True)
+    definition = JSONField()
+
+    email_subject = "%s: Flow Merging Finished"
+    email_template = "flows/email/flow_merging_result"
+
+    status = models.CharField(max_length=1, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    def process_merging(self):
+        if self.status != self.STATUS_ACTIVE:
+            # interupt execution if merging was processed by another celery task
+            return
+
+        self.status = self.STATUS_PROCESSING
+        self.save(update_fields=["status"])
+        try:
+            with transaction.atomic():
+                logger.info("Mergeflow Task ({0}): Merging started.")
+                uuids_metadata = self.merging_metadata or {}
+                origin_node_uuids = uuids_metadata.get("origin_node_uuids", {})
+                origin_exit_uuids = uuids_metadata.get("origin_exit_uuids", {})
+                source_metadata = dict(self.source.metadata)
+                target_metadata = dict(self.target.metadata)
+
+                # move flow images data
+                images = self.source.flow_images.all()
+                images.update(flow=self.target)
+                logger.info("Mergeflow Task ({0}): Images transfered ({1} rows).".format(self.uuid, len(images)))
+
+                # move trackable links
+                links = self.source.related_links.all()
+                links.update(related_flow=self.target)
+                logger.info("Mergeflow Task ({0}): Links transfered ({1} rows).".format(self.uuid, len(links)))
+
+                # move campaigns from source to target
+                from temba.campaigns.models import CampaignEvent
+
+                campaigns = CampaignEvent.objects.filter(
+                    is_active=True, flow=self.source, campaign__org=self.target.org, campaign__is_archived=False
+                )
+                campaigns.update(flow=self.target)
+                logger.info("Mergeflow Task ({0}): Campaigns transfered ({1} rows).".format(self.uuid, len(campaigns)))
+
+                # move triggers from source to target
+                from temba.triggers.models import Trigger
+
+                triggers = Trigger.objects.filter(flow=self.source)
+                triggers.update(flow=self.target)
+                logger.info("Mergeflow Task ({0}): Triggers transfered ({1} rows).".format(self.uuid, len(triggers)))
+
+                # move flow starts from source to target
+                flow_starts = self.source.starts.all().exclude(
+                    runs__status__in=[FlowRun.STATUS_ACTIVE, FlowRun.STATUS_WAITING]
+                )
+                flow_starts.update(flow=self.target)
+                logger.info(
+                    "Mergeflow Task ({0}): Flow strarts transfered ({1} rows).".format(self.uuid, len(flow_starts))
+                )
+
+                # move runs from source to target
+                def next_flow_runs_chunk():
+                    return (
+                        self.source.runs.all()
+                        .exclude(status__in=[FlowRun.STATUS_ACTIVE, FlowRun.STATUS_WAITING])
+                        .order_by("uuid")[:20000]
+                    )
+
+                chunk = 1
+                runs = next_flow_runs_chunk()
+                while runs:
+                    run_sessions = []
+                    for run in runs:
+                        run.flow = self.target
+                        run.current_node_uuid = origin_node_uuids.get(
+                            str(run.current_node_uuid), run.current_node_uuid
+                        )
+
+                        # responsible for messages that displays on flow editor when you hover on messages count
+                        path_recent_runs = run.recent_runs.all()
+                        for recent_run in path_recent_runs:
+                            recent_run.from_uuid = origin_exit_uuids.get(
+                                str(recent_run.from_uuid), recent_run.from_uuid
+                            )
+                            recent_run.to_uuid = origin_node_uuids.get(str(recent_run.to_uuid), recent_run.to_uuid)
+                        # FlowPathRecentRun.objects.bulk_update(path_recent_runs, ["from_uuid", "to_uuid"])
+
+                        if run.session and run.session.current_flow == self.source:
+                            session = run.session
+                            session.current_flow = self.target
+                            run_sessions.append(session)
+                    FlowRun.objects.bulk_update(runs, ["flow", "current_node_uuid"])
+                    FlowSession.objects.bulk_update(run_sessions, ["current_flow"])
+                    logger.info(
+                        "Mergeflow Task ({0}): Transfered {1} page of flow runs ({2} rows).".format(
+                            self.uuid, chunk, len(runs)
+                        )
+                    )
+                    # load next page
+                    chunk += 1
+                    runs = next_flow_runs_chunk()
+
+                # move analytics data
+                active_pathes = {}
+                active_source_runs = self.source.runs.filter(
+                    status__in=[FlowRun.STATUS_ACTIVE, FlowRun.STATUS_WAITING]
+                )
+                for active_run in active_source_runs:
+                    for path_item in active_run.path:
+                        exit_uuid = path_item.get("exit_uuid")
+                        active_pathes[exit_uuid] = active_pathes.get(exit_uuid, 0) + 1
+
+                # move path counts (responsible for numbers on action connections that display messages count)
+                equalized_path_counts = []
+                for path_count in self.source.path_counts.values("from_uuid", "to_uuid").annotate(count=Sum("count")):
+                    need_to_skip = active_pathes.get(str(path_count["from_uuid"]), 0)
+                    trasfered_count = path_count.get("count", 0) - need_to_skip
+                    equalized_path_counts.extend(
+                        [
+                            FlowPathCount(
+                                flow=self.source,
+                                from_uuid=path_count["from_uuid"],
+                                to_uuid=path_count["to_uuid"],
+                                count=-trasfered_count,
+                                period=timezone.now(),
+                            ),
+                            FlowPathCount(
+                                flow=self.target,
+                                from_uuid=origin_exit_uuids.get(str(path_count["from_uuid"]), path_count["from_uuid"]),
+                                to_uuid=origin_node_uuids.get(str(path_count["to_uuid"]), path_count["to_uuid"]),
+                                count=trasfered_count,
+                                period=timezone.now(),
+                            ),
+                        ]
+                    )
+                FlowPathCount.objects.bulk_create(equalized_path_counts)
+                logger.info("Mergeflow Task ({0}): Path counts transfered.".format(self.uuid))
+
+                # transfer category counts from source flow (responsible for charts on analytics page)
+                category_counts = self.source.category_counts.all()
+                for category_count in category_counts:
+                    category_count.node_uuid = origin_node_uuids.get(
+                        str(category_count.node_uuid), category_count.node_uuid
+                    )
+                    category_count.flow = self.target
+                FlowCategoryCount.objects.bulk_update(category_counts, ["node_uuid", "flow"])
+                logger.info(
+                    "Mergeflow Task ({0}): Category counts transfered ({1} rows).".format(
+                        self.uuid, len(category_counts)
+                    )
+                )
+
+                # move exit counts (responsible for completion chart and data on flow list page)
+                exit_counts = (
+                    self.source.exit_counts.exclude(exit_type__isnull=True)
+                    .values("exit_type")
+                    .annotate(count=Sum("count"))
+                )
+                equalized_exit_counts = []
+                for exit_count in exit_counts:
+                    equalized_exit_counts.extend(
+                        [
+                            FlowRunCount(
+                                flow=self.source,
+                                exit_type=exit_count.get("exit_type", None),
+                                count=(0 - exit_count.get("count", 0)),
+                            ),
+                            FlowRunCount(
+                                flow=self.target,
+                                exit_type=exit_count.get("exit_type", None),
+                                count=exit_count.get("count", 0),
+                            ),
+                        ]
+                    )
+                FlowRunCount.objects.bulk_create(equalized_exit_counts)
+                logger.info("Mergeflow Task ({0}): Exit counts transfered.".format(self.uuid))
+
+                # move flow metadata
+                source_waiting_exits = []
+                for exit_uuid in source_metadata.get("waiting_exit_uuids", []):
+                    source_waiting_exits.append(origin_exit_uuids.get(exit_uuid, exit_uuid))
+                waiting_exit_uuids = list(set([*target_metadata.get("waiting_exit_uuids", []), *source_waiting_exits]))
+                self.target.metadata["waiting_exit_uuids"] = list(set(waiting_exit_uuids))
+
+                results_map = {result.get("key"): result for result in target_metadata.get("results", [])}
+                for result in source_metadata.get("results", []):
+                    for index, node_uuid in enumerate(result.get("node_uuids", [])):
+                        result["node_uuids"][index] = origin_node_uuids.get(node_uuid, node_uuid)
+
+                    if result.get("key") in results_map:
+                        results_map[result.get("key")]["node_uuids"] = list(
+                            set((*result["node_uuids"], *results_map[result.get("key")]["node_uuids"]))
+                        )
+                    else:
+                        results_map[result.get("key")] = result
+
+                self.target.metadata["results"] = list(results_map.values())
+                self.merging_metadata["previous_target_name"] = self.target.name
+                self.target.name = self.merge_name
+                self.target.save(update_fields=["name", "metadata"])
+                logger.info("Mergeflow Task ({0}): Metadata transfered.".format(self.uuid))
+
+                # archive source
+                active_runs_exists = self.source.runs.filter(
+                    status__in=[FlowRun.STATUS_ACTIVE, FlowRun.STATUS_WAITING]
+                ).exists()
+                if not active_runs_exists:
+                    self.source.is_archived = True
+                    self.source.save(update_fields=["is_archived"])
+                self.status = self.STATUS_COMPLETED
+                self.save()
+
+                org = self.target.org
+                branding = org.get_branding()
+                send_template_email(
+                    self.created_by.username,
+                    self.email_subject % org,
+                    self.email_template,
+                    {
+                        "source_name": self.source.name,
+                        "target_name": self.merging_metadata.get("previous_target_name", self.target.name),
+                        "link": f"{branding['link']}{reverse('flows.flow_editor', args=[self.target.uuid])}",
+                    },
+                    branding,
+                )
+        except Exception as e:
+            logger.error(str(e), exc_info=True)
+            self.status = self.STATUS_FAILED
+            self.save(update_fields=["status"])
+            org = self.target.org
+            branding = org.get_branding()
+            email_subject = "%s: Flow Merging Failed"
+            email_template = "flows/email/flow_merging_error"
+            send_template_email(
+                self.created_by.username,
+                email_subject % org,
+                email_template,
+                {
+                    "source_name": self.source.name,
+                    "target_name": self.merging_metadata.get("previous_target_name", self.target.name),
+                },
+                branding,
+            )
+
+    def run(self):
+        from .tasks import merge_flows_task
+
+        merge_flows_task.apply_async([self.uuid], queue="flows")
 
 
 class FlowStart(models.Model):
@@ -2264,3 +2888,193 @@ def get_flow_user(org):
             __flow_users[username] = flow_user
 
     return flow_user
+
+
+class StudioFlowStart(models.Model):
+    STATUS_PENDING = "P"
+    STATUS_STARTING = "S"
+    STATUS_COMPLETE = "C"
+    STATUS_FAILED = "F"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, _("Pending")),
+        (STATUS_STARTING, _("Starting")),
+        (STATUS_COMPLETE, _("Complete")),
+        (STATUS_FAILED, _("Failed")),
+    )
+
+    # the uuid of this start
+    uuid = models.UUIDField(unique=True, default=uuid4)
+
+    # the org the flow belongs to
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="studio_flow_starts")
+
+    # the channel number from which will be used as from parameter
+    channel = models.CharField(max_length=64)
+
+    # the flow that should be started
+    flow_sid = models.CharField(max_length=64)
+
+    # the current status of this flow start
+    status = models.CharField(max_length=1, default=STATUS_PENDING, choices=STATUS_CHOICES)
+
+    # the groups that should be considered for start in this flow
+    groups = models.ManyToManyField(ContactGroup)
+
+    # the individual contacts that should be considered for start in this flow
+    contacts = models.ManyToManyField(Contact)
+
+    # additional data about stored
+    metadata = JSONField(default=dict)
+
+    # who created this flow start
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="studio_flow_starts"
+    )
+
+    # when this flow start was created
+    created_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    # when this flow start was last modified
+    modified_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    @classmethod
+    def create(
+        cls,
+        org,
+        user,
+        flow_sid,
+        channel,
+        groups=(),
+        contacts=(),
+        urns=(),
+    ):
+        start = StudioFlowStart.objects.create(
+            org=org,
+            flow_sid=flow_sid,
+            channel=channel,
+            created_by=user,
+        )
+
+        for urn in urns:
+            contact = Contact.from_urn(org, urn)
+            if contact:
+                start.contacts.add(contact)
+
+        for contact in contacts:
+            start.contacts.add(contact)
+
+        for group in groups:
+            start.groups.add(group)
+
+        return start
+
+    def async_start(self):
+        on_transaction_commit(lambda: mailroom.queue_studio_flow_start(self))
+
+    def release(self):
+        with transaction.atomic():
+            self.groups.clear()
+            self.contacts.clear()
+            self.delete()
+
+    def __str__(self):  # pragma: no cover
+        return f"StudioFlowStart[id={self.id}, flow={self.flow_sid}]"
+
+
+class FlowTemplateMixin(object):
+    @classmethod
+    def get_unique_name(cls, base_name):
+        """
+        Generates a unique name based on the given base name
+        """
+        name = base_name[:64].strip()
+
+        count = 2
+        while True:
+            instances = cls.objects.filter(name=name)
+
+            if not instances.exists():
+                break
+
+            name = "%s %d" % (base_name[:59].strip(), count)
+            count += 1
+
+        return name
+
+
+class FlowTemplateGroup(models.Model, FlowTemplateMixin):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    name = models.CharField(max_length=64, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_or_create_obj(cls, value):
+        obj = None
+        valid_uuid = is_valid_uuid(value)
+        if valid_uuid:
+            obj = cls.objects.filter(uuid=value).first()
+        if not obj and not valid_uuid:
+            obj = cls.objects.create(name=value)
+        return obj
+
+    @classmethod
+    def get_group_count(cls):
+        groups = cls.objects.annotate(total=Count("group"))
+        return groups.values("name", "total", "uuid")
+
+    def has_templates(self):
+        return self.group.count() > 0
+
+
+class FlowTemplate(models.Model, FlowTemplateMixin):
+    uuid = models.UUIDField(unique=True, default=uuid4)
+    name = models.CharField(max_length=64, unique=True)
+    document = JSONAsTextField(help_text=_("imported flow file"), default=dict)
+    tags = ArrayField(models.CharField(max_length=10, null=True), default=list, null=True)
+    description = models.TextField(null=True)
+    group = models.ForeignKey(FlowTemplateGroup, on_delete=models.PROTECT, related_name="group")
+
+    # The org that can view this template
+    orgs = models.ManyToManyField(Org, related_name="flow_template")
+
+    # Override above and will show template to all org
+    global_view = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="flow_template"
+    )
+    created_on = models.DateTimeField(default=timezone.now, editable=False)
+    modified_on = models.DateTimeField(default=timezone.now, editable=False)
+
+    def __str__(self):
+        return f"{self.name}({self.group.name})"
+
+    @classmethod
+    def get_base_queryset(cls, org):
+        # TODO Improve this query later
+
+        results = set()
+        for item in cls.objects.filter(orgs=org).only("id"):
+            results.add(item.pk)
+        for item in cls.objects.filter(global_view=True).only("id"):
+            results.add(item.pk)
+
+        return cls.objects.filter(pk__in=list(results))
+
+    @classmethod
+    def get_flow_dict(cls, flow_id, request):
+        org = request.user.get_org()
+        # org_obj = Org.objects.get(pk=org.id)
+        branding_link = request.branding.get("link")
+        flow = Flow.objects.get(pk=flow_id)
+        campaigns = []
+        links = []
+
+        components = set(itertools.chain([flow], campaigns, links))
+
+        # add triggers for the selected flow
+        components.update(flow.triggers.filter(is_active=True, is_archived=False))
+
+        return org.export_definitions(branding_link, components)

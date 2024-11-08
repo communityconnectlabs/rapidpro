@@ -4,14 +4,14 @@
 -block login-title
   -trans "Welcome Back"
       
--block login-content        
+-block login-content
 
   {% analytics_hook 'login' %}
 
   -blocktrans trimmed
     Please sign in with your email address and password.
 
-  %form#login-form(method="POST" action="/users/login/")
+  %form#login-form(method="POST" action="/users/login/?next={{ request.GET.next | xss_safe }}")
     -csrf_token
     -for field, errors in form.errors.items
       -if field == '__all__'
@@ -26,20 +26,52 @@
         {{form.username.errors}}
 
     .mt-4
-      %input.input(type="password" name='password' placeholder='{{_("Password")|escapejs}}')
-    
+      %input.input(type="password" name='password' placeholder='{{_("Password")|escapejs}}' value="{% if form.password.value%}{{form.password.value|escape}}{%endif%}")
+
+    -if no_cellphone
+      .mt-4{style:"display: table; width: 100%;"}
+        %div{class:'w-2/5 md:float-left'}
+          %temba-select#country(name='country_code' searchable="true")
+            -for country in countries
+              %temba-option(value='{{country.value}}' name='{{country.text}}')
+        %div{class:'md:w-7/12 md:float-right'}
+          %temba-textinput(name='tel' placeholder='{{_("Phone Number")|escapejs}}')
+          .mt-2.text-left
+            Ex. 4154354423
+
+    -if no_authy_code
+      .mt-4
+        %temba-textinput(name='authy_code' placeholder='{{_("SMS Code")|escapejs}}')
+        %a{href:"javascript:resendCode();", class:"mt-2"}
+          -trans "Resend code"
+
+      %input{type:"hidden", name:"change_phone_number", value:"", id:"change_phone_number"}
+
     -if form.password.errors
       .alert-error.mt-4
         {{form.password.errors}}
-    .mt-2.text-right
-      %a(href="/user/forget/")
-        Forgot your password?
 
-    .mt-6
-      %input.button-primary(type="submit" value='{{_("Sign In")}}')
+    %div{class:"md\:w-full"}
+      %div(class='w-5/12 mt-2 text-right float-right')
+        -if no_authy_code
+          %a(href="javascript:changePhoneNumberProcess();")
+            Change phone number?
+        -else
+          %a(href="/user/forget/")
+            Forgot your password?
 
-  .mt-6
-    -blocktrans trimmed
-      Don't have an account yet?
-    %a(href="/org/signup")
-      -trans "Sign up"
+      %div(class='mt-6 w-6/12')
+        %input.button-primary(type="submit" value='{{_("Sign In")}}')
+
+-block extra-script
+  %script
+    function changePhoneNumberProcess() {
+      $('#change_phone_number').val('true');
+      $('form#login-form').removeAttr('onsubmit');
+      $('form#login-form').submit();
+    }
+    function resendCode() {
+      $('form#login-form').removeAttr('onsubmit');
+      $('[name="authy_code"]').val('');
+      $('form#login-form').submit();
+    }

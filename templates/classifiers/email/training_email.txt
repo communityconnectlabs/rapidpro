@@ -1,0 +1,16 @@
+{% load tz %}
+{% load i18n %}
+
+{% trans "Hi there!" %}
+{% trans "We have completed the classifier training." %}
+{% trans "You can find the results below:" %}
+
+{% trans "Total created:" %} {{ total_created }}
+{% trans "Total updated:" %} {{ total_updated }}
+
+{% if errors %}{% trans "Errors:" %}
+  {% for error in errors %}{{ error }}{% endfor %}
+{% endif %}
+
+{% trans "Thanks," %}
+{% blocktrans with brand=branding.name %}The {{ brand }} Team {% endblocktrans %}

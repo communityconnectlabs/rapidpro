@@ -1,0 +1,45 @@
+#ccl-web-surveyor
+%script{src:"https://ccl-webchat.communityconnectlabs.com/latest/ccl-web-surveyor.min.js", type:"text/javascript"}
+:javascript
+  window.renderSurveyor({
+    socketUrl: 'https://websocket-app.communityconnectlabs.com',
+    channelUUID: 'cc4bafc2-4060-4b3e-a1f4-63151b992b2d',
+    title: 'CCL Helper',
+    autoOpen: false,
+    storeHistory: true,
+    hostApi: 'https://app.communityconnectlabs.com',
+    icon: 'https://app.communityconnectlabs.com/sitestatic/brands/rapidpro/icon.png',
+    welcomeMessage: 'How can we help?',
+    welcomeMessageI18n: {'en': ''},
+    welcomeMessageQuickReplies: [],
+    inputTextPlaceholder: 'type here',
+    inputTextPlaceholderI18n: {'en': ''},
+    allowAttachments: false,
+    enableLanguageSelector: false,
+    fabText: 'How can we help?',
+    theme: {
+      widgetBackgroundColor: '#D8F3F2',
+      chatHeaderBackgroundColor: '#289F9B',
+      chatHeaderTextColor: '#FFFFFF',
+      automatedChatBackgroundColor: '#289F9B',
+      automatedChatTextColor: '#FFFFFF',
+      userChatBackgroundColor: '#FFFFFF',
+      userChatTextColor: '#000000',
+      logoStyle: 'circle',
+      chatButtonHeight: 64,
+      sidePadding: 20,
+      bottomPadding: 20,
+      sideOfScreen: 'right',
+      googleFont: '',
+      width: '400px',
+      height: '550px',
+      fabTextColor: '#FFFFFF',
+      fabBackgroundColor: '#289F9B',
+    },
+    meta: {
+      icon: {
+        width: 64,
+        height: 64
+      }
+    }
+  }, 'ccl-web-surveyor');

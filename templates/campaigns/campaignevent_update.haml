@@ -9,6 +9,7 @@
 
 -block modal-script
   {{ block.super }}
+  %script{src:"{{ STATIC_URL }}js/flow-parameters.js"}
 
   :javascript
     var modax = document.querySelector("#event-add, #event-update, temba-modax#gear-modax");
@@ -34,11 +35,11 @@
       body.querySelector("." + link.dataset.iso).style.display = display;
       display = 'none';
     }
-    
+
     flowSelect.addEventListener('change', function(event) {
       var option = event.target.values[0];
       var isBackground = option.type == "B";
-      
+
       if (isBackground) {
         body.querySelector("#event-flow-start-mode").classList.add("hide");
         flowSelect.infoText = "{{background_warning|escapejs}}";
@@ -85,21 +86,60 @@
       deliveryHourOptions.style.display = 'none';
     {% endif %}
 
+    body.querySelector("#id_flow_to_start").addEventListener("change", function (event) {
+      var selectedFlow = event.target.values[0].value;
+      var flowId = (selectedFlow !== '' ? parseInt(selectedFlow) : null);
+      if (flowId) {
+        var api_url = "{% url 'flows.flow_flow_parameters' %}?flow_id=" + flowId;
+        $.getJSON(api_url).done(function(data) {
+          buildTriggerFlowParams(data.results, [], 'update', body);
+        });
+      } else {
+        buildTriggerFlowParams([], [], 'update', body);
+      }
+    });
 
+    var flowField = body.querySelector("#id_flow_to_start");
+    setTimeout(() => {
+      if (!flowField.values[0]) {
+        return;
+      }
+      var idFlowVal = flowField.values[0].value;
+      {% if flow_parameters_fields and flow_parameters_values %}
+          var flowParamsFields = "{{ flow_parameters_fields }}".split("|");
+          var flowParamsValues = "{{ flow_parameters_values }}".split("|");
+          _requestAndBuildFlowParams(idFlowVal, flowParamsFields, flowParamsValues);
+      {% else %}
+        _requestAndBuildFlowParams(idFlowVal);
+      {% endif %}
+    }, 100)
+
+    {% if flow_parameters_fields and flow_parameters_values %}
+      var container = body.querySelector("#embed-container-update");
+      var flowParamsFields = "{{ flow_parameters_fields }}".split("|");
+      var flowParamsValues = "{{ flow_parameters_values }}".split("|");
+      buildTriggerFlowParams(flowParamsFields, flowParamsValues, 'update', body);
+    {% endif %}
+
+    function _requestAndBuildFlowParams(flowId, fields, values) {
+      if (flowId) {
+        var api_url = "{% url 'flows.flow_flow_parameters' %}?flow_id=" + flowId;
+        $.getJSON(api_url).done(function(data) {
+          if (fields && values) {
+            buildTriggerFlowParams(data.results, values, 'update', body);
+          } else {
+            buildTriggerFlowParams(data.results, [], 'update', body);
+          }
+        });
+      } else {
+        buildTriggerFlowParams([], [], 'update', body);
+      }
+    }
 
 -block modal-extra-style
   {{ block.super }}
 
   :css
-
-    .delivered {
-      color: inherit;
-    }
-
-    .control-group.field_event_type {
-      margin-bottom: 8px;
-    }
-
     #languages{
       position: relative;
       text-align: right;
@@ -133,6 +173,7 @@
 
     #field-relative {
       flex-grow: 1;
+      padding-top: 20px;
     }
 
     #field-hour {
@@ -150,7 +191,7 @@
     #event-flow-start-mode {
       opacity: 1;
     }
-    
+
     #background-flow-message {
       opacity: 1;
       transition: margin 200ms ease-in-out;
@@ -181,20 +222,64 @@
       margin-bottom: 6px;
     }
 
-    .delivered {
-      padding-top:10px;
-      margin-right: 12px;
-      vertical-align: center;
-    }
-
-    #send-at {
-      display: flex;
-    }
-
     temba-completion {
       margin: 10px 0px 20px 0px;
       --textarea-height: 125px;
     }
+
+    a {
+      color: rgb(var(--primary-rgb));
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .embedded-data-update {
+      margin: 0 0 5px 4px;
+      font-weight: 400;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      line-height: normal;
+      color: rgb(119, 119, 119);
+    }
+
+    .embed-row {
+      display: flex;
+    }
+
+    .embed-field-update, .embed-value-update {
+      width: 49%;
+      margin: 0 5px 5px 0;
+    }
+
+    .embed-field-update > input, .embed-value-update > input {
+      width: calc(100% - 18px);
+      font-size: 13px;
+      padding: 9px;
+      border-radius: var(--curvature-widget);;
+      border: 1px solid var(--color-widget-border);
+      color: var(--color-widget-text);
+      outline: none;
+    }
+
+    .embed-field-update > input:read-only {
+      background: #eee;
+    }
+
+    .embed-value-update > input:focus {
+      background: var(--color-widget-bg-focused);
+      border-color: var(--color-focus);
+      box-shadow: var(--widget-box-shadow-focused);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+
 
 -block fields
 
@@ -214,18 +299,16 @@
     -for field in form.languages
       .language{class:'{{field.language.iso_code}} {%if forloop.counter0 > 0%}hide{%endif%}'}
         -render_field field.language.iso_code
+        -with dialog_query="#event-add, #event-update" field_name=field.language.iso_code
+          -include "utils/forms/segments_counter.haml"
 
     #event-message-start-mode
-      .start-mode-help
-        - trans "If the contact is already active in a flow"
       -render_field 'message_start_mode'
 
   #flow-section
     -render_field 'flow_to_start'
-    
+
     #event-flow-start-mode(class="{% if form.initial.flow_to_start.flow_type == 'B' %}hide{%endif%}")
-      .start-mode-help
-        -trans "If the contact is already active in a flow"
       -render_field 'flow_start_mode'
 
   #schedule-section
@@ -239,8 +322,12 @@
       -render_field 'relative_to'
 
   #send-at.hide
-    .delivered
-      -trans "Delivered"
     #field-hour
       -render_field 'delivery_hour'
+
+  #flow-params-section
+    %h5.embedded-data-update.hidden
+      -trans "Flow Parameters"
+    #embedded-data-update.hidden
+      #embed-container-update
 

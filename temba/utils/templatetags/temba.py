@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import iso8601
 import pytz
@@ -10,7 +10,7 @@ from django.template import TemplateSyntaxError
 from django.template.defaultfilters import register
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import escapejs
+from django.utils.html import escape, escapejs, strip_tags
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _, ngettext_lazy
 
@@ -183,7 +183,9 @@ class LessBlockNode(template.Node):
     def render(self, context):
         output = self.nodelist.render(context)
         includes = '@import (reference) "variables.less";\n'
-        includes += '@import (reference, optional) "../brands/%s/less/variables.less";\n' % context["brand"]["slug"]
+        includes += '@import (reference, optional) "../brands/%s/less/variables.less";\n' % context.get(
+            "brand", {}
+        ).get("slug", "rapidpro")
         includes += '@import (reference) "mixins.less";\n'
         style_output = '<style type="text/less" media="all">\n%s\n%s</style>' % (includes, output)
         return style_output
@@ -207,6 +209,39 @@ def to_json(value):
     escaped_output = escapejs(value)
 
     return mark_safe(f'JSON.parse("{escaped_output}")')
+
+
+@register.simple_tag(takes_context=True)
+def pretty_datetime(context, dtime):
+
+    if dtime.tzinfo is None:
+        dtime = dtime.replace(tzinfo=pytz.utc)
+    org_format = "D"
+    tz = pytz.UTC
+    org = context["user_org"]
+    if org:
+        org_format = org.date_format
+        tz = org.timezone
+
+    dtime = dtime.astimezone(tz)
+
+    if org_format == "D":
+        return "%d %s %s %s:%s" % (
+            int(dtime.strftime("%d")),
+            dtime.strftime("%B"),
+            dtime.strftime("%Y"),
+            dtime.strftime("%H"),
+            dtime.strftime("%M"),
+        )
+    else:
+        return "%s %d, %s %d:%s %s" % (
+            dtime.strftime("%B"),
+            int(dtime.strftime("%d")),
+            dtime.strftime("%Y"),
+            int(dtime.strftime("%I")),
+            dtime.strftime("%M"),
+            dtime.strftime("%p").lower(),
+        )
 
 
 @register.simple_tag(takes_context=True)
@@ -276,3 +311,44 @@ def parse_isodate(value):
 @register.simple_tag(takes_context=True)
 def analytics_hook(context, name: str):
     return mark_safe(analytics.get_hook_html(name, context))
+
+
+def format_tz_datetime(time, tz):
+    user_time_zone = pytz.timezone(tz.zone)
+
+    if time.tzinfo is None:
+        time = time.replace(tzinfo=user_time_zone)
+
+    time = time.astimezone(user_time_zone)
+    return time.strftime("%b %d, %Y %H:%M")
+
+
+@register.simple_tag(takes_context=True)
+def temba_get_value(context, obj, field):
+    view = context["view"]
+    org = context["user_org"]
+    value = view.lookup_field_value(context, obj, field)
+
+    try:
+        if value.__class__.__name__ == "dict" and value.get("__type") == "Date":
+            value = value.get("iso")
+
+        value = datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ")
+        return format_tz_datetime(value, org.timezone)
+    except Exception:
+        pass
+
+    if value.__class__.__name__ == "bool":
+        value = str(value)
+
+    return value or "-"
+
+
+@register.simple_tag
+def to_dict(obj):
+    return str(obj.__dict__)
+
+
+@register.filter
+def xss_safe(string):
+    return "" if "javascript:" in string else escape(strip_tags(string))

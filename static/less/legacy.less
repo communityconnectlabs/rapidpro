@@ -704,6 +704,14 @@ a.logo {
 // The list tables we use on messages, contacts etc..
 // *******************************
 
+.search-details {
+  float: left;
+  width: 650px;
+  padding-top:20px;
+  margin-bottom:-10px;
+}
+
+
 .list-container {
   .scroll-x();
 }
@@ -803,6 +811,284 @@ table.list-table {
           border-left: 7px solid transparent;
           border-bottom-color: rgba(255, 255, 255, 1);
           content: '';
+        }
+
+        a {
+          font-size: 28px;
+          color: @color-navlink;
+          margin: 0;
+          padding: 10px 0;
+          width: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+
+          .title {
+            border: 0px solid green;
+            color: @color-navbar;
+            padding: 0px;
+            width: 50px;
+            margin: 0;
+            margin-left: 0px;
+            margin-top: 8px;
+          }
+        }
+
+      }
+    }
+
+    .title {
+      font-family: @primary-font;
+      font-size: 12px;
+      text-align: center;
+      width: 60px;
+      height: 10px;
+      margin-top: 5px;
+      color: @color-menu;
+      border: 0px solid green;
+    }
+
+    .notification {
+      position: absolute;
+      padding: 3px 3px;
+      font-family: @primary-font;
+      font-size: 12px;
+      background: @color-notification;
+      color: @color-menu;
+      line-height: 12px;
+      left: 34px;
+      top: -10px;
+      text-align: center;
+      border-radius: 2px;
+      -moz-border-radius: 2px;
+      box-shadow: 1px 1px 0px @color-bg-grey;
+      text-shadow: 0px -1px 0px rgba(0, 0, 0, 0.8);
+
+      border: 0px solid maroon;
+
+      &.icon-warning {
+        font-family: temba;
+      }
+    }
+
+    a {
+      color: @color-menu;
+      text-decoration: none;
+      text-transform: lowercase;
+      display: inline-block;
+      border: 0px solid black;
+      height: 50px;
+      width: 60px;
+      text-align: center;
+
+      &.icon-nav-messages {
+        &.active:before {
+          content: "\e085";
+        }
+        &:hover:before {
+          content: "\e085";
+        }
+      }
+
+      &.icon-nav-learn {
+        &.active:before {
+          content: "\e0b9";
+        }
+        &:hover:before {
+          content: "\e0b9";
+        }
+      }
+
+      &.icon-nav-docs {
+        &.active:before {
+          content: "\f15c";
+        }
+
+        &:hover:before {
+          content: "\f15c";
+        }
+      }
+
+      &.icon-nav-analytics {
+        &.active:before {
+          content: "\e087";
+        }
+        &:hover:before {
+          content: "\e087";
+        }
+      }
+
+      &.icon-more {
+        &.active:before {
+          content: "\e0be";
+        }
+        &:hover:before {
+          content: "\e0be";
+        }
+      }
+
+      &.icon-nav-orgs {
+        &.active:before {
+          content: "\e0ad";
+        }
+        &:hover:before {
+          content: "\e0ad";
+        }
+      }
+
+      &.icon-nav-flows {
+        &.active:before {
+          content: "\e08c";
+        }
+        &:hover:before {
+          content: "\e08c";
+        }
+      }
+
+      &.icon-nav-contacts {
+        &.active:before {
+          content: "\e081";
+        }
+        &:hover:before {
+          content: "\e081";
+        }
+      }
+
+      &.icon-nav-channels {
+        &.active:before {
+          content: "\e098";
+        }
+        &:hover:before {
+          content: "\e098";
+        }
+      }
+
+      &.icon-nav-home {
+        &.active:before {
+          content: "\e083";
+        }
+        &:hover:before {
+          content: "\e083";
+        }
+      }
+
+      &.icon-nav-login {
+        &:hover:before {
+          content: "\e090";
+        }
+        &.active:before {
+          content: "\e090";
+        }
+
+      }
+
+      &.icon-nav-channels {
+
+        &:hover:before {
+          content: "\e098";
+        }
+        &.active:before {
+          content: "\e098";
+        }
+      }
+
+      &.icon-nav-pricing {
+        &:hover:before {
+          content: "\e09e";
+        }
+        &.active:before {
+          content: "\e09e";
+        }
+      }
+
+      &.icon-nav-groups {
+        &.active:before {
+          content: "\e08e";
+        }
+        &:hover:before {
+          content: "\e08e";
+        }
+      }
+
+      &.icon-nav-dashboard {
+        &.active:before {
+          content: "\e0a3";
+        }
+        &:hover:before {
+          content: "\e0a3";
+        }
+      }
+
+      &.icon-nav-android {
+        &.active:before {
+          content: "\e089";
+        }
+        &:hover:before {
+          content: "\e089";
+        }
+      }
+
+      &.icon-nav-triggers {
+        &.active:before {
+          content: "\e0a5";
+        }
+        &:hover:before {
+          content: "\e0a5";
+        }
+      }
+
+      &.icon-nav-locations {
+        &.active:before {
+          content: "\e601";
+        }
+        &:hover:before {
+          content: "\e601";
+        }
+      }
+
+      &.icon-nav-campaigns {
+
+        &:hover:before {
+          content: "\e0bc";
+        }
+        &.active:before {
+          content: "\e0bc";
+        }
+      }
+
+      &.icon-nav-blog {
+        &.active:before {
+          content: "\e0b7";
+        }
+        &:hover:before {
+          content: "\e0b7";
+        }
+      }
+
+      &.icon-nav-logout {
+        &.active:before {
+          content: "\e0c8";
+        }
+        &:hover:before {
+          content: "\e0c8";
+        }
+      }
+
+      &.icon-nav-help-inverted, &.icon-nav-help {
+        &.active:before {
+          content: "\e917";
+        }
+        &:hover:before {
+          content: "\e917";
+        }
+      }
+
+      &.icon-nav-hand-inverted, &.icon-nav-hand {
+        &.active:before {
+          content: "\e915";
+        }
+        &:hover:before {
+          content: "\e915";
         }
       }
     }
@@ -1153,7 +1439,6 @@ input[type='text'].search-query {
   padding-top: 2;
   font-size: 14px;
   font-weight: 200;
-
 }
 
 // *******************************
@@ -1394,7 +1679,9 @@ form.smartmin-form ul.errorlist li {
 
 }
 
-#active-modal .fetched-content {}
+#active-modal .fetched-content {
+
+}
 
 .modal,
 .send-message {
@@ -1443,6 +1730,7 @@ form.smartmin-form ul.errorlist li {
 
     padding: 20px;
     position: initial;
+    max-height: 350px;
 
     .details {
       color: #ccc;
@@ -1846,10 +2134,6 @@ input[type='radio'] {
 #id-schedule.fixed .formax-container {
   margin-left: 115px;
   margin-top: 15px;
-}
-
-#id-schedule .formax-container .formax-form input[value='Save'] {
-  display: none;
 }
 
 .stop-button {

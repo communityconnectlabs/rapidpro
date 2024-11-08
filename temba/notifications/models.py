@@ -11,6 +11,7 @@ from django.utils.functional import cached_property
 from temba.channels.models import Channel
 from temba.contacts.models import ContactImport, ExportContactsTask
 from temba.flows.models import ExportFlowResultsTask
+from temba.links.models import ExportLinksTask
 from temba.msgs.models import ExportMessagesTask
 from temba.orgs.models import Org
 from temba.utils.email import send_template_email
@@ -258,6 +259,9 @@ class Notification(models.Model):
     contact_import = models.ForeignKey(
         ContactImport, null=True, on_delete=models.PROTECT, related_name="notifications"
     )
+    links_export = models.ForeignKey(
+        ExportLinksTask, null=True, on_delete=models.PROTECT, related_name="notifications"
+    )
     incident = models.ForeignKey(Incident, null=True, on_delete=models.PROTECT, related_name="notifications")
 
     @classmethod
@@ -337,7 +341,7 @@ class Notification(models.Model):
 
     @cached_property
     def export(self):
-        return self.contact_export or self.message_export or self.results_export
+        return self.contact_export or self.message_export or self.results_export or self.links_export
 
     @property
     def type(self):

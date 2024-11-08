@@ -1,3 +1,4 @@
+import ast
 import base64
 import hashlib
 import hmac
@@ -8,9 +9,13 @@ from datetime import datetime, timedelta
 
 import nexmo
 import phonenumbers
+import pycountry
 import pytz
+import regex
 import requests
 import twilio.base.exceptions
+from dateutil.relativedelta import relativedelta
+from rest_framework import status
 from smartmin.views import (
     SmartCRUDL,
     SmartFormView,
@@ -25,7 +30,7 @@ from twilio.base.exceptions import TwilioRestException
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Sum
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -41,8 +46,8 @@ from temba.msgs.models import Msg, SystemLabel
 from temba.msgs.views import InboxView
 from temba.orgs.models import Org
 from temba.orgs.views import AnonMixin, DependencyDeleteModal, MenuMixin, ModalMixin, OrgObjPermsMixin, OrgPermsMixin
-from temba.utils import analytics, countries, json
-from temba.utils.fields import SelectWidget
+from temba.utils import analytics, countries, get_image_size, json
+from temba.utils.fields import SelectMultipleWidget, SelectWidget
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import ComponentFormMixin, SpaMixin
 
@@ -371,7 +376,9 @@ class ClaimViewMixin(SpaMixin, OrgPermsMixin, ComponentFormMixin):
         return kwargs
 
     def get_success_url(self):
-        if self.channel_type.show_config_page:
+        if self.channel_type.show_edit_page:
+            return reverse("channels.channel_update", args=[self.object.id])
+        elif self.channel_type.show_config_page:
             return reverse("channels.channel_configuration", args=[self.object.uuid])
         else:
             return reverse("channels.channel_read", args=[self.object.uuid])
@@ -713,9 +720,448 @@ class UpdateChannelForm(forms.ModelForm):
     class Meta:
         model = Channel
         fields = ("name", "alert_email")
+        config_fields = []
         readonly = ()
         labels = {}
         helps = {}
+
+
+class UpdateWebChatForm(UpdateChannelForm):
+    name = forms.CharField(
+        label=_("Name"),
+        help_text=_("Descriptive label for this channel"),
+        widget=forms.TextInput(attrs={"required": "", "maxlength": "64"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.add_extra_fields()
+
+        self.fields["theme"].choices = [
+            (theme, settings.WIDGET_THEMES[theme]["name"]) for theme in list(settings.WIDGET_THEMES.keys())
+        ]
+
+        self.fields["logo_style"].choices = [("circle", _("Circle")), ("rectangle", _("Rectangle"))]
+
+        self.fields["auto_open"].choices = [("false", _("Disable")), ("true", _("Enable"))]
+
+        self.fields["side_of_screen"].choices = [("right", _("Right")), ("left", _("Left"))]
+
+        if self.instance.config:
+            config = self.instance.config
+            default_theme = settings.WIDGET_THEMES.get(settings.WIDGET_DEFAULT_THEME, {})
+            self.fields["theme"].initial = config.get("theme", "")
+            self.fields["title"].initial = config.get("title", "")
+            self.fields["logo_style"].initial = config.get("logo_style", "circle")
+            self.fields["widget_bg_color"].initial = config.get("widget_bg_color", default_theme.get("widget_bg"))
+            self.fields["chat_header_bg_color"].initial = config.get(
+                "chat_header_bg_color", default_theme.get("header_bg")
+            )
+            self.fields["chat_header_text_color"].initial = config.get(
+                "chat_header_text_color", default_theme.get("header_txt")
+            )
+            self.fields["automated_chat_bg"].initial = config.get(
+                "automated_chat_bg", default_theme.get("automated_chat_bg")
+            )
+            self.fields["automated_chat_txt"].initial = config.get(
+                "automated_chat_txt", default_theme.get("automated_chat_txt")
+            )
+            self.fields["user_chat_bg"].initial = config.get("user_chat_bg", default_theme.get("user_chat_bg"))
+            self.fields["user_chat_txt"].initial = config.get("user_chat_txt", default_theme.get("user_chat_txt"))
+
+            self.fields["width"].initial = config.get("width", "400")
+            self.fields["height"].initial = config.get("height", "550")
+            self.fields["chat_button_height"].initial = config.get("chat_button_height", "64")
+            self.fields["side_padding"].initial = config.get("side_padding", "20")
+            self.fields["bottom_padding"].initial = config.get("bottom_padding", "20")
+            self.fields["side_of_screen"].initial = config.get("side_of_screen", "right")
+
+            self.fields["action_type"].initial = "update_and_generate_code_snippet"
+
+            self.fields["welcome_message_default"].initial = config.get("welcome_message_default", "")
+
+            self.fields["welcome_msg_quick_replies"].initial = config.get("welcome_msg_quick_replies", [])
+
+            self.fields["inputtext_placeholder_default"].initial = config.get("inputtext_placeholder_default", "")
+
+            self.fields["store_history"].initial = config.get("store_history", False)
+            self.fields["allow_attachments"].initial = config.get("allow_attachments", False)
+            self.fields["allow_multi_language"].initial = config.get("allow_multi_language", False)
+            self.fields["allow_fab_text"].initial = config.get("allow_fab_text", False)
+            self.fields["fab_text"].initial = config.get("fab_text", "")
+
+            response_fonts = requests.get(
+                f"https://www.googleapis.com/webfonts/v1/webfonts?key={settings.GOOGLE_FONT_API_KEY}"
+            )
+
+            if response_fonts.status_code == 200:
+                font_list_json = response_fonts.json()
+                self.fields["google_font"].choices = [("", "")] + [
+                    (item.get("family"), item.get("family")) for item in font_list_json.get("items", [])
+                ]
+
+            self.fields["google_font"].initial = config.get("google_font", "")
+
+            for lang in self.object.org.flow_languages:
+                lang_alpha = pycountry.languages.get(alpha_3=lang)
+                if not hasattr(lang_alpha, "alpha_2"):
+                    continue
+
+                self.fields[f"welcome_message_{lang_alpha.alpha_2}"].initial = config.get(
+                    f"welcome_message_{lang_alpha.alpha_2}", ""
+                )
+
+                self.fields[f"inputtext_placeholder_{lang_alpha.alpha_2}"].initial = config.get(
+                    f"inputtext_placeholder_{lang_alpha.alpha_2}", ""
+                )
+
+    def clean_name(self):
+        org = self.object.org
+        name = self.cleaned_data["name"]
+
+        if not regex.match(r"^[A-Za-z0-9_.\-*() ]+$", name, regex.V0):
+            raise forms.ValidationError(
+                "Please make sure the WebChat name only contains "
+                "alphanumeric characters [0-9a-zA-Z], hyphens, and underscores"
+            )
+
+        # does a ws channel already exists on this account with that name
+        existing = Channel.objects.filter(
+            org=org, is_active=True, channel_type=self.object.channel_type, name=name
+        ).first()
+
+        if existing and existing != self.object:
+            raise ValidationError(_("A WebChat channel for this name already exists on your account."))
+
+        return name
+
+    def clean_width(self):
+        width = self.cleaned_data["width"]
+
+        if str(width).endswith("px"):
+            width = str(width).replace("px", "")
+
+        if int(width) < 250:
+            raise ValidationError(_("The minimum width is 250px."))
+
+        return width
+
+    def clean_height(self):
+        height = self.cleaned_data["height"]
+
+        if str(height).endswith("px"):
+            height = str(height).replace("px", "")
+
+        if int(height) < 300:
+            raise ValidationError(_("The minimum height is 300px."))
+
+        return height
+
+    def clean_title(self):
+        title = self.cleaned_data["title"]
+
+        if len(title) > 40:
+            raise ValidationError(
+                _("Oops, the maximum length for a title is only 40 characters, " "your title has %s." % len(title))
+            )
+
+        return title
+
+    def clean_logo(self):
+        channel = self.instance
+        org = channel.org
+        logo = self.cleaned_data.get("logo")
+        config = channel.config
+
+        logo_media = config.get(Channel.CONFIG_WCH_LOGO, None)
+
+        if logo and len(logo) > 0 and not str(logo).startswith("http"):
+            if logo.size > 1000000:
+                raise ValidationError(_("Too big logo for the Widget, it does not accept more than 1MB"))
+
+            extension = logo.name.split(".")[-1]
+            if extension not in ["png", "jpg", "jpeg", "gif"]:
+                raise ValidationError(
+                    _("Please, upload a logo using one of the following formats: PNG, JPG, " "JPEG or GIF")
+                )
+
+            logo_media = org.save_media(logo, extension)
+
+        return logo_media
+
+    def clean_welcome_msg_quick_replies(self):
+        quick_replies = self.cleaned_data.get("welcome_msg_quick_replies", "")
+        quick_replies = ast.literal_eval(quick_replies if quick_replies else "[]")
+        return [item for item in quick_replies if item != ""]
+
+    def add_extra_fields(self):
+
+        self.add_config_field(
+            "logo",
+            forms.FileField(
+                label=_("Logo"), required=False, help_text=_("We recommend to upload an image with 64x64px")
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "logo_style",
+            forms.ChoiceField(
+                label=_("Logo Style"),
+                help_text=_("This is related to how we will display the widget when it's closed"),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "title",
+            forms.CharField(
+                label=_("Chat Title"),
+                help_text=_("It will appear on the header of the WebChat"),
+                widget=forms.TextInput(attrs={"required": "", "maxlength": 40}),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "welcome_message_default",
+            forms.CharField(
+                label=_("Welcome Message"), widget=forms.Textarea(attrs={"style": "height: 110px", "required": ""})
+            ),
+            default=None,
+        )
+
+        org = self.object.org
+        for lang in org.flow_languages:
+            lang_alpha = pycountry.languages.get(alpha_3=lang)
+            if not hasattr(lang_alpha, "alpha_2"):
+                continue
+
+            self.add_config_field(
+                f"welcome_message_{lang_alpha.alpha_2}",
+                forms.CharField(
+                    label=_(f"Welcome Message {lang_alpha.name}"),
+                    required=False,
+                    widget=forms.Textarea(attrs={"style": "height: 110px"}),
+                ),
+                default="",
+            )
+
+        self.add_config_field(
+            "welcome_msg_quick_replies",
+            forms.CharField(
+                required=False,
+                label=_("Welcome Message Quick Replies"),
+                widget=SelectMultipleWidget(
+                    attrs={
+                        "widget_only": False,
+                        "searchable": True,
+                        "tags": True,
+                        "space_select": False,
+                        "placeholder": _("Quick Replies"),
+                    }
+                ),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "inputtext_placeholder_default",
+            forms.CharField(
+                label=_("Input Text Placeholder"),
+                widget=forms.Textarea(attrs={"style": "height: 110px", "required": ""}),
+            ),
+            default=None,
+        )
+
+        # Unfortunately, duplicated "for" here because of the frontend implementation
+        for lang in org.flow_languages:
+            lang_alpha = pycountry.languages.get(alpha_3=lang)
+            if not hasattr(lang_alpha, "alpha_2"):
+                continue
+
+            self.add_config_field(
+                f"inputtext_placeholder_{lang_alpha.alpha_2}",
+                forms.CharField(
+                    label=_(f"Input Text Placeholder {lang_alpha.name}"),
+                    required=False,
+                    widget=forms.Textarea(attrs={"style": "height: 110px"}),
+                ),
+                default="",
+            )
+
+        self.add_config_field(
+            "google_font",
+            forms.ChoiceField(
+                label=_("Google Font"),
+                required=False,
+                widget=SelectWidget(attrs={"searchable": True, "clearable": True}),
+            ),
+            default=None,
+        )
+
+        self.add_config_field("theme", forms.ChoiceField(label=_("Theme"), required=False), default=None)
+
+        self.add_config_field(
+            "widget_bg_color",
+            forms.CharField(label=_("Widget Background Color"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "chat_header_bg_color",
+            forms.CharField(label=_("Chat Header Background Color"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "chat_header_text_color",
+            forms.CharField(label=_("Chat Header Text Color"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "automated_chat_bg",
+            forms.CharField(label=_("Automated Chat Background"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "automated_chat_txt",
+            forms.CharField(label=_("Automated Chat Text"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "user_chat_bg",
+            forms.CharField(label=_("User Chat Background"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "user_chat_txt",
+            forms.CharField(label=_("User Chat Text"), widget=forms.TextInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "width",
+            forms.CharField(
+                label=_("Width (in pixels)"),
+                widget=forms.NumberInput(),
+                help_text=_("Default: 400 | Minimum: 250"),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "height",
+            forms.CharField(
+                label=_("Height (in pixels)"),
+                widget=forms.NumberInput(),
+                help_text=_("Default: 550 | Minimum: 300"),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "chat_button_height",
+            forms.CharField(label=_("Chat Button Height (in pixels)"), widget=forms.NumberInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "side_padding",
+            forms.CharField(label=_("Side Padding (# of Pixels)"), widget=forms.NumberInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "bottom_padding",
+            forms.CharField(label=_("Bottom Padding (# of Pixels)"), widget=forms.NumberInput()),
+            default=None,
+        )
+
+        self.add_config_field(
+            "side_of_screen",
+            forms.ChoiceField(
+                label=_("Side of Screen"),
+                help_text=_("This is related to the side of the screen that we will display the widget"),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "auto_open",
+            forms.ChoiceField(
+                label=_("Auto Open"), help_text=_("Whether the chatbox should open when the website page is loaded")
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
+            "action_type", forms.CharField(widget=forms.HiddenInput()), default="update_and_generate_code_snippet"
+        )
+
+        self.add_config_field(
+            "store_history",
+            forms.BooleanField(
+                label=_("Store History"),
+                help_text=_(
+                    "Keeps chat identifier in cookies so the history can be accessible after the page refresh"
+                ),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "allow_attachments",
+            forms.BooleanField(
+                label=_("Allow Attachments"),
+                help_text=_("Check this box whether the attachment icon is available for this WebChat"),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "allow_multi_language",
+            forms.BooleanField(
+                label=_("Allow Language Select"),
+                help_text=_("Check this box whether the language selection is available for this WebChat"),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "allow_fab_text",
+            forms.BooleanField(
+                label=_("Use a text button"),
+                help_text=_(
+                    "Whether you want to use a text button instead of icon "
+                    "(you can specify text you want once you checking this box)"
+                ),
+                required=False,
+            ),
+            default=False,
+        )
+
+        self.add_config_field(
+            "fab_text", forms.CharField(label=_("Text for the button"), max_length=64, required=False), default=False
+        )
+
+        unlisted_fields = ["name", "alert_email"]
+
+        for field in list(self.fields):
+            if field in unlisted_fields:
+                continue
+            self.Meta.config_fields.append(field)
+
+    class Meta(UpdateChannelForm.Meta):
+        readonly = []
 
 
 class UpdateTelChannelForm(UpdateChannelForm):
@@ -818,14 +1264,16 @@ class ChannelCRUDL(SmartCRUDL):
                     )
 
             if self.has_org_perm("channels.channel_update"):
-                links.append(
-                    dict(
-                        id="update-channel",
-                        title=_("Edit"),
-                        href=reverse("channels.channel_update", args=[self.object.id]),
-                        modax=_("Edit Channel"),
-                    )
+                edit_link = dict(
+                    id="update-channel",
+                    title=_("Edit"),
+                    href=reverse("channels.channel_update", args=[self.object.id]),
+                    modax=_("Edit Channel"),
                 )
+                if self.object.channel_type == "WCH":
+                    del edit_link["modax"]
+
+                links.append(edit_link)
 
                 if self.object.is_android() or (self.object.parent and self.object.parent.is_android()):
 
@@ -995,8 +1443,8 @@ class ChannelCRUDL(SmartCRUDL):
             message_stats.append(dict(name=_("Outgoing Text"), data=msg_out))
 
             if context["ivr_count"]:
-                message_stats.append(dict(name=_("Incoming IVR"), data=ivr_in))
-                message_stats.append(dict(name=_("Outgoing IVR"), data=ivr_out))
+                message_stats.append(dict(name=_("Incoming Voice Messages"), data=ivr_in))
+                message_stats.append(dict(name=_("Outgoing Voice Messages"), data=ivr_out))
 
             # get all our counts for that period
             daily_counts = list(
@@ -1035,8 +1483,15 @@ class ChannelCRUDL(SmartCRUDL):
 
             message_stats_table = []
 
-            # we'll show totals for every month since this channel was started
+            # we'll show totals for every month since this channel was started (limited to 12 months ago)
             month_start = channel.created_on.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+            now = timezone.now()
+            twelve_months_ago = now + relativedelta(months=-12)
+            twelve_months_ago = twelve_months_ago.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+            if month_start < twelve_months_ago:
+                month_start = twelve_months_ago
 
             # get our totals grouped by month
             monthly_totals = list(
@@ -1055,8 +1510,12 @@ class ChannelCRUDL(SmartCRUDL):
                 .annotate(count_sum=Sum("count"))
             )
 
+            context["total_incoming_messages_count"] = 0
+            context["total_outgoing_messages_count"] = 0
+            context["total_incoming_ivr_count"] = 0
+            context["total_outgoing_ivr_count"] = 0
+
             # calculate our summary table for last 12 months
-            now = timezone.now()
             while month_start < now:
                 msg_in = 0
                 msg_out = 0
@@ -1083,6 +1542,11 @@ class ChannelCRUDL(SmartCRUDL):
                         outgoing_ivr_count=ivr_out,
                     )
                 )
+
+                context["total_incoming_messages_count"] += msg_in
+                context["total_outgoing_messages_count"] += msg_out
+                context["total_incoming_ivr_count"] += ivr_in
+                context["total_outgoing_ivr_count"] += ivr_out
 
                 month_start = (month_start + timedelta(days=32)).replace(day=1)
 
@@ -1185,8 +1649,53 @@ class ChannelCRUDL(SmartCRUDL):
         success_message = ""
         submit_button_name = _("Save Changes")
 
+        def set_submit_button_name(self, name):
+            self.submit_button_name = name
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+
+            if self.object.channel_type == "WCH":
+                context["customable_fields"] = [
+                    "#id_title",
+                    "#id_widget_bg_color",
+                    "#id_chat_header_bg_color",
+                    "#id_chat_header_text_color",
+                    "#id_automated_chat_bg",
+                    "#id_automated_chat_txt",
+                    "#id_user_chat_bg",
+                    "#id_user_chat_txt",
+                    "#id_welcome_message_default",
+                    "#id_side_padding",
+                    "#id_bottom_padding",
+                    "#id_chat_button_height",
+                    "#id_width",
+                    "#id_height",
+                ]
+                context["hostname"] = settings.HOSTNAME
+                context["websocket_url"] = settings.WEBSOCKET_SERVER_URL
+                logo_img = self.object.config.get("logo")
+                context["wch_logo_size"] = get_image_size(logo_img=logo_img)
+
+                context["widget_compiled_file"] = settings.WIDGET_COMPILED_FILE
+
+                context_languages = []
+                for lang in self.object.org.flow_languages:
+                    lang_alpha = pycountry.languages.get(alpha_3=lang)
+                    if not hasattr(lang_alpha, "alpha_2"):
+                        continue
+                    context_languages.append(dict(name=lang_alpha.name, iso_code=lang_alpha.alpha_2))
+                context["languages"] = context_languages
+
+            return context
+
         def derive_title(self):
-            return _("%s Channel") % self.object.get_channel_type_display()
+            if self.object.channel_type == "WCH":
+                channel_type_display = self.object.get_channel_type_display()
+                self.set_submit_button_name(_("Save and Generate Code Snippet"))
+            else:
+                channel_type_display = f"{self.object.get_channel_type_display()} Channel"
+            return _("%s") % channel_type_display
 
         def derive_readonly(self):
             return self.form.Meta.readonly if hasattr(self, "form") else []
@@ -1202,7 +1711,16 @@ class ChannelCRUDL(SmartCRUDL):
             return super().lookup_field_help(field, default=default)
 
         def get_success_url(self):
-            return reverse("channels.channel_read", args=[self.object.uuid])
+            has_reload = self.request.POST.get("action_type", None) == "update_and_reload"
+            if has_reload:
+                viewname = "channels.channel_update"
+                arg = self.object.id
+            else:
+                viewname = (
+                    "channels.channel_configuration" if self.object.channel_type == "WCH" else "channels.channel_read"
+                )
+                arg = self.object.uuid
+            return reverse(viewname=viewname, args=[arg])
 
         def get_form_class(self):
             return Channel.get_type_from_code(self.object.channel_type).get_update_form()
@@ -1219,7 +1737,12 @@ class ChannelCRUDL(SmartCRUDL):
 
         def pre_save(self, obj):
             for field in self.form.config_fields:
-                obj.config[field] = self.form.cleaned_data[field]
+                try:
+                    if field == "action_type":
+                        continue
+                    obj.config[field] = self.form.cleaned_data[field]
+                except KeyError:
+                    pass
             return obj
 
         def post_save(self, obj):
@@ -1386,17 +1909,68 @@ class ChannelCRUDL(SmartCRUDL):
     class Configuration(SpaMixin, OrgObjPermsMixin, SmartReadView):
         slug_url_kwarg = "uuid"
 
+        def get_gear_links(self):
+            links = []
+
+            if self.has_org_perm("channels.channel_update") and self.object.channel_type == "WCH":
+                links.append(
+                    dict(
+                        title=_("Edit"),
+                        style="button-primary",
+                        href=reverse("channels.channel_update", args=[self.object.id]),
+                    )
+                )
+
+            return links
+
+        def has_permission_view_objects(self):
+            channel = Channel.objects.filter(org=self.request.user.get_org(), uuid=self.kwargs.get("uuid")).first()
+            if not channel:
+                raise PermissionDenied()
+            return None
+
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
             context["domain"] = self.object.callback_domain
             context["ip_addresses"] = settings.IP_ADDRESSES
 
+            context_dict = dict(widget_compiled_file=settings.WIDGET_COMPILED_FILE)
+
             # populate with our channel type
             channel_type = Channel.get_type_from_code(self.object.channel_type)
-            context["configuration_template"] = channel_type.get_configuration_template(self.object)
             context["configuration_blurb"] = channel_type.get_configuration_blurb(self.object)
             context["configuration_urls"] = channel_type.get_configuration_urls(self.object)
             context["show_public_addresses"] = channel_type.show_public_addresses
+
+            if self.object.channel_type == "WCH":
+                config = self.object.config
+                logo_img = config.get("logo", None)
+                if logo_img:
+                    context_dict["wch_logo_size"] = get_image_size(logo_img=logo_img)
+                context_dict["hostname"] = settings.HOSTNAME
+
+                welcome_message_i18n = {}
+                input_placeholder_i18n = {}
+
+                for lang in self.object.org.flow_languages:
+                    lang_alpha = pycountry.languages.get(alpha_3=lang)
+                    if not hasattr(lang_alpha, "alpha_2"):
+                        continue
+
+                    welcome_message_i18n[f"{lang_alpha.alpha_2}"] = self.object.config.get(
+                        f"welcome_message_{lang_alpha.alpha_2}", ""
+                    )
+
+                    input_placeholder_i18n[f"{lang_alpha.alpha_2}"] = self.object.config.get(
+                        f"inputtext_placeholder_{lang_alpha.alpha_2}", ""
+                    )
+
+                context_dict["welcome_message_i18n"] = welcome_message_i18n
+                context_dict["input_placeholder_i18n"] = input_placeholder_i18n
+
+            context["configuration_template"] = channel_type.get_configuration_template(
+                self.object, context=context_dict
+            )
 
             return context
 
@@ -1545,10 +2119,47 @@ class ChannelLogCRUDL(SmartCRUDL):
 
             return events
 
+        def has_permission_view_objects(self):
+            channel = Channel.objects.filter(
+                org=self.request.user.get_org(), uuid=self.kwargs.get("channel_uuid")
+            ).first()
+            if not channel:
+                raise PermissionDenied()
+            return None
+
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
             context["channel"] = self.channel
+            context["statuses"] = [
+                (key, getattr(status, key, None)) for key in filter(lambda x: x.startswith("HTTP_"), dir(status))
+            ]
             return context
+
+        def paginate_queryset(self, queryset, page_size):
+            paginator = self.get_paginator(
+                queryset, page_size, orphans=self.get_paginate_orphans(), allow_empty_first_page=self.get_allow_empty()
+            )
+
+            page_kwarg = self.page_kwarg
+            page = self.kwargs.get(page_kwarg) or self.request.GET.get(page_kwarg) or 1
+            try:
+                page_number = int(page)
+            except ValueError:
+                if page == "last":
+                    page_number = paginator.num_pages
+                else:
+                    raise Http404(_("Page is not 'last', nor can it be converted to an int."))
+
+            from django.core.paginator import InvalidPage
+
+            try:
+                paginator.count = len(queryset)
+                page = paginator.page(page_number)
+                return (paginator, page, page.object_list, page.has_other_pages())
+            except InvalidPage as e:
+                raise Http404(
+                    _("Invalid page (%(page_number)s): %(message)s") % {"page_number": page_number, "message": str(e)}
+                )
 
     class Connection(AnonMixin, SmartReadView):
         model = ChannelConnection

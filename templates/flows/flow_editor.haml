@@ -25,6 +25,7 @@
 
     #rp-flow-editor #simulator {
       top: 20px;
+      right: 1em;
     }
 
     #header *, #top-menu *, .org-header * {
@@ -44,7 +45,7 @@
 
     #rp-flow-editor, .case_list_case {
       --curvature: 4px;
-      --curvature-widget: 4px; 
+      --curvature-widget: 4px;
     }
 
     #rp-flow-editor input[type=text] {
@@ -156,8 +157,7 @@
     }
 
     temba-loading {
-      margin-left: 30px;
-      padding-top: 25px;
+      margin-left: 20px;
       display: block;
     }
 
@@ -178,9 +178,37 @@
       margin-bottom: 0;
     }
 
+    .inverted {
+      color: var(--color-text-light);
+      background: #1a1a1a;
+      border-radius: 100%;
+    }
+
+    [class*="components_printButton"] {
+      right: -77px !important;
+
+      &:hover {
+        right: -5px !important;
+      }
+
+    }
+
+    [class*="Canvas_canvas_background"] {
+      padding-top: 40px;
+    }
+
+    #rp-flow-editor .language-selector {
+      top: 5px;
+    }
+
+    [class*="Flow_empty_flow"] {
+      margin: -10px 30px 0 24px !important;
+    }
+
 -block extra-script
   {{ block.super }}
 
+  %script{type:'text/javascript', src:'{{ STATIC_URL }}js/html2canvas.min.js'}
   -for script in scripts
     %script(type="text/javascript" src="{{script}}")
 
@@ -198,11 +226,122 @@
         }
         confirmation.open = false;
       });
+
+      var sessionTimeoutModal = document.getElementById("session-timeout");
+      sessionTimeoutModal.addEventListener("temba-button-clicked", function(event){
+        location.reload();
+      });
+      document.addEventListener("editor-session-timeout", function () {
+        sessionTimeoutModal.classList.remove("hide");
+        sessionTimeoutModal.open = true;
+      })
     });
 
     function handleEditorLoaded() {
       $('.editor-loader').hide();
       $('#rp-flow-editor > div').css('opacity', '1');
+      $('[class*="components_printButton"]').click((e) => {
+        e.stopPropagation(); // Prevent print to PDF call on this page.
+        if ($.browser.mozilla) {
+          // For Mozilla Firefox we use a different way of exporting because it correctly exports to PDF only the first page.
+          if(!document.querySelector("#image-export-confirmation")) {
+            let imageExportConfirmation = document.createElement("temba-dialog");
+            imageExportConfirmation.id = "image-export-confirmation";
+            imageExportConfirmation.header = gettext("Flow Export");
+            let dialogBody = document.createElement("div")
+            dialogBody.className = "body";
+            dialogBody.innerHTML = `<p style="margin: 20px;">${gettext("The current flow will be exported as an image.")}</p>`;
+            imageExportConfirmation.body = dialogBody;
+            imageExportConfirmation.addEventListener("temba-button-clicked", function(event) {
+              if (!event.detail.button.secondary) {
+                imageExportConfirmation.loading = true;
+                exportFlowAsImage(() => {
+                  imageExportConfirmation.open = false;
+                  imageExportConfirmation.loading = false;
+                });
+              }
+            });
+            document.body.append(imageExportConfirmation);
+            imageExportConfirmation.open = true;
+          } else {
+            let imageExportConfirmation = document.querySelector("#image-export-confirmation");
+            imageExportConfirmation.open = true;
+          }
+        } else {
+          // In all other case we use normal exporting.
+          Object.assign(document.createElement('a'), {
+            target: '_blank',
+            href: '{% url "flows.flow_export_pdf" object.uuid %}'
+          }).click();
+        }
+      });
+    }
+
+    function prepareDataForImageExport(documentCopy) {
+
+      function replaceContent(element, content) {
+        let newElement = documentCopy.createElement('span');
+        newElement.innerHTML = content;
+        element.parentNode.replaceChild(newElement, element);
+      }
+
+      documentCopy.querySelectorAll('[class*="fe-"]').forEach((el) => {
+        if (el.className.includes('fe-paperclip')) {
+          replaceContent(el, "📎");
+        } else if (el.className.includes('fe-group')) {
+          replaceContent(el, "👥");
+        } else if (el.className.includes('fe-label')) {
+          replaceContent(el, "🏷️");
+        } else {
+          replaceContent(el, "");
+        }
+      });
+      documentCopy.querySelectorAll('[class*="Pill_pill"], [class*="Exit_name"]').forEach((el) => {
+        el.style.fontSize = (parseFloat(window.getComputedStyle(el).fontSize) - 1) + 'px';
+      });
+    }
+
+    function exportFlowAsImage(callback) {
+      setTimeout(() => {
+        let body = document.body;
+        let html = document.documentElement;
+        let width = Math.max( body.scrollWidth, body.offsetWidth, html.clientWidth, html.scrollWidth, html.offsetWidth );
+        let container = $("#editor-container");
+        let config = {
+          x: 0,
+          y: 0,
+          scrollX: 0,
+          scrollY: 0,
+          width: width,
+          height: container.height(),
+          allowTaint: true,
+          foreignObjectRendering: true,
+          imageTimeout: 30000,
+          logging: false,
+          useCORS: true,
+          onclone: prepareDataForImageExport,
+          ignoreElements: (elem) => {
+            let style = $(elem).attr('class') || '';
+            if (
+              style.includes('components_printButton') ||
+              style.includes('Simulator_simulator') ||
+              style.includes('PopTab_tab') ||
+              style.includes('LanguageSelector_language')
+            ) {
+              return true;
+            }
+            return false;
+          }
+        };
+        html2canvas(container[0], config).then (canvas => {
+          Object.assign(document.createElement('a'), {
+            download: "{{ object.name }}.jpg",
+            href: canvas.toDataURL('jpeg', 1.0),
+          })
+          .click();
+          callback();
+        });
+      }, 1000)
     }
 
     function handleActivityClicked(nodeUUID, count) {
@@ -217,10 +356,10 @@
       var confirmation = document.getElementById("confirm-language");
       confirmation.classList.remove("hide");
       confirmation.dataset.code = code;
-      
+
       var body = confirmation.querySelector('.body');
       body.innerHTML = body.innerHTML.replace(/%LANG%/g, name);
-      confirmation.open = true;      
+      confirmation.open = true;
     }
 
     const config = {
@@ -254,12 +393,14 @@
         globals: api + 'globals.json',
         users: api + 'users.json',
         topics: api + 'topics.json',
+        links: api + 'validate_flow_links.json?flow_id={{object.id}}',
         editor: '/flow/editor',
 
         // TODO: migrate to API?
         revisions: '/flow/revisions/{{object.uuid}}/',
         recents: '/flow/recent_contacts/{{object.uuid}}/',
         attachments: '/flow/upload_media_action/{{object.uuid}}/',
+        attachments_validation: '{% url "api.v2.attachments_validation" %}',
         languages: base + 'language',
         environment: base + 'environment',
         activity: '/flow/activity/{{object.uuid}}/',
@@ -268,12 +409,67 @@
 
         {% if can_simulate %}
         simulateStart: '/flow/simulate/{{object.id}}/',
-        simulateResume: '/flow/simulate/{{object.id}}/'
+        simulateResume: '/flow/simulate/{{object.id}}/',
         {% endif %}
-      }
+
+        lookups: '/flow/lookups_api/',
+        giftcard: '/flow/giftcards_api/',
+        link: '/link/api/',
+        dialogflow: '/flow/dialogflow_api/',
+        replace_accented_chars: api + 'replace_accented_chars.json',
+        {% if has_translator %}
+          translation: '/org/translate/',
+        {% endif %}
+
+        {% if allow_analyzer and analyzer_endpoint %}
+        analyzer: '{{analyzer_endpoint}}',
+        {% endif %}
+      },
+
     };
 
     showFlowEditor(document.getElementById('rp-flow-editor'), config);
+
+    {% if immutable_alert %}
+      let immutableAlertModal = document.querySelector("#immutable_alert");
+      immutableAlertModal.header = gettext("You can't edit this flow");
+      immutableAlertModal.primaryButtonName = gettext("OK");
+      immutableAlertModal.addEventListener("temba-button-clicked", function(event) {
+        if (event.detail.button.secondary) {
+          window.history.back();
+        }
+        immutableAlertModal.open = false;
+      });
+      immutableAlertModal.open = true;
+    {% endif %}
+
+  :javascript
+    {% if org_perms.msgs.broadcast_send %}
+    let sendModal = document.querySelector("#launch-flow");
+    let doNotContactDialog = document.createElement("temba-dialog");
+    let dialogBody = document.createElement("div");
+    doNotContactDialog.id = "do-not-contact-dialog";
+    doNotContactDialog.header = gettext("Out of Business Hours Warning");
+    doNotContactDialog.primaryButtonName = "Confirm";
+    doNotContactDialog.destructive = true;
+    dialogBody.className = "body";
+    dialogBody.innerHTML = `<p style="margin: 20px;">${gettext("You are trying to send a message out of compliance hours (8AM - 9PM). Are you sure you want to continue?")}</p>`;
+    doNotContactDialog.body = dialogBody;
+    document.body.append(doNotContactDialog);
+    let doNotContact = "{{ user_org.do_not_contact }}" === "True";
+    if (doNotContact) {
+      let sendModalSubmit = sendModal.submit.bind(sendModal);
+      doNotContactDialog.addEventListener("temba-button-clicked", function(event) {
+        if (!event.detail.button.secondary) {
+          doNotContactDialog.open = false;
+          sendModalSubmit();
+        }
+      });
+      sendModal.submit = () => {
+        doNotContactDialog.open = true;
+      }
+    }
+    {% endif %}
 
 -block page-container
 
@@ -305,6 +501,15 @@
         flow will be appear in that language and can be translated into other languages. Also if a contact is
         in this flow and no translation exists for their language or the default language of the workspace,
         communication with that contact will default to <b>{{ language }}</b>.
+
+  - if immutable_alert
+    %temba-dialog#immutable_alert
+      .p-6.body
+        = immutable_alert
+
+  %temba-dialog.hide#session-timeout(header='{{_("Session timed out")|escapejs}}' primaryButtonName='{{_("Refresh")|escapejs}}')
+    .p-6.body
+      = _("Your session has timed out. Refresh the page to reload.")
 
   #shadow.pb-5.-mb-5
   #grid.h-full

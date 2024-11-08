@@ -1,0 +1,422 @@
+-extends "smartmin/form.html"
+
+-load smartmin
+-load i18n humanize
+
+-block fields
+  #language-list
+    -render_field 'language_list'
+
+    %div#languages_errors
+      {{ form.languages.errors }}
+
+  #file-upload
+    %label
+      -trans "Upload Training CSV"
+      %input(type="file" name="file" id="import-file" onchange='onFileChange(this)' accept=".csv")
+      #real-button.flex.mb-4
+        %input(type="text" id="file-field")
+        .button-light.ml-4(style="margin-top:-1px")
+          -trans "Choose File"
+
+  #ignore-errors
+    -render_field 'ignore_errors'
+
+    %div#import_file_errors
+      {{ form.file.errors }}
+
+  #loading-status.hidden
+    %span.visually-hidden
+      -trans "Loading..."
+
+  #active-upload-task.hidden
+    -blocktrans trimmed
+      You have one active upload task, kindly wait for it to complete to continue
+
+  #download-template
+    -blocktrans trimmed with sample_url=STATIC_URL|add:"examples/sample_training_data.csv" code=explicit_clear max=max_records|intcomma
+      You can download <a href="{{ sample_url }}">this CSV template</a> as a sample
+
+
+  #previous-status.pt-5.hidden(onclick="getPreviousReport(this)" )
+    %a
+      -trans "Click here to previous task result"
+
+  #messages
+
+  %input#submit-type(type="hidden" name="submit_type" value="C")
+
+  %temba-dialog#training-confirmation(header='{{ _("Confirm Action")|escapejs }}' primaryButtonName='{{ _("Train Chatbot")|escapejs }}' destructive='true')
+    .p-6
+      -blocktrans trimmed
+        WARNING: Running this training data update will overwrite existing training data and answers
+        for all existing content and intents. Are you sure you want to do this?
+
+
+-block extra-style
+  {{block.super}}
+  %link{rel:"stylesheet", href:"{{ STATIC_URL }}css/tailwind.css", type:"text/css"}
+
+  :css
+    input {
+      padding: 9px;
+      cursor: pointer;
+      box-shadow: rgba(0, 0, 0, 0.1) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 3px 20px 0px, rgba(0, 0, 0, 0.02) 0px 1px 2px 0px;
+    }
+
+    #file-upload {
+      position: relative;
+    }
+
+    #real-button {
+      position: relative;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    #file-field {
+      width: 300px;
+      height: 35px;
+      font-size: 16px;
+      margin-bottom: 0px;
+      border-radius: 5px;
+    }
+
+    #import-file {
+      position: absolute;
+      width: 450px;
+      height: 35px;
+      top: 0;
+      left: 0;
+      text-align: right;
+      -moz-opacity:0 ;
+      filter: alpha(opacity: 0);
+      opacity: 0;
+      z-index: 2;
+    }
+
+-block extra-script
+  {{ block.super }}
+  <script id="ccl-script" src="{{ STATIC_URL }}js/ccl-utils.js"></script>
+
+  :javascript
+      function hasActiveTask() {
+        let hasUploadTask = '{{has_upload_task}}';
+        return hasUploadTask === 'True';
+      }
+
+      function hasPreviousTask() {
+        let hasPrevTask = '{{has_prev_task}}';
+        return hasPrevTask === 'True';
+      }
+
+      function getFormElements() {
+        const { modaxBody, dialogFooter, modalView } = getModalResources('bot-training');
+        const form = modaxBody.querySelector('form');
+        const currentSubmit = dialogFooter.querySelector('temba-button:not([secondary])');
+        const messagesDiv = form.querySelector('#messages');
+        const loaderDiv = form.querySelector('#loading-status');
+        const uploadTaskDiv = form.querySelector('#active-upload-task');
+        const downloadTemplateDiv = form.querySelector('#download-template');
+        const previousStatusDiv = form.querySelector('#previous-status');
+
+        const confirmationDialog = form.querySelector('#training-confirmation');
+        const confirmationFooter =  confirmationDialog.shadowRoot.querySelector('.dialog-footer');
+        return {
+          form,
+          loaderDiv,
+          modaxBody,
+          modalView,
+          messagesDiv,
+          dialogFooter,
+          uploadTaskDiv,
+          currentSubmit,
+          previousStatusDiv,
+          confirmationDialog,
+          confirmationFooter,
+          downloadTemplateDiv
+        }
+      }
+
+      function onFileChange() {
+        const { form } = getFormElements();
+
+        const uploadField = form.querySelector('#import-file');
+        const realField = form.querySelector('#file-field');
+        let file = $(uploadField).val();
+
+        while (file.indexOf('\\') >= 0) {
+          file = file.substring(file.indexOf('\\') + 1, file.length);
+        }
+        $(realField).val(file);
+      }
+
+      function updateSubmitButton(dialogFooter, disabled = false) {
+        const button = dialogFooter.querySelector('temba-button');
+        $(button).attr('disabled', disabled);
+      }
+
+      function enableReplaceCharsButtons(dialogFooter) {
+        dialogFooter.querySelectorAll('temba-button:not([secondary])').forEach((btn) => {
+            dialogFooter.removeChild(btn);
+        });
+        dialogFooter.prepend(createButton({ name: 'Replace', onclick: submitFormReplace, primary: true }));
+        dialogFooter.prepend(createButton({ name: 'Train Bot', onclick: submitFormNormal, primary: true }));
+        dialogFooter.querySelector("temba-button[secondary]").removeAttribute("disabled");
+      }
+
+      function toggleLoadingStatus() {
+        const { loaderDiv } = getFormElements();
+        if ($(loaderDiv).hasClass('hidden')) $(loaderDiv).removeClass('hidden');
+        else $(loaderDiv).addClass('hidden');
+      }
+
+      function removeErrorMessages(form, selectors) {
+        const nodes = form.querySelectorAll(selectors);
+        nodes.forEach((element) => {
+          const errorNode = element.querySelector('.alert-error');
+          if (errorNode) element.removeChild(errorNode);
+        });
+      }
+
+      function addMessage(form, elementId, message) {
+        const errorDiv = form.querySelector(`#${elementId}`);
+        $(errorDiv).html(`<div class="alert-error">${message}</div>`);
+      }
+
+      function submitForm(event) {
+        event.preventDefault();
+        const { form, modalView, loaderDiv, messagesDiv, dialogFooter, confirmationDialog } = getFormElements();
+        const formData = new FormData(form);
+        const options = { ...getHTTPOptions(), method: 'POST', body: formData };
+
+        removeErrorMessages(form, '#import_file_errors, #languages_errors');
+        removeMessage(messagesDiv)
+        toggleLoadingStatus();
+        dialogFooter.querySelectorAll('temba-button:not([socondary])').forEach((btn) => btn.setAttribute("disabled", true));
+
+        let hasErrors = false;
+
+        fetch(modalView.endpoint, options)
+          .then((response) => {
+            if (response.status < 400) return response.json();
+            if (response.status === 400) return Promise.reject(response.json());
+            return Promise.reject(response.text());
+          })
+          .then((response) => {
+            if (response.check_result) {
+              enableReplaceCharsButtons(dialogFooter);
+              $(messagesDiv).html(response.check_result);
+              toggleLoadingStatus();
+              hasErrors = true;
+            } else {
+              toggleLoadingStatus();
+              getTaskProgress(true);
+            }
+          })
+          .catch((error) => {
+            updateSubmitButton(dialogFooter);
+            toggleLoadingStatus(loaderDiv);
+            if (error && error.then) {
+              error.then((err) => {
+                if (err.file) addMessage(form, 'import_file_errors', err.file);
+                if (err.language_list) addMessage(form, 'languages_errors', err.language_list);
+              });
+              hasErrors = true;
+            }
+          })
+          .finally(() => {
+            confirmationDialog.open = false;
+            if (!hasErrors) {
+              modalView.open = false;
+              window.location = "{{ redirect_success }}";
+            }
+          });
+      }
+
+      function submitFormNormal(event) {
+        const { form } = getFormElements();
+        const submitType = form.querySelector("#submit-type");
+        submitType.value = "S";
+        submitForm(event);
+      }
+
+      function submitFormReplace(event) {
+        const { form } = getFormElements();
+        const submitType = form.querySelector("#submit-type");
+        submitType.value = "R";
+        submitForm(event);
+      }
+
+      function showConfirmation(event) {
+        const { confirmationDialog } = getFormElements();
+        event.preventDefault();
+        confirmationDialog.open = true;
+      }
+
+      function renderError(error) {
+        let message = error
+        if (typeof error === 'object')
+          message = JSON.stringify(error);
+        return `<div class="error-message">${message}</div>`
+      }
+
+      function removeMessage(messageDiv) {
+        const node = messageDiv.querySelector('#training-messages');
+        if (node) messageDiv.removeChild(node);
+      }
+
+      function countListInObject(obj) {
+        return Object.values(obj || {}).reduce((allCount, list) => list.length + allCount, 0);
+      }
+
+      function hasLanguageErrors(response) {
+        const updateErrors = countListInObject(response.update_errors);
+        const createErrors = countListInObject(response.create_errors);
+        return updateErrors > 0 || createErrors > 0;
+      }
+
+      function formatMessages(response = {}) {
+        const messages = {
+          ...{ created: {}, updated: {}, create_errors: {}, update_errors: {}, errors: []},
+          ...response
+        };
+        let message = 'Training phrases pushed to dialogflow successfully';
+        let hasErrors = false;
+        if (messages.create_errors.length || hasLanguageErrors(response)) {
+          message += ', with some errors';
+          hasErrors = true;
+        } else {
+          message += ' without error';
+        }
+        let html = [`
+          <div class="alert-${hasErrors? 'errors' : 'success'}">${message}</div>
+          <div>Total intents created = ${JSON.stringify(messages.created)}</div>
+          <div>Total intents updated = ${JSON.stringify(messages.updated)}</div>
+          <div>Other errors = ${messages.errors.length}</div>
+        `];
+
+        if (countListInObject(messages.create_errors)) {
+          html.push(`<div class="create_errors">${Object.values(messages.update_errors).map(renderError).join('')}</div>`);
+        }
+
+        if (countListInObject(messages.update_errors)) {
+          html.push(`<div class="update-errors">${Object.values(messages.update_errors).map(renderError).join('')}</div>`);
+        }
+
+        if (messages.errors.length) {
+          html.push(`<div class="other-errors">${messages.errors.map(renderError).join('')}</div>`);
+        }
+
+        return `<div id="training-messages">${html.join('')}</div>`;
+      }
+
+      function toggleTaskItems(activeTask) {
+        const { downloadTemplateDiv, uploadTaskDiv } = getFormElements();
+        if (activeTask) {
+          $(uploadTaskDiv).removeClass('hidden');
+          $(downloadTemplateDiv).addClass('hidden');
+        } else {
+          $(uploadTaskDiv).addClass('hidden');
+          $(downloadTemplateDiv).removeClass('hidden');
+        }
+      }
+
+      function formatTaskProgress(response) {
+        const { status, pushed, total, messages } = response;
+        let html = ['<div>Task not started yet</div>']
+        const statusMap = {
+          R: 'Retrying after 2 minutes',
+          I: 'In Progress',
+          C: 'Completed',
+          F: 'Failed',
+          P: 'Pending'
+        }
+        if (['R', 'I', 'C'].includes(status)) {
+          const percentPushed = (pushed / total) * 100;
+          html = [
+            `<div>Total push items to push = ${total}</div>`,
+            `<div>Total push items pushed = ${pushed} (${Math.round(percentPushed)}%)</div>`,
+            `<div>Task status = ${statusMap[response.status]}</div>`
+          ];
+        }
+        if (messages && status === 'C') html.push(formatMessages(messages));
+        if (status === 'P') html = ['<div>Task not started yet</div>'];
+
+        return html.join('');
+      }
+
+      function getReport(reportType, endpoint) {
+        const options = { ...getHTTPOptions(), method: 'GET' };
+        return fetch(`${endpoint}?report-type=${reportType}`, options)
+            .then((response) => response.json());
+      }
+
+      function getPreviousReport() {
+        const { modalView, messagesDiv } = getFormElements();
+        const content = $(messagesDiv).text();
+        if (content.indexOf('Training phrases') > -1) {
+          $(messagesDiv).html('');
+          return;
+        }
+        getReport('previous', modalView.endpoint)
+          .then((response) => {
+            $(messagesDiv).html(formatTaskProgress(response || {}));
+          });
+      }
+
+      function getTaskProgress(activeTask) {
+        toggleTaskItems(activeTask);
+        if (!activeTask) return;
+        const { modalView, messagesDiv } = getFormElements();
+        const interval = setInterval(() => {
+          getReport('progress', modalView.endpoint)
+            .then((response) => {
+              if (['F', 'C', undefined].includes(response.status) || !modalView.open) {
+                $(messagesDiv).html('<div></div>');
+                clearInterval(interval);
+              }
+              $(messagesDiv).html(formatTaskProgress(response || {}));
+            });
+        }, 30000); // every 30 secs
+      }
+
+      function setupModal() {
+        const { currentSubmit, dialogFooter, confirmationDialog, confirmationFooter, previousStatusDiv } = getFormElements();
+
+        const confirmSubmitButton = confirmationDialog.shadowRoot.querySelector('temba-button[destructive]');
+        const confirmationCancelButton = confirmationFooter.querySelector('temba-button[secondary]');
+
+        confirmSubmitButton.onclick = submitForm;
+        confirmationFooter.removeChild(confirmationCancelButton);
+
+        const cancelButton = createButton({
+          secondary: true,
+          onclick: () => { confirmationDialog.open = false },
+          name: 'No'
+        });
+
+        confirmationFooter.appendChild(cancelButton);
+
+        const submitButton = createButton({ name: 'Train Bot', onclick: showConfirmation, primary: true });
+
+        try {
+          if (currentSubmit) {
+            dialogFooter.removeChild(currentSubmit);
+            dialogFooter.prepend(submitButton);
+          }
+        } catch (e) {}
+
+        updateSubmitButton(dialogFooter, hasActiveTask());
+        getTaskProgress(hasActiveTask());
+
+        if (hasPreviousTask()) {
+          $(previousStatusDiv).removeClass('hidden');
+        }
+      }
+
+      $(document).ready(function () {
+        setTimeout(setupModal, 200);
+      });
+

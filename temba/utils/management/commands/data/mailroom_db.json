@@ -47,9 +47,9 @@
           "name": "LUIS",
           "config": {
             "app_id": "12345",
-            "version": "0.1",
-            "endpoint_url": "https://foo.com",
-            "primary_key": "sesame"
+            "slot": "0.1",
+            "prediction_endpoint": "https://foo.com",
+            "prediction_key": "sesame"
           },
           "intents": [
             {
@@ -401,6 +401,26 @@
             "secret": "123456789",
             "admin_auth_token": "1234",
             "admin_user_id": "ADMIN346"
+          }
+        },
+        {
+          "uuid": "07d1b73e-2e36-4c0a-9cb8-6baf714c09e4",
+          "name": "TwilioFlex",
+          "ticketer_type": "twilioflex",
+          "config": {
+            "auth_token": "token",
+            "account_sid": "AC81d44315e19273181bdaefac12cd3c12",
+            "flex_flow_sid": "FObbde8f8e54f04afaef924046f728a44d",
+            "workspace_sid": "WS645912e5aefc6727d71fe638c0173119",
+            "chat_service_sid": "IS83760ec293f6814bc6f5de5612f21fc2"
+          }
+        },
+        {
+          "uuid": "a1b9c62a-357c-4f1f-9de0-6b07fbb6b6bb",
+          "name": "AmazonConnect",
+          "ticketer_type": "amazonconnect",
+          "config": {
+            "endpoint_url": "https://connect.aws"
           }
         }
       ],

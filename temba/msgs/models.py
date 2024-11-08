@@ -26,7 +26,7 @@ from temba.orgs.models import DependencyMixin, Org, TopUp
 from temba.schedules.models import Schedule
 from temba.utils import chunk_list, on_transaction_commit
 from temba.utils.export import BaseExportAssetStore, BaseExportTask
-from temba.utils.models import JSONAsTextField, SquashableModel, TembaModel, TranslatableField
+from temba.utils.models import JSONAsTextField, JSONField, SquashableModel, TembaModel, TranslatableField
 from temba.utils.text import clean_string
 from temba.utils.uuid import uuid4
 
@@ -85,7 +85,7 @@ class Broadcast(models.Model):
     media = TranslatableField(max_length=2048, null=True)
 
     channel = models.ForeignKey(Channel, on_delete=models.PROTECT, null=True)
-    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.PROTECT, null=True, related_name="broadcasts")
+    ticket = models.ForeignKey("tickets.Ticket", on_delete=models.SET_NULL, null=True, related_name="broadcasts")
 
     status = models.CharField(max_length=1, choices=STATUS_CHOICES, default=STATUS_INITIALIZING)
 
@@ -277,6 +277,33 @@ class Attachment:
     def __eq__(self, other):
         return self.content_type == other.content_type and self.url == other.url
 
+    @classmethod
+    def validate_fields(cls, org, definition: dict) -> list:
+        contact_fields = list(
+            map(lambda x: f"@fields.{x}", org.contactfields.filter(field_type="U").values_list("key", flat=True))
+        )
+        contact_fields += list(map(lambda x: x.replace("@", "@contact."), contact_fields))
+        issues = []
+        for node in definition.get("nodes", []):
+            for action in node.get("actions", []):
+                if action.get("attachments"):
+                    for attachment in cls.parse_all(action.get("attachments", [])):
+                        if attachment.url.startswith("@") and attachment.url not in contact_fields:
+                            _url = attachment.url.replace("contact.", "")
+                            issues.append(
+                                {
+                                    "type": "missing_dependency",
+                                    "node_uuid": node.get("uuid"),
+                                    "action_uuid": action.get("uuid"),
+                                    "dependency": {
+                                        "key": f'attachment: {_url.replace("@fields.", "")}',
+                                        "type": "field",
+                                        "name": "",
+                                    },
+                                }
+                            )
+        return issues
+
 
 class Msg(models.Model):
     """
@@ -298,6 +325,7 @@ class Msg(models.Model):
     STATUS_INITIALIZING = "I"  # used to hold off sending the message until the flow is ready to receive a response
     STATUS_PENDING = "P"  # initial state for all messages
     STATUS_QUEUED = "Q"
+    STATUS_ENROUTE = "U"
     STATUS_WIRED = "W"  # message was handed off to the provider and credits were deducted for it
     STATUS_SENT = "S"  # we have confirmation that a message was sent
     STATUS_DELIVERED = "D"  # we have confirmation that a message was delivered
@@ -310,6 +338,7 @@ class Msg(models.Model):
         (STATUS_PENDING, _("Pending")),
         (STATUS_QUEUED, _("Queued")),
         (STATUS_WIRED, _("Wired")),
+        (STATUS_ENROUTE, _("En Route")),
         (STATUS_SENT, _("Sent")),
         (STATUS_DELIVERED, _("Delivered")),
         (STATUS_HANDLED, _("Handled")),
@@ -532,7 +561,7 @@ class Msg(models.Model):
         """
         sorted_logs = None
         if self.channel and self.channel.is_active:
-            sorted_logs = sorted(self.channel_logs.all(), key=lambda l: l.created_on, reverse=True)
+            sorted_logs = sorted(self.channel_logs.all(), key=lambda log: log.created_on, reverse=True)
         return sorted_logs[0] if sorted_logs else None
 
     def update(self, cmd):
@@ -745,9 +774,11 @@ class BroadcastMsgCount(SquashableModel):
 class SystemLabel:
     TYPE_INBOX = "I"
     TYPE_FLOWS = "W"
+    TYPE_FLOW_VOICE = "V"
     TYPE_ARCHIVED = "A"
     TYPE_OUTBOX = "O"
     TYPE_SENT = "S"
+    TYPE_SENT_VOICE = "Z"
     TYPE_FAILED = "X"
     TYPE_SCHEDULED = "E"
     TYPE_CALLS = "C"
@@ -761,6 +792,8 @@ class SystemLabel:
         (TYPE_FAILED, "Failed"),
         (TYPE_SCHEDULED, "Scheduled"),
         (TYPE_CALLS, "Calls"),
+        (TYPE_FLOW_VOICE, "Voice Flows"),
+        (TYPE_SENT_VOICE, "Voice Sent"),
     )
 
     @classmethod
@@ -795,7 +828,7 @@ class SystemLabel:
                 direction=Msg.DIRECTION_OUT,
                 visibility=Msg.VISIBILITY_VISIBLE,
                 status__in=(Msg.STATUS_WIRED, Msg.STATUS_SENT, Msg.STATUS_DELIVERED),
-            )
+            ).exclude(msg_type=Msg.TYPE_IVR)
         elif label_type == cls.TYPE_FAILED:
             qs = Msg.objects.filter(
                 direction=Msg.DIRECTION_OUT, visibility=Msg.VISIBILITY_VISIBLE, status=Msg.STATUS_FAILED
@@ -804,6 +837,17 @@ class SystemLabel:
             qs = Broadcast.objects.exclude(schedule=None).prefetch_related("groups", "contacts", "urns")
         elif label_type == cls.TYPE_CALLS:
             qs = ChannelEvent.objects.filter(event_type__in=ChannelEvent.CALL_TYPES)
+        elif label_type == cls.TYPE_FLOW_VOICE:
+            qs = Msg.objects.filter(
+                direction=Msg.DIRECTION_IN, visibility=Msg.VISIBILITY_VISIBLE, msg_type=Msg.TYPE_IVR
+            )
+        elif label_type == cls.TYPE_SENT_VOICE:
+            qs = Msg.objects.filter(
+                direction=Msg.DIRECTION_OUT,
+                visibility=Msg.VISIBILITY_VISIBLE,
+                status__in=(Msg.STATUS_WIRED, Msg.STATUS_SENT, Msg.STATUS_DELIVERED),
+                msg_type=Msg.TYPE_IVR,
+            )
         else:  # pragma: needs cover
             raise ValueError("Invalid label type: %s" % label_type)
 
@@ -1353,3 +1397,13 @@ class MessageExportAssetStore(BaseExportAssetStore):
     directory = "message_exports"
     permission = "msgs.msg_export"
     extensions = ("xlsx",)
+
+
+class MessageExternalIDMap(models.Model):
+    message = models.ForeignKey(Msg, on_delete=models.CASCADE, related_name="external_ids", null=True)
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, null=True)
+    carrier_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    gateway_id = models.CharField(max_length=64, blank=True, null=True, unique=True)
+    created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
+    modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
+    request_logs = JSONField(blank=True, null=True)

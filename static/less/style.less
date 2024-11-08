@@ -185,6 +185,21 @@ td.created_on {
   }
 }
 
+.warning {
+  .rounded-corners();
+  padding: 15px;
+  margin-top: 5px;
+  border: @color-bg-lightred;
+}
+
+.success {
+  .rounded-corners();
+  padding: 15px;
+  margin-top: 5px;
+  border: 1px solid @color-bg-lightgrey - #111;
+  background: #fff;
+}
+
 // Policies
 .policy {
   margin-top: 20px;
@@ -257,4 +272,80 @@ ol.steps li {
   list-style: decimal;
   margin-left: 20px;
   padding: 5px;
+}
+
+#embedded-data,
+#embedded-data-keyword,
+#embedded-data-schedule,
+#embedded-data-update {
+  width: 100%;
+
+  .embed-row {
+    width: 100%;
+    display: table;
+    margin-bottom: 5px;
+
+    &.embed-header {
+      margin: 10px 0 0 0;
+
+      &.inactive {
+        display: none;
+      }
+    }
+
+    &.embed-header-keyword,
+    &.embed-header-schedule,
+    &.embed-header-update {
+      margin: 5px 0 0 0;
+    }
+
+    .embed-field,
+    .embed-value,
+    .embed-field-keyword,
+    .embed-value-keyword,
+    .embed-field-schedule,
+    .embed-value-schedule,
+    .embed-field-update,
+    .embed-value-update {
+      float: left;
+      width: 49%;
+
+      label {
+        display: none;
+      }
+
+      input {
+        width: 92%;
+        &.invalid {
+          border: 1px solid var(--color-error);
+        }
+      }
+
+      .embed-field-slug {
+        font-size: 13px;
+        margin: -5px 0 5px 0;
+        color: #999999;
+      }
+    }
+
+    .embed-value,
+    .embed-value-update {
+      float: right;
+    }
+
+    .embed-error-message {
+      float: left;
+      width: 100%;
+      color: var(--color-error);
+      font-size: 13px;
+      margin: -5px 0 5px 0;
+    }
+  }
+}
+
+.embedded-data-default-message {
+  width: 100%;
+  float: left;
+  margin-top: 10px;
+  color: red;
 }

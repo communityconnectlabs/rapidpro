@@ -6,6 +6,7 @@ from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFoun
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import View
 
+from temba.flows.models import ExportFlowImagesTask
 from temba.notifications.views import NotificationTargetMixin
 
 from .models import AssetAccessDenied, AssetEntityNotFound, AssetFileNotFound, get_asset_store
@@ -69,6 +70,11 @@ class AssetDownloadView(NotificationTargetMixin, SmartTemplateView):
         try:
             asset = self.get_asset()
             download_url = self.asset_store.get_asset_url(asset.id, direct=True)
+            if kwargs.pop("type") == "flowimages_download":
+                task = ExportFlowImagesTask.objects.filter(pk=kwargs.pop("pk")).first()
+                task.file_path = download_url
+                task.file_downloaded = True
+                task.save(update_fields=["file_path", "file_downloaded"])
         except (AssetEntityNotFound, AssetFileNotFound):
             file_error = _("File not found")
         except AssetAccessDenied:  # pragma: needs cover

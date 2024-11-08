@@ -14,6 +14,7 @@
     %meta{name:"description", content:"{% block page-description %}{{brand.name}} lets you visually build interactive SMS applications and launch them anywhere in the world.{% endblock %}"}
     %meta{name:"author", content:"Nyaruka Ltd"}
     %meta{http-equiv:"X-UA-Compatible", content:"IE=10"}
+    %meta{name:"robots", content:"noindex, nofollow"}
 
     -if user.is_beta
       %script{src:"{{ STATIC_URL }}js/urls.js"}
@@ -87,7 +88,7 @@
       %script{src:"{{ STATIC_URL }}bower/bootstrap/js/bootstrap-modal.js"}
       %script{src:"{{ STATIC_URL }}bower/bootstrap/js/bootstrap-dropdown.js"}
       %script{src:"{{ STATIC_URL }}bower/bootstrap/js/bootstrap-tooltip.js"}
-      %script{src:"{{ STATIC_URL }}bower/bootstrap/js/bootstrap-tab.js"}      
+      %script{src:"{{ STATIC_URL }}bower/bootstrap/js/bootstrap-tab.js"}
       %script{src:"{{ STATIC_URL }}bower/intercooler-js/src/intercooler.js"}
       %script{src:"{{ STATIC_URL }}bower/moment/moment.js"}
       %script{src:"{{ STATIC_URL }}bower/moment-timezone/builds/moment-timezone-with-data.js"}
@@ -109,8 +110,8 @@
     -compress js
       %script{src:"{{ STATIC_URL }}js/temba.js"}
       %script{src:"{{ STATIC_URL }}js/labels.js"}
-      
-    
+      %script{src:"{{ STATIC_URL }}js/formax.js"}
+
     -include "includes/frame_top.html"
 
     -if not COMPONENTS_DEV_MODE
@@ -179,9 +180,9 @@
     <script type="module">
       import '../out-tsc/temba-modules.js';
     </script>
-  -else 
+  -else
     -include "components-body.html"
-  
+
   -block temba-store
     
     -if user.is_authenticated
@@ -215,10 +216,8 @@
       #header
         &nbsp;
 
-
-      %a#big-logo.logo.icon-logo{href:"{% if user.is_authenticated %}{% url 'msgs.msg_inbox' %}{% else %}/{% endif %}", title:"{{brand.name}}", class:"hover:no-underline"}
-        .name
-          {{brand.name}}
+      %a#big-logo.logo.icon-logo{href:"{% if request.session.org_id %}{% url 'orgs.org_home' %}{% elif not request.user.is_authenticated %}/{% endif %}", title:"{{brand.name}}"}
+        %img{src:'{{ STATIC_URL }}brands/rapidpro/cc-logo.png'}
 
       -block nav
         -include 'includes/nav.html'
@@ -269,7 +268,7 @@
 
             .mt-6
               -block content
-            
+
             -block post-content
 
     -block footer
@@ -316,7 +315,6 @@
       }
 
       function removalConfirmation(removal, buttonName) {
-  
         var modal = document.querySelector("#general-delete-confirmation");
         modal.classList.remove("hidden");
 
@@ -364,7 +362,7 @@
 
     -block refresh-fn
       :javascript
-        function refresh(onSuccess, forceReload){  
+        function refresh(onSuccess, forceReload){
           var url = params;
           {% if page_obj %}
             url += "page={{page_obj.number}}";
@@ -376,7 +374,7 @@
 
           url += '&ts=' + new Date().getTime() + "&refresh=" + refreshTimeout;
 
-          document.dispatchEvent(new Event("temba-refresh-begin"));  
+          document.dispatchEvent(new Event("temba-refresh-begin"));
           fetchPJAXContent(url, '#pjax', {
               onSuccess: function() {
                 if (onSuccess) {
@@ -427,11 +425,21 @@
       });
 
       $(document).ready(function() {
+
+        $('ul#top-menu li a').mouseenter(function() {
+          var elem = $(this);
+          elem.parent().children('.custom-tooltip').addClass('active');
+        }).mouseleave(function(){
+          var elem = $(this);
+          elem.parent().children('.custom-tooltip').removeClass('active');
+        });
+
         if (navigator.appVersion.indexOf("Win")!=-1) {
           $("html").addClass("windows");
         }
 
         $(".btn").tooltip();
+        $(".ccl-tooltip").tooltip();
 
         $('.org-header > .toggle').live('click', function(evt) {
           evt.stopPropagation();
@@ -483,6 +491,9 @@
 
 
       });
+
+  -if request.get_full_path != "/user/forget/" and request.get_full_path != "/users/login/" and request.get_full_path != "/"
+    -include "includes/ccl_webchat.haml"
 {% endblock body %}
 
 </html>

@@ -37,6 +37,7 @@ from temba.tests import (
     AnonymousOrg,
     CRUDLTestMixin,
     ESMockWithScroll,
+    MockResponse,
     TembaNonAtomicTest,
     TembaTest,
     matchers,
@@ -44,6 +45,7 @@ from temba.tests import (
 )
 from temba.tests.engine import MockSessionWriter
 from temba.tests.s3 import MockS3Client
+from temba.tests.twilio import MockTwilioClient
 from temba.tickets.models import Ticket, TicketCount, Ticketer
 from temba.triggers.models import Trigger
 from temba.utils import json
@@ -60,7 +62,7 @@ from .models import (
     ContactURN,
     ExportContactsTask,
 )
-from .tasks import check_elasticsearch_lag, squash_contactgroupcounts
+from .tasks import block_deactivated_contacts_task, check_elasticsearch_lag, squash_contactgroupcounts
 from .templatetags.contacts import contact_field, history_class, history_icon
 
 
@@ -96,7 +98,7 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
             self.org, self.user, "Group being created", status=ContactGroup.STATUS_INITIALIZING
         )
 
-        with self.assertNumQueries(61):
+        with self.assertNumQueries(60):
             response = self.client.get(list_url)
 
         self.assertEqual([frank, joe], list(response.context["object_list"]))
@@ -106,6 +108,8 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
         active_contacts = ContactGroup.system_groups.get(org=self.org, group_type="A")
         survey_audience = ContactGroup.user_groups.get(org=self.org, name="Survey Audience")
         unsatisfied = ContactGroup.user_groups.get(org=self.org, name="Unsatisfied Customers")
+        opt_in = ContactGroup.user_groups.get(org=self.org, name="Opted-In")
+        opt_out = ContactGroup.user_groups.get(org=self.org, name="Opted-Out")
 
         self.assertEqual(
             response.context["groups"],
@@ -116,6 +120,22 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
                     "label": "Group being created",
                     "is_dynamic": False,
                     "is_ready": False,
+                    "count": 0,
+                },
+                {
+                    "uuid": str(opt_in.uuid),
+                    "pk": opt_in.id,
+                    "label": "Opted-In",
+                    "is_dynamic": False,
+                    "is_ready": True,
+                    "count": 0,
+                },
+                {
+                    "uuid": str(opt_out.uuid),
+                    "pk": opt_out.id,
+                    "label": "Opted-Out",
+                    "is_dynamic": False,
+                    "is_ready": True,
                     "count": 0,
                 },
                 {
@@ -148,7 +168,9 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
         self.assertEqual(response.context["search"], "age = 18")
         self.assertEqual(response.context["save_dynamic_search"], True)
         self.assertIsNone(response.context["search_error"])
-        self.assertEqual(list(response.context["contact_fields"].values_list("label", flat=True)), ["Home", "Age"])
+        self.assertEqual(
+            list(response.context["contact_fields"].values_list("label", flat=True)), ["Home", "Age", "Opt In"]
+        )
 
         mr_mocks.contact_search("age = 18", contacts=[frank], total=10020, allow_as_group=True)
 
@@ -157,12 +179,6 @@ class ContactCRUDLTest(CRUDLTestMixin, TembaTest):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
-
-        # when user requests page 201, we return a 404, page not found
-        url = f'{reverse("contacts.contact_list")}?{"search=age+%3D+18&page=201"}'
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, 404)
 
         mr_mocks.contact_search('age > 18 and home = "Kigali"', cleaned='age > 18 AND home = "Kigali"', contacts=[joe])
 
@@ -803,6 +819,7 @@ class ContactGroupTest(TembaTest):
         # start with no contacts
         for contact in Contact.objects.all():
             contact.release(self.admin)
+            contact.urns.all().delete()
             contact.delete()
 
         counts = ContactGroup.get_system_group_counts(self.org)
@@ -2213,7 +2230,7 @@ class ContactTest(TembaTest):
         # fetch our contact history
         self.login(self.admin)
         with patch("temba.utils.s3.s3.client", return_value=self.mock_s3):
-            with self.assertNumQueries(47):
+            with self.assertNumQueries(49):
                 response = self.client.get(url + "?limit=100")
 
         # history should include all messages in the last 90 days, the channel event, the call, and the flow run
@@ -3335,7 +3352,7 @@ class ContactTest(TembaTest):
                         modifiers.GroupRef(uuid=spammers.uuid, name="Spammers"),
                         modifiers.GroupRef(uuid=testers.uuid, name="Testers"),
                     ],
-                ),
+                )
             ],
             mods,
         )
@@ -3828,7 +3845,7 @@ class ContactFieldTest(TembaTest):
     def test_is_valid_label(self):
         self.assertTrue(ContactField.is_valid_label("Age"))
         self.assertTrue(ContactField.is_valid_label("Age Now 2"))
-        self.assertFalse(ContactField.is_valid_label("Age_Now"))  # can't have punctuation
+        self.assertTrue(ContactField.is_valid_label("Age_Now"))
         self.assertFalse(ContactField.is_valid_label("âge"))  # a-z only
 
     @mock_mailroom
@@ -3914,7 +3931,7 @@ class ContactFieldTest(TembaTest):
             self.create_contact_import(path)
 
         # no group specified, so will default to 'Active'
-        with self.assertNumQueries(41):
+        with self.assertNumQueries(43):
             export = request_export()
             self.assertExcelSheet(
                 export[0],
@@ -3925,6 +3942,7 @@ class ContactFieldTest(TembaTest):
                         "Language",
                         "Created On",
                         "Last Seen On",
+                        "Groups",
                         "URN:Mailto",
                         "URN:Tel",
                         "URN:Telegram",
@@ -3939,6 +3957,7 @@ class ContactFieldTest(TembaTest):
                         "eng",
                         contact2.created_on,
                         "",
+                        "Active, Poppin Tags",
                         "adam@sumner.com",
                         "+12067799191",
                         "1234",
@@ -3953,6 +3972,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact.created_on,
                         datetime(2020, 1, 1, 12, 0, 0, 0, tzinfo=pytz.UTC),
+                        "Active, Poppin Tags",
                         "",
                         "+12067799294",
                         "",
@@ -3976,7 +3996,7 @@ class ContactFieldTest(TembaTest):
         # change the order of the fields
         self.contactfield_2.priority = 15
         self.contactfield_2.save()
-        with self.assertNumQueries(41):
+        with self.assertNumQueries(43):
             export = request_export()
             self.assertExcelSheet(
                 export[0],
@@ -3987,6 +4007,7 @@ class ContactFieldTest(TembaTest):
                         "Language",
                         "Created On",
                         "Last Seen On",
+                        "Groups",
                         "URN:Mailto",
                         "URN:Tel",
                         "URN:Telegram",
@@ -4002,6 +4023,7 @@ class ContactFieldTest(TembaTest):
                         "eng",
                         contact2.created_on,
                         "",
+                        "Active, Poppin Tags",
                         "adam@sumner.com",
                         "+12067799191",
                         "1234",
@@ -4017,6 +4039,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact.created_on,
                         datetime(2020, 1, 1, 12, 0, 0, 0, tzinfo=pytz.UTC),
+                        "Active, Poppin Tags",
                         "",
                         "+12067799294",
                         "",
@@ -4037,7 +4060,7 @@ class ContactFieldTest(TembaTest):
         ContactURN.create(self.org, contact, "tel:+12062233445")
 
         # but should have additional Twitter and phone columns
-        with self.assertNumQueries(41):
+        with self.assertNumQueries(45):
             export = request_export()
             self.assertExcelSheet(
                 export[0],
@@ -4048,6 +4071,7 @@ class ContactFieldTest(TembaTest):
                         "Language",
                         "Created On",
                         "Last Seen On",
+                        "Groups",
                         "URN:Mailto",
                         "URN:Tel",
                         "URN:Tel",
@@ -4063,6 +4087,7 @@ class ContactFieldTest(TembaTest):
                         "eng",
                         contact2.created_on,
                         "",
+                        "Active, Poppin Tags",
                         "adam@sumner.com",
                         "+12067799191",
                         "",
@@ -4079,6 +4104,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact.created_on,
                         datetime(2020, 1, 1, 12, 0, 0, 0, tzinfo=pytz.UTC),
+                        "Active, Poppin Tags",
                         "",
                         "+12067799294",
                         "+12062233445",
@@ -4095,6 +4121,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact3.created_on,
                         "",
+                        "Active",
                         "",
                         "+12078776655",
                         "",
@@ -4111,6 +4138,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact4.created_on,
                         "",
+                        "Active",
                         "",
                         "+12078778899",
                         "",
@@ -4127,7 +4155,7 @@ class ContactFieldTest(TembaTest):
         assertImportExportedFile()
 
         # export a specified group of contacts (only Ben and Adam are in the group)
-        with self.assertNumQueries(42):
+        with self.assertNumQueries(44):
             self.assertExcelSheet(
                 request_export("?g=%s" % group.uuid)[0],
                 [
@@ -4137,6 +4165,7 @@ class ContactFieldTest(TembaTest):
                         "Language",
                         "Created On",
                         "Last Seen On",
+                        "Groups",
                         "URN:Mailto",
                         "URN:Tel",
                         "URN:Tel",
@@ -4152,6 +4181,7 @@ class ContactFieldTest(TembaTest):
                         "eng",
                         contact2.created_on,
                         "",
+                        "Active, Poppin Tags",
                         "adam@sumner.com",
                         "+12067799191",
                         "",
@@ -4167,6 +4197,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact.created_on,
                         datetime(2020, 1, 1, 12, 0, 0, 0, tzinfo=pytz.UTC),
+                        "Active, Poppin Tags",
                         "",
                         "+12067799294",
                         "+12062233445",
@@ -4195,7 +4226,7 @@ class ContactFieldTest(TembaTest):
                 log_info_threshold.return_value = 1
 
                 with ESMockWithScroll(data=mock_es_data):
-                    with self.assertNumQueries(43):
+                    with self.assertNumQueries(45):
                         self.assertExcelSheet(
                             request_export("?s=name+has+adam+or+name+has+deng")[0],
                             [
@@ -4205,6 +4236,7 @@ class ContactFieldTest(TembaTest):
                                     "Language",
                                     "Created On",
                                     "Last Seen On",
+                                    "Groups",
                                     "URN:Mailto",
                                     "URN:Tel",
                                     "URN:Tel",
@@ -4220,6 +4252,7 @@ class ContactFieldTest(TembaTest):
                                     "eng",
                                     contact2.created_on,
                                     "",
+                                    "Active, Poppin Tags",
                                     "adam@sumner.com",
                                     "+12067799191",
                                     "",
@@ -4235,6 +4268,7 @@ class ContactFieldTest(TembaTest):
                                     "",
                                     contact3.created_on,
                                     "",
+                                    "Active",
                                     "",
                                     "+12078776655",
                                     "",
@@ -4257,7 +4291,7 @@ class ContactFieldTest(TembaTest):
         # export a search within a specified group of contacts
         mock_es_data = [{"_type": "_doc", "_index": "dummy_index", "_source": {"id": contact.id}}]
         with ESMockWithScroll(data=mock_es_data):
-            with self.assertNumQueries(42):
+            with self.assertNumQueries(43):
                 self.assertExcelSheet(
                     request_export("?g=%s&s=Hagg" % group.uuid)[0],
                     [
@@ -4267,6 +4301,7 @@ class ContactFieldTest(TembaTest):
                             "Language",
                             "Created On",
                             "Last Seen On",
+                            "Groups",
                             "URN:Mailto",
                             "URN:Tel",
                             "URN:Tel",
@@ -4282,6 +4317,7 @@ class ContactFieldTest(TembaTest):
                             "",
                             contact.created_on,
                             datetime(2020, 1, 1, 12, 0, 0, 0, tzinfo=pytz.UTC),
+                            "Active, Poppin Tags",
                             "",
                             "+12067799294",
                             "+12062233445",
@@ -4310,6 +4346,7 @@ class ContactFieldTest(TembaTest):
                         "Language",
                         "Created On",
                         "Last Seen On",
+                        "Groups",
                         "Field:Third",
                         "Field:Second",
                         "Field:First",
@@ -4322,6 +4359,7 @@ class ContactFieldTest(TembaTest):
                         "eng",
                         contact2.created_on,
                         "",
+                        "Active, Poppin Tags",
                         "",
                         "",
                         "",
@@ -4334,6 +4372,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact.created_on,
                         datetime(2020, 1, 1, 12, 0, 0, 0, tzinfo=pytz.UTC),
+                        "Active, Poppin Tags",
                         "20-12-2015 08:30",
                         "",
                         "One",
@@ -4346,7 +4385,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact3.created_on,
                         "",
-                        "",
+                        "Active",
                         "",
                         "",
                     ],
@@ -4358,7 +4397,7 @@ class ContactFieldTest(TembaTest):
                         "",
                         contact4.created_on,
                         "",
-                        "",
+                        "Active",
                         "",
                         "",
                     ],
@@ -4705,7 +4744,7 @@ class ContactFieldCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertCreateSubmit(
             create_url,
             {"label": "???", "value_type": "T", "show_in_table": True},
-            form_errors={"label": "Can only contain letters, numbers and hypens."},
+            form_errors={"label": "Can only contain letters, numbers and hyphens."},
         )
 
         # try to submit with something that would be an invalid key
@@ -4779,7 +4818,7 @@ class ContactFieldCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertUpdateSubmit(
             update_url,
             {"label": "???", "value_type": "N", "show_in_table": True},
-            form_errors={"label": "Can only contain letters, numbers and hypens."},
+            form_errors={"label": "Can only contain letters, numbers and hyphens."},
             object_unchanged=self.age,
         )
 
@@ -4817,7 +4856,7 @@ class ContactFieldCRUDLTest(TembaTest, CRUDLTestMixin):
             list_url, allow_viewers=False, allow_editors=True, context_objects=[self.age, self.gender, self.state]
         )
         self.assertEqual(3, response.context["total_count"])
-        self.assertEqual(250, response.context["total_limit"])
+        self.assertEqual(255, response.context["total_limit"])
         self.assertNotContains(response, "You have reached the limit")
         self.assertNotContains(response, "You are approaching the limit")
 
@@ -5421,6 +5460,9 @@ class ContactImportTest(TembaTest):
             ("uuid_only.csv", "Import files must contain columns besides UUID."),
         ]
 
+        # force test mode to default regardless of user local setting
+        settings.ALLOW_DUPLICATE_CONTACT_IMPORT = False
+
         for imp_file, imp_error in bad_files:
             with self.assertRaises(ValidationError, msg=f"expected error in {imp_file}") as e:
                 try_to_parse(imp_file)
@@ -5531,7 +5573,19 @@ class ContactImportTest(TembaTest):
 
         # info can be fetched but it's empty
         self.assertEqual(
-            {"status": "P", "num_created": 0, "num_updated": 0, "num_errored": 0, "errors": [], "time_taken": 0},
+            {
+                "status": "P",
+                "num_created": 0,
+                "num_updated": 0,
+                "num_blocked": 0,
+                "num_errored": 0,
+                "errors": [],
+                "time_taken": 0,
+                "num_duplicates": 0,
+                "num_total": 0,
+                "is_validated": False,
+                "validated_urn_carriers": {"landline": [], "mobile": []},
+            },
             imp.get_info(),
         )
 
@@ -5597,9 +5651,14 @@ class ContactImportTest(TembaTest):
                 "status": "O",
                 "num_created": 0,
                 "num_updated": 0,
+                "num_blocked": 0,
                 "num_errored": 0,
                 "errors": [],
                 "time_taken": matchers.Int(),
+                "num_duplicates": 0,
+                "num_total": 0,
+                "is_validated": False,
+                "validated_urn_carriers": {"landline": [], "mobile": []},
             },
             imp.get_info(),
         )
@@ -5614,9 +5673,14 @@ class ContactImportTest(TembaTest):
                 "status": "O",
                 "num_created": 2,
                 "num_updated": 1,
+                "num_blocked": 0,
                 "num_errored": 0,
                 "errors": [{"record": 1, "message": "that's wrong"}],
                 "time_taken": matchers.Int(),
+                "num_duplicates": 0,
+                "num_total": 3,
+                "is_validated": False,
+                "validated_urn_carriers": {"landline": [], "mobile": []},
             },
             imp.get_info(),
         )
@@ -5632,9 +5696,14 @@ class ContactImportTest(TembaTest):
                 "status": "O",
                 "num_created": 5,
                 "num_updated": 6,
+                "num_blocked": 0,
                 "num_errored": 0,
                 "errors": [{"record": 1, "message": "that's wrong"}, {"record": 3, "message": "that's not right"}],
                 "time_taken": matchers.Int(),
+                "num_duplicates": 0,
+                "num_total": 11,
+                "is_validated": False,
+                "validated_urn_carriers": {"landline": [], "mobile": []},
             },
             imp.get_info(),
         )
@@ -5650,9 +5719,14 @@ class ContactImportTest(TembaTest):
                 "status": "C",
                 "num_created": 5,
                 "num_updated": 6,
+                "num_blocked": 0,
                 "num_errored": 0,
                 "errors": [{"record": 1, "message": "that's wrong"}, {"record": 3, "message": "that's not right"}],
                 "time_taken": matchers.Int(),
+                "num_duplicates": 0,
+                "num_total": 11,
+                "is_validated": False,
+                "validated_urn_carriers": {"landline": [], "mobile": []},
             },
             imp.get_info(),
         )
@@ -5861,11 +5935,7 @@ class ContactImportTest(TembaTest):
         )
 
         # check that we correctly detect different encodings
-        enc_tests = [
-            ("utf16-le", "Drazen"),
-            ("utf16-be", "Drazen"),
-            ("iso-8859-1", "Dràzen"),
-        ]
+        enc_tests = [("utf16-le", "Drazen"), ("utf16-be", "Drazen"), ("iso-8859-1", "Dràzen")]
         for test in enc_tests:
             imp = self.create_contact_import(f"media/test_imports/encoding_{test[0]}.csv")
             imp.start()
@@ -5980,7 +6050,9 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
     def test_create_and_preview(self):
         create_url = reverse("contacts.contactimport_create")
 
-        self.assertCreateFetch(create_url, allow_viewers=False, allow_editors=True, form_fields=["file"])
+        self.assertCreateFetch(
+            create_url, allow_viewers=False, allow_editors=True, form_fields=["file", "validate_carrier"]
+        )
 
         # try posting with nothing
         response = self.client.post(create_url, {})
@@ -6064,10 +6136,6 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
         response = self.client.post(preview_url, {"add_to_group": True, "group_mode": "N", "new_group_name": "Import"})
         self.assertRedirect(response, read_url)
 
-        new_group = ContactGroup.user_groups.get(name="Import")
-        imp.refresh_from_db()
-        self.assertEqual(new_group, imp.group)
-
     @mock_mailroom
     def test_using_existing_group(self, mr_mocks):
         self.login(self.admin)
@@ -6094,9 +6162,6 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
             preview_url, {"add_to_group": True, "group_mode": "E", "existing_group": doctors.id}
         )
         self.assertRedirect(response, read_url)
-
-        imp.refresh_from_db()
-        self.assertEqual(doctors, imp.group)
 
     def test_preview_with_mappings(self):
         self.create_field("age", "Age", ContactField.TYPE_NUMBER)
@@ -6230,3 +6295,30 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
         read_url = reverse("contacts.contactimport_read", args=[imp.id])
 
         self.assertReadFetch(read_url, allow_viewers=True, allow_editors=True, context_object=imp)
+
+
+class BlockDeactivatedNumberContactsTest(TembaTest):
+    @mock_mailroom
+    def test_deactivated_phone_numbers_contacts(self, _):
+        deactivated_numbers = "17143367890\n17015502875\n13023829550"
+        contacts = [
+            self.create_contact("Deactivated 1", phone="+13023829550"),
+            self.create_contact("Deactivated 2", phone="+17015502875"),
+            self.create_contact("Deactivated 3", phone="+17143367890"),
+        ]
+        for contact in contacts:
+            contact.refresh_from_db(fields=["status"])
+            self.assertEqual(contact.status, "A")
+
+        with patch("temba.orgs.models.Org.get_twilio_client") as tw_client:
+            mock_twilio = MockTwilioClient("", "", self.org)
+            mock_twilio.request = lambda *a: MockResponse(307, '{"redirect_to": "https://localhost:8000"}')
+            tw_client.return_value = mock_twilio
+
+            with patch("requests.get") as mock_request:
+                mock_request.return_value = MockResponse(200, deactivated_numbers)
+                block_deactivated_contacts_task()
+
+        for contact in contacts:
+            contact.refresh_from_db(fields=["status"])
+            self.assertEqual(contact.status, "B")

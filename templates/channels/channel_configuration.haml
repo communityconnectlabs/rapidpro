@@ -23,7 +23,7 @@
       .title
         {{url.label}}
       .code.inline-block.mt-3
-        {{url.url}}       
+        {{url.url}}
 
       .my-4
         {{url.description}}
@@ -42,6 +42,96 @@
   {{ block.super }}
   <script src="{{ STATIC_URL }}rest_framework/js/prettify-min.js"></script>
   :javascript
+    $("pre.wch-channel code").each(function(){
+      var html = $(this).html();
+      var pattern = html.match(/\s*\n[\t\s]*/);
+      $(this).html(html.replace(new RegExp(pattern, "g"),'\n'));
+    });
+
     $(function(){
       prettyPrint();
     });
+
+    function copyWCHCode() {
+      var el = $("pre.wch-channel code");
+      copyToClipboard(el);
+      alert("{% trans 'The code has been copied to clipboard' %}");
+    }
+
+    function copyToClipboard(element) {
+      var $temp = $("<textarea>");
+      $("body").append($temp);
+      $temp.val($(element).text()).select();
+      document.execCommand("copy");
+      $temp.remove();
+    }
+
+-block extra-style
+  <link rel="stylesheet" type="text/css" href="{{ STATIC_URL }}rest_framework/css/prettify.css"/>
+  :css
+    textarea#code-field {
+      height: 0px;
+      width: 0px;
+      opacity: 0;
+    }
+
+    pre.wch-channel {
+      padding: 5px;
+      margin: 5px 0;
+    }
+
+    .config-value {
+      float: left;
+      padding-top: 10px;
+      padding-bottom: 10px;
+      padding-right: 20px;
+      height: 10px;
+    }
+
+    .config-value .name {
+      font-weight: normal;
+      float: left;
+    }
+
+    .config-value .value {
+      float: left;
+      padding-left: 5px;
+    }
+
+    pre.prettyprint {
+      margin-top: 0px;
+      margin-bottom: 0px;
+
+      font-family: monospace;
+      font-size: inherit;
+      white-space: pre;
+      line-height: 110%;
+
+      -webkit-border-radius: 0px;
+      -moz-border-radius: 0px;
+      border-radius: 0px;
+    }
+
+    .important {
+      background-color: #efefef;
+      border: 1px solid #ccc;
+      padding: 10px 10px 0px 10px;
+      margin-bottom: 10px;
+    }
+
+    .device .number {
+      padding-left:5px;
+    }
+
+    .title .number {
+      font-size:20px;
+    }
+
+    ol.line-steps li {
+      margin-top: 10px;
+      list-style: decimal;
+    }
+
+    .info {
+      margin-bottom: 20px;
+    }

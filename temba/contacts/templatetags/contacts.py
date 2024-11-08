@@ -30,6 +30,7 @@ ACTIVITY_ICONS = {
     Event.TYPE_AIRTIME_TRANSFERRED: "icon-cash",
     Event.TYPE_BROADCAST_CREATED: "icon-bullhorn",
     Event.TYPE_CALL_STARTED: "icon-phone",
+    Event.TYPE_CALL_RETRIED: "icon-phone",
     Event.TYPE_CAMPAIGN_FIRED: "icon-clock",
     Event.TYPE_CHANNEL_EVENT: "icon-power",
     Event.TYPE_CHANNEL_EVENT + ":missed_incoming": "icon-call-incoming",
@@ -190,6 +191,8 @@ def history_class(event: dict) -> str:
             classes.append("warning")
         elif event_type == Event.TYPE_CALL_STARTED and event["status"] == IVRCall.STATUS_FAILED:
             classes.append("warning")
+        elif event_type == Event.TYPE_CALL_RETRIED and event["is_error"]:
+            classes.append("warning")
         elif event_type == Event.TYPE_CAMPAIGN_FIRED and event["fired_result"] == EventFire.RESULT_SKIPPED:
             classes.append("skipped")
 
@@ -205,3 +208,9 @@ def inactive_count(objs) -> int:
     Returns the number of items in a queryset or list where is_active=False
     """
     return len([o for o in list(objs) if not o.is_active])
+
+
+@register.filter
+def has_connection(contact):
+    urn = contact.get_urn()
+    return bool(urn and urn.scheme != "ext")

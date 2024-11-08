@@ -12,7 +12,7 @@ from openpyxl import load_workbook
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core import checks
+from django.core import checks, mail
 from django.db import connection, models
 from django.forms import ValidationError
 from django.test import TestCase, override_settings
@@ -27,15 +27,17 @@ from temba.flows.models import Flow, FlowRun
 from temba.tests import TembaTest, matchers
 from temba.triggers.models import Trigger
 from temba.utils import json, uuid
+from temba.utils.json import JsonResponse
 from temba.utils.templatetags.temba import format_datetime, icon
 
 from . import chunk_list, countries, format_number, languages, percentage, redact, sizeof_fmt, str_to_bool
 from .cache import get_cacheable_attr, get_cacheable_result, incrby_existing
 from .celery import nonoverlapping_task
 from .dates import datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
-from .email import is_valid_address, send_simple_email
+from .email import is_valid_address, send_email_with_attachments, send_simple_email
 from .export import TableExporter
 from .fields import validate_external_url
+from .gsm7 import calculate_num_segments, is_gsm7, replace_accented_chars, replace_non_gsm7_accents
 from .http import http_headers
 from .locks import LockNotAcquiredException, NonBlockingLock
 from .models import IDSliceQuerySet, JSONAsTextField, patch_queryset_count
@@ -535,6 +537,28 @@ class EmailTest(TembaTest):
         send_simple_email(["recipient@bar.com"], "Test Subject", "Test Body", from_email="no-reply@foo.com")
         self.assertOutbox(1, "no-reply@foo.com", "Test Subject", "Test Body", ["recipient@bar.com"])
 
+    @override_settings(SEND_EMAILS=True)
+    def test_send_email_with_attachments(self):
+        from django.template import loader
+
+        template = "contacts/email/deactivated_contacts_email"
+        text_template = loader.get_template(template + ".txt")
+        text_template = text_template.render({"branding": settings.BRANDING.get(settings.DEFAULT_BRAND)})
+
+        send_email_with_attachments("Test Subject", template, ["recipient@bar.com"], [("text.csv", "", "text/csv")])
+        self.assertOutbox(0, settings.DEFAULT_FROM_EMAIL, "Test Subject", text_template, ["recipient@bar.com"])
+        self.assertGreater(len(mail.outbox[0].attachments), 0)
+
+        send_email_with_attachments(
+            "Test Subject",
+            template,
+            ["recipient@bar.com"],
+            [("text.csv", "", "text/csv")],
+            from_email="no-reply@foo.com",
+        )
+        self.assertOutbox(1, "no-reply@foo.com", "Test Subject", text_template, ["recipient@bar.com"])
+        self.assertGreater(len(mail.outbox[1].attachments), 0)
+
     def test_is_valid_address(self):
 
         valid_emails = [
@@ -656,6 +680,20 @@ class JsonTest(TembaTest):
         with self.assertRaises(TypeError):
             json.dumps(dict(foo=Exception("invalid")))
 
+    def test_default_json_encoder(self):
+        struct_data = dict(
+            age=20,
+            date_of_birth=datetime.date(day=28, month=10, year=2017),
+            created_on=datetime.datetime(year=2021, month=12, day=10, hour=0, minute=0, second=0),
+            time=datetime.time(),
+        )
+
+        json_data = JsonResponse(struct_data)
+        self.assertEqual(
+            json_data.getvalue(),
+            b'{"age": 20, "date_of_birth": "2017-10-28", "created_on": "2021-12-10T00:00:00", "time": "00:00:00"}',
+        )
+
 
 class CeleryTest(TembaTest):
     @patch("redis.client.StrictRedis.lock")
@@ -709,6 +747,72 @@ class CeleryTest(TembaTest):
         mock_redis_get.assert_called_once_with("celery-task-lock:test_task1")
         self.assertEqual(mock_redis_lock.call_count, 0)
         self.assertEqual(task_calls, ["1-11-12", "2-21-22", "3-31-32"])
+
+
+class GSM7Test(TembaTest):
+    def test_is_gsm7(self):
+        self.assertTrue(is_gsm7("Hello World! {} <>"))
+        self.assertFalse(is_gsm7("No capital accented È!"))
+        self.assertFalse(is_gsm7("No unicode. ☺"))
+
+        replaced = replace_non_gsm7_accents("No capital accented È!")
+        self.assertEqual("No capital accented E!", replaced)
+        self.assertTrue(is_gsm7(replaced))
+
+        replaced = replace_non_gsm7_accents("No crazy “word” quotes.")
+        self.assertEqual('No crazy "word" quotes.', replaced)
+        self.assertTrue(is_gsm7(replaced))
+
+        # non breaking space
+        replaced = replace_non_gsm7_accents("Pour chercher du boulot, comment fais-tu ?")
+        self.assertEqual("Pour chercher du boulot, comment fais-tu ?", replaced)
+        self.assertTrue(is_gsm7(replaced))
+
+        # no tabs
+        replaced = replace_non_gsm7_accents("I am followed by a\x09tab")
+        self.assertEqual("I am followed by a tab", replaced)
+        self.assertTrue(is_gsm7(replaced))
+
+    def test_num_segments(self):
+        ten_chars = "1234567890"
+
+        self.assertEqual(1, calculate_num_segments(ten_chars * 16))
+        self.assertEqual(1, calculate_num_segments(ten_chars * 6 + "“word”7890"))
+
+        # 161 should be two segments
+        self.assertEqual(2, calculate_num_segments(ten_chars * 16 + "1"))
+
+        # 306 is exactly two gsm7 segments
+        self.assertEqual(2, calculate_num_segments(ten_chars * 30 + "123456"))
+
+        # 159 but with extended as last should be two as well
+        self.assertEqual(2, calculate_num_segments(ten_chars * 15 + "123456789{"))
+
+        # 355 should be three segments
+        self.assertEqual(3, calculate_num_segments(ten_chars * 35 + "12345"))
+
+        # 134 is exactly two ucs2 segments
+        self.assertEqual(2, calculate_num_segments(ten_chars * 12 + "“word”12345678"))
+
+        # 136 characters with quotes should be three segments
+        self.assertEqual(3, calculate_num_segments(ten_chars * 13 + "“word”"))
+
+    def test_replace_accented_chars(self):
+        text = "@ΔSP0¡P¿p£_!1AQaq$Φ\"2BRbr¥Γ#3CScsèΛ¤4DTdtéΩ%5EUeuùΠ&6FVfvìΨ'7GWgwòΣ(8HXhxÇΘ)9IYiy"
+        result = replace_accented_chars(text)
+
+        self.assertEqual(
+            result["updated"], "@SP0Pp_!!1/2AQaq$\"2BRbrΓ#3/4CScse4DTdte%5EUeuu&6FVfvi'7GWgwo(8HXhxCO)9IYiy"
+        )
+        self.assertEqual(result["removed"], ["Δ", "¡", "¿", "£", "Φ", "¥", "Λ", "¤", "Ω", "Π", "Ψ", "Σ"])
+        self.assertEqual(result["replaced"]["ò"], "o")
+        self.assertEqual(result["replaced"]["Θ"], "O")
+
+        result = replace_accented_chars("simple      text")
+
+        self.assertEqual(result["updated"], "simple text")
+        self.assertEqual(result["removed"], [])
+        self.assertEqual(result["replaced"], dict())
 
 
 class ModelsTest(TembaTest):
@@ -1071,8 +1175,16 @@ class LanguagesTest(TembaTest):
         # check that search returns results and in the proper order
         self.assertEqual(
             [
+                {"value": "afh", "name": "Afrihili"},
                 {"value": "afr", "name": "Afrikaans"},
+                {"value": "afa", "name": "Afro-Asiatic languages"},
+                {"value": "cpf", "name": "Creoles and pidgins, French-based"},
+                {"value": "frs", "name": "Eastern Frisian"},
                 {"value": "fra", "name": "French"},
+                {"value": "frm", "name": "French, Middle (ca.1400-1600)"},
+                {"value": "fro", "name": "French, Old (842-ca.1400)"},
+                {"value": "fur", "name": "Friulian"},
+                {"value": "frr", "name": "Northern Frisian"},
                 {"value": "fry", "name": "Western Frisian"},
             ],
             languages.search_by_name("Fr"),
@@ -1085,9 +1197,17 @@ class LanguagesTest(TembaTest):
             # order is based on name rather than code
             self.assertEqual(
                 [
+                    {"value": "afh", "name": "Afrihili"},
                     {"value": "afr", "name": "Afrikaans"},
+                    {"value": "afa", "name": "Afro-Asiatic languages"},
                     {"value": "frc", "name": "Cajun French"},
+                    {"value": "cpf", "name": "Creoles and pidgins, French-based"},
+                    {"value": "frs", "name": "Eastern Frisian"},
                     {"value": "fra", "name": "French"},
+                    {"value": "frm", "name": "French, Middle (ca.1400-1600)"},
+                    {"value": "fro", "name": "French, Old (842-ca.1400)"},
+                    {"value": "fur", "name": "Friulian"},
+                    {"value": "frr", "name": "Northern Frisian"},
                     {"value": "fry", "name": "Western Frisian"},
                 ],
                 languages.search_by_name("Fr"),
@@ -1099,6 +1219,7 @@ class LanguagesTest(TembaTest):
                     {"value": "ara", "name": "Arabic"},
                     {"value": "afb", "name": "Arabic (Gulf, ISO-639-3)"},
                     {"value": "acx", "name": "Arabic (Omani, ISO-639-3)"},
+                    {"value": "jrb", "name": "Judeo-Arabic"},
                 ],
                 languages.search_by_name("Arabic"),
             )

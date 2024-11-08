@@ -9,8 +9,10 @@ from smartmin.models import SmartModel
 from django.contrib.postgres.fields import HStoreField
 from django.core import checks
 from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.db import connection, models
 from django.db.models import JSONField as DjangoJSONField, Sum
+from django.forms.fields import URLField
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 
@@ -38,7 +40,8 @@ class IDSliceQuerySet(models.query.RawQuerySet):
     QuerySet defined by a model, set of ids, offset and total count
     """
 
-    def __init__(self, model, ids, *, offset, total, only=None, using="default", _raw_query=None):
+    def __init__(self, model, ids, *, offset, total, only=None, active_only=False, using="default", _raw_query=None):
+        active_filter = " WHERE t.is_active=true" if active_only and hasattr(model, "is_active") else ""
         if _raw_query:
             # we're being cloned so can reuse our SQL query
             raw_query = _raw_query
@@ -49,8 +52,7 @@ class IDSliceQuerySet(models.query.RawQuerySet):
             if len(ids) > 0:
                 # build a list of sequence to model id, so we can sort by the sequence in our results
                 pairs = ", ".join(str((seq, model_id)) for seq, model_id in enumerate(ids, start=1))
-
-                raw_query = f"""SELECT {cols} FROM {table} t JOIN (VALUES {pairs}) tmp_resultset (seq, model_id) ON t.id = tmp_resultset.model_id ORDER BY tmp_resultset.seq"""
+                raw_query = f"""SELECT {cols} FROM {table} t JOIN (VALUES {pairs}) tmp_resultset (seq, model_id) ON t.id = tmp_resultset.model_id{active_filter} ORDER BY tmp_resultset.seq"""
             else:
                 raw_query = f"""SELECT {cols} FROM {table} t WHERE t.id < 0"""
 
@@ -76,7 +78,7 @@ class IDSliceQuerySet(models.query.RawQuerySet):
             start = k.start if k.start else 0
             if start != self.offset:
                 raise IndexError(
-                    f"attempt to slice ID queryset with differing offset: [{k.start}:{k.stop}] != [{self.offset}:{self.offset+len(self.ids)}]"
+                    f"attempt to slice ID queryset with differing offset: [{k.start}:{k.stop}] != [{self.offset}:{self.offset + len(self.ids)}]"
                 )
 
             return list(self)[: k.stop - self.offset]
@@ -216,7 +218,7 @@ class JSONAsTextField(CheckFieldDefaultMixin, models.Field):
         if self.has_default() and value is None:
             return self.get_default()
 
-        if value is None:
+        if value in ["", None]:
             return value
 
         if isinstance(value, str):
@@ -270,7 +272,6 @@ class JSONField(DjangoJSONField):
 
 
 class TembaModel(SmartModel):
-
     uuid = models.CharField(
         max_length=36,
         unique=True,
@@ -335,3 +336,22 @@ class SquashableModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class URLTextField(models.TextField):
+    default_validators = [URLValidator()]
+    description = _("URL Text Field")
+
+    def __init__(self, verbose_name=None, name=None, **kwargs):
+        super(URLTextField, self).__init__(verbose_name, name, **kwargs)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super(URLTextField, self).deconstruct()
+        return name, path, args, kwargs
+
+    def formfield(self, **kwargs):
+        # As with CharField, this will cause URL validation to be performed
+        # twice.
+        defaults = {"form_class": URLField}
+        defaults.update(kwargs)
+        return super(URLTextField, self).formfield(**defaults)

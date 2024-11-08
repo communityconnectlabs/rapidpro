@@ -1,15 +1,23 @@
 import logging
+import os
 from abc import ABCMeta
 
+import pandas as pd
+from jellyfish import jaro_similarity
 from smartmin.models import SmartModel
 
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage as storage
 from django.db import models
 from django.template import Engine
-from django.urls import re_path
+from django.urls import re_path, reverse
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from temba.orgs.models import DependencyMixin, Org
 from temba.utils import on_transaction_commit
+from temba.utils.email import send_template_email
 from temba.utils.models import JSONField
 from temba.utils.uuid import uuid4
 
@@ -217,3 +225,203 @@ class Intent(models.Model):
 
     class Meta:
         unique_together = (("classifier", "external_id"),)
+
+
+class ClassifierTrainingTask(SmartModel):
+    PENDING = "P"
+    IN_PROGRESS = "I"
+    RETRY = "R"
+    COMPLETED = "C"
+    FAILED = "F"
+
+    STATUS = (
+        (PENDING, _("Pending")),
+        (IN_PROGRESS, _("In Progress")),
+        (RETRY, _("Retry")),
+        (COMPLETED, _("Completed")),
+        (FAILED, _("Failed")),
+    )
+
+    classifier = models.ForeignKey(Classifier, on_delete=models.CASCADE)
+    training_doc = JSONField(default=list)
+    pickled_doc = models.TextField(null=True)
+    status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
+    messages = JSONField(default=dict)
+    languages = JSONField(default=list)
+    start_index = models.IntegerField(default=0)
+    total_intents = models.PositiveSmallIntegerField(default=0)
+
+    @classmethod
+    def create(cls, classifier, training_doc, languages, user):
+        created_obj = cls.objects.create(
+            training_doc=training_doc, classifier=classifier, languages=languages, created_by=user, modified_by=user
+        )
+        created_obj.start_training()
+        return created_obj
+
+    def start_training(self):
+        from .tasks import train_bot
+
+        on_transaction_commit(lambda: train_bot.delay(self.id))
+
+    @classmethod
+    def get_active_tasks(cls, classifier):
+        active_status = [cls.RETRY, cls.IN_PROGRESS, cls.PENDING]
+        return cls.objects.filter(classifier=classifier, status__in=active_status)
+
+    @classmethod
+    def get_last_task(cls, classifier):
+        return cls.objects.filter(classifier=classifier).order_by("-modified_on").first()
+
+    @classmethod
+    def get_active_task(cls, classifier):
+        return cls.get_active_tasks(classifier).first()
+
+    @classmethod
+    def has_task(cls, classifier):
+        tasks = cls.get_active_tasks(classifier).count()
+        return tasks > 0
+
+    def trash_docs(self):
+        self.training_doc = []
+        self.pickled_doc = None
+
+    @classmethod
+    def run_task(cls, instance_id):
+        from .types.dialogflow.train_bot import TrainingClient
+
+        filter_status = [cls.PENDING, cls.RETRY]
+
+        reschedule_task = False
+        training = None
+        try:
+            training = cls.objects.get(id=instance_id)
+        except Exception as e:
+            logger.error(e, exc_info=True)
+
+        if training and training.status in filter_status:
+            training.status = cls.IN_PROGRESS
+            training.save()
+
+            client = TrainingClient(
+                credential=training.classifier.config,
+                csv_data=training.training_doc,
+                languages=training.languages,
+                messages=training.messages,
+            )
+
+            if not training.pickled_doc:
+                client.build_intent_list()
+                intent_list = client.intents_requests
+            else:
+                intent_list = client.intent_str_to_list(training.pickled_doc)
+
+            if training.start_index == 0:
+                training.total_intents = len(intent_list)
+                training.save()
+
+            index, retry, completed = client.push_to_dialogflow(intent_list, training.start_index)
+            training.start_index = index
+            training.messages = client.messages
+            if not training.pickled_doc:
+                training.pickled_doc = client.intent_list_to_str()
+
+            if retry:
+                training.status = cls.RETRY
+            if completed:
+                training.status = cls.COMPLETED
+                training.trash_docs()
+
+            if not completed and not retry:
+                training.status = cls.FAILED
+                training.trash_docs()
+
+            reschedule_task = retry
+            training.modified_on = timezone.now()
+            training.save()
+
+            if training.status in [cls.COMPLETED, cls.FAILED]:
+                send_template_email(
+                    training.created_by.username,
+                    f"[{training.classifier.org.name}] Classifier training complete",
+                    "classifiers/email/training_email",
+                    dict(
+                        total_created=training.messages.get("created", 0),
+                        total_updated=training.messages.get("updated", 0),
+                        errors=list(training.messages.get("errors", [])),
+                    ),
+                    training.classifier.org.get_branding(),
+                )
+
+        return reschedule_task
+
+
+class ClassifierDuplicatesCheckTask(SmartModel):
+    PENDING = "P"
+    IN_PROGRESS = "I"
+    COMPLETED = "C"
+    FAILED = "F"
+
+    STATUS = (
+        (PENDING, _("Pending")),
+        (IN_PROGRESS, _("In Progress")),
+        (COMPLETED, _("Completed")),
+        (FAILED, _("Failed")),
+    )
+
+    org = models.ForeignKey(Org, related_name="duplicates_checks", on_delete=models.PROTECT)
+    origin_file = models.FileField(upload_to="duplicates_check")
+    result_file = models.FileField(upload_to="duplicates_check", null=True, blank=True)
+    status = models.CharField(default=PENDING, choices=STATUS, max_length=2)
+    metadata = models.JSONField(default=dict)
+
+    @property
+    def file_name(self):
+        return os.path.basename(self.origin_file.name)
+
+    @classmethod
+    def create(cls, file, user):
+        return cls.objects.create(origin_file=file, created_by=user, modified_by=user)
+
+    def start(self):
+        from .tasks import check_duplicates
+
+        check_duplicates.delay(self.id)
+
+    def perform(self):
+        self.status = ClassifierDuplicatesCheckTask.IN_PROGRESS
+        self.save(update_fields=["status"])
+
+        columns = self.metadata["selected_columns"]
+        file_name = self.origin_file.name
+        new_filename = f"{os.path.basename(file_name).removesuffix('.csv')}_similarity.csv"
+        df = pd.read_csv(storage.open(file_name, "r"))
+        df_copy = df.copy()
+
+        try:
+            for column in columns:
+                column_similarity = f"{column}_Smlr"
+                for i, value in df_copy[column].items():
+                    similar_rows = []
+                    for j, other_value in df_copy[column].items():
+                        if i != j and jaro_similarity(value, other_value) >= 0.95:
+                            similar_rows.append(j + 1)
+                    df_copy.at[i, column_similarity] = ";".join(map(str, similar_rows))
+
+            self.result_file.save(new_filename, ContentFile(df_copy.to_csv(index=False).encode("utf-8")))
+            self.status = ClassifierDuplicatesCheckTask.COMPLETED
+            self.save(update_fields=["status"])
+            self.send_email()
+        except Exception as e:
+            logger.error("Similarity search process has been failed. %s", str(e))
+            self.status = ClassifierDuplicatesCheckTask.FAILED
+            self.save(update_fields=["status"])
+
+    def send_email(self):
+        send_template_email(
+            self.created_by.email,
+            "Similarity search process has been completed.",
+            "notifications/email/duplicates_check_result",
+            {"target_url": reverse("file_storage", kwargs={"file_path": self.result_file.name})},
+            settings.BRANDING.get(settings.DEFAULT_BRAND),
+        )

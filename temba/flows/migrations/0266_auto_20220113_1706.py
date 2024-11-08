@@ -10,10 +10,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name="flowrun",
-            name="events",
-        ),
         migrations.DeleteModel(
             name="FlowPathRecentRun",
         ),

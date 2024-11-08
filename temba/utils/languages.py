@@ -1,3 +1,4 @@
+import json
 from collections import OrderedDict
 
 import pycountry
@@ -26,6 +27,11 @@ NAME_OVERRIDES = {
 NAMES = {}
 
 
+def load_639_2_language_codes():
+    with open("%s/flow_editor/language_codes.json" % settings.MEDIA_ROOT, "r+") as file:
+        return json.loads(file.read())
+
+
 def reload():
     """
     Reloads languages
@@ -37,6 +43,10 @@ def reload():
         is_iso6391 = getattr(lang, "alpha_2", None)
         if is_iso6391 or lang.alpha_3 in settings.NON_ISO6391_LANGUAGES:
             NAMES[lang.alpha_3] = NAME_OVERRIDES.get(lang.alpha_3, lang.name)
+
+    for alpha3, name in load_639_2_language_codes().items():
+        if alpha3 not in NAMES:
+            NAMES[alpha3] = name
 
     # sort by name
     NAMES = OrderedDict(sorted(NAMES.items(), key=lambda n: n[1]))
@@ -74,7 +84,7 @@ def choices(codes: set, sort: bool = True) -> tuple:
     """
     Converts language codes into a list of code/name tuples suitable for choices on a form.
     """
-    cs = tuple((c, NAMES[c]) for c in codes)
+    cs = tuple((c, NAMES[c]) for c in codes if NAMES.get(c))
     if sort:
         cs = sorted(cs, key=lambda x: x[1])
     return cs
@@ -86,3 +96,11 @@ def alpha2_to_alpha3(alpha_2: str):
     """
     lang = pycountry.languages.get(alpha_2=alpha_2[:2])
     return lang.alpha_3 if lang else None
+
+
+def alpha3_to_alpha2(alpha_3: str):
+    """
+    Convert 3-char code (e.g. spa) to a 2-char code (e.g. es)
+    """
+    lang = pycountry.languages.get(alpha_3=alpha_3[:3])
+    return lang.alpha_2 if lang else None

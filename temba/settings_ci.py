@@ -15,4 +15,7 @@ _default_database_config = {
     "TEST": {"NAME": "temba"},  # use this same database for unit tests
 }
 
-DATABASES = {"default": _default_database_config, "readonly": _default_database_config.copy()}
+DATABASES = {
+    "default": _default_database_config,
+    "readonly": _default_database_config.copy(),
+}

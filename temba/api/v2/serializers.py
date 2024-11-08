@@ -701,7 +701,7 @@ class ContactFieldWriteSerializer(WriteSerializer):
 
     def validate_label(self, value):
         if not ContactField.is_valid_label(value):
-            raise serializers.ValidationError("Can only contain letters, numbers and hypens.")
+            raise serializers.ValidationError("Can only contain letters, numbers and hyphens.")
 
         key = ContactField.make_key(value)
         if not ContactField.is_valid_key(key):
@@ -926,6 +926,7 @@ class FlowRunReadSerializer(ReadSerializer):
     start = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
     values = serializers.SerializerMethodField()
+    messages = serializers.SerializerMethodField()
     exit_type = serializers.SerializerMethodField()
     created_on = serializers.DateTimeField(default_timezone=pytz.UTC)
     modified_on = serializers.DateTimeField(default_timezone=pytz.UTC)
@@ -941,11 +942,20 @@ class FlowRunReadSerializer(ReadSerializer):
 
         return [convert_step(s) for s in obj.path]
 
+    def get_messages(self, obj):
+        results = [
+            {"uuid": event.get("msg", {}).get("uuid"), "text": event.get("msg", {}).get("text")}
+            for event in (obj.events or [])
+            if event.get("type") in ["msg_created", "msg_received"]
+        ]
+        return results
+
     def get_values(self, obj):
         def convert_result(result):
             created_on = iso8601.parse_date(result[FlowRun.RESULT_CREATED_ON])
             return {
                 "value": result[FlowRun.RESULT_VALUE],
+                "corrected": result.get(FlowRun.RESULT_CORRECTED),
                 "category": result.get(FlowRun.RESULT_CATEGORY),
                 "node": result[FlowRun.RESULT_NODE_UUID],
                 "time": format_datetime(created_on),
@@ -973,6 +983,7 @@ class FlowRunReadSerializer(ReadSerializer):
             "modified_on",
             "exited_on",
             "exit_type",
+            "messages",
         )
 
 
@@ -1071,6 +1082,22 @@ class FlowStartWriteSerializer(WriteSerializer):
             urns=urns,
             extra=extra,
         )
+
+
+class FlowVariableQuerySerializer(serializers.Serializer):
+    flow = serializers.UUIDField()
+    variables = serializers.ListField(child=serializers.CharField(), default=list)
+    another_format_variables = serializers.ListField(child=serializers.CharField(), default=list)
+    format = serializers.ChoiceField(choices=["value", "category"], default="category")
+    top = serializers.IntegerField(default=0)
+
+    def validate_flow(self, flow_uuid):
+        org = self.context["request"].user.get_org()
+        try:
+            Flow.objects.get(org=org, uuid=flow_uuid)
+            return flow_uuid
+        except Flow.DoesNotExist as e:
+            raise serializers.ValidationError(e)
 
 
 class GlobalReadSerializer(ReadSerializer):
@@ -1200,6 +1227,7 @@ class MsgReadSerializer(ReadSerializer):
     status = serializers.SerializerMethodField()
     archived = serializers.SerializerMethodField()
     visibility = serializers.SerializerMethodField()
+    flow = serializers.SerializerMethodField()
     labels = fields.LabelField(many=True)
     media = serializers.SerializerMethodField()  # deprecated
     created_on = serializers.DateTimeField(default_timezone=pytz.UTC)
@@ -1230,6 +1258,9 @@ class MsgReadSerializer(ReadSerializer):
     def get_visibility(self, obj):
         return self.VISIBILITIES.get(obj.visibility)
 
+    def get_flow(self, obj):
+        return dict(uuid=obj.flow.uuid, name=obj.flow.name) if obj.flow else dict()
+
     class Meta:
         model = Msg
         fields = (
@@ -1244,6 +1275,7 @@ class MsgReadSerializer(ReadSerializer):
             "archived",
             "visibility",
             "text",
+            "flow",
             "labels",
             "attachments",
             "created_on",
@@ -1397,7 +1429,13 @@ class WebHookEventReadSerializer(ReadSerializer):
         return obj.resthook.slug
 
     def get_data(self, obj):
-        return obj.data
+        decoded = obj.data
+
+        # decode values and steps
+        values, steps = obj.data.get("values", "[]"), obj.data.get("steps", "[]")
+        decoded["values"] = json.loads(values) if isinstance(values, str) else values
+        decoded["steps"] = json.loads(steps) if isinstance(steps, str) else steps
+        return decoded
 
     class Meta:
         model = WebHookEvent
@@ -1432,6 +1470,10 @@ class TemplateReadSerializer(ReadSerializer):
     class Meta:
         model = Template
         fields = ("uuid", "name", "translations", "created_on", "modified_on")
+
+
+class UrlAttachmentValidationSerializer(serializers.Serializer):
+    attachment_url = serializers.URLField(required=True)
 
 
 class TicketerReadSerializer(ReadSerializer):
@@ -1627,3 +1669,23 @@ class WorkspaceReadSerializer(ReadSerializer):
             "credits",
             "anon",
         )
+
+
+class TwilioNumberValidationSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(required=True)
+
+    def update(self, instance, validated_data):
+        return instance
+
+    def create(self, validated_data):
+        return None
+
+
+class ReplaceAccentedCharsSerializer(serializers.Serializer):
+    message = serializers.CharField(required=True)
+
+    def update(self, instance, validated_data):
+        return instance
+
+    def create(self, validated_data):
+        return None

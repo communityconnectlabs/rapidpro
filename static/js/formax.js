@@ -88,8 +88,9 @@
         }
         form.off("submit").on("submit", _submitFormax);
         if (!section.data("nobutton")) {
-          form.append("<input type=\"submit\" class=\"button-primary\" value=\"" + buttonName + "\"/>");
           form.find(".form-actions").remove();
+          form.find(".button-primary").remove(); // remove the old submit button before adding the new one
+          form.append("<input type=\"submit\" class=\"button-primary\" value=\"" + buttonName + "\"/>");
         }
         form.find(".submit-button").on("click", function() {
           return $(this).addClass("disabled").attr("enabled", false);

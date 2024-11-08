@@ -62,6 +62,7 @@ class ChannelType(metaclass=ABCMeta):
     icon = "icon-channel-external"
     schemes = None
     show_config_page = True
+    show_edit_page = False
 
     available_timezones = None
     recommended_timezones = None
@@ -92,6 +93,8 @@ class ChannelType(metaclass=ABCMeta):
 
     redact_request_keys = set()
     redact_response_keys = set()
+    force_redact_request_keys = set()
+    force_redact_response_keys = set()
 
     def is_available_to(self, user):
         """
@@ -174,15 +177,18 @@ class ChannelType(metaclass=ABCMeta):
         """
         return self.attachment_support
 
-    def get_configuration_context_dict(self, channel):
-        return dict(channel=channel, ip_addresses=settings.IP_ADDRESSES)
+    def get_configuration_context_dict(self, channel, context=None):
+        context_dict = dict(channel=channel, ip_addresses=settings.IP_ADDRESSES)
+        if context:
+            context_dict.update(context)
+        return context_dict
 
-    def get_configuration_template(self, channel):
+    def get_configuration_template(self, channel, context=None):
         try:
             return (
                 Engine.get_default()
                 .get_template("channels/types/%s/config.html" % self.slug)
-                .render(context=Context(self.get_configuration_context_dict(channel)))
+                .render(context=Context(self.get_configuration_context_dict(channel=channel, context=context)))
             )
         except TemplateDoesNotExist:
             return ""
@@ -276,6 +282,7 @@ class Channel(TembaModel, DependencyMixin):
     CONFIG_MAX_CONCURRENT_EVENTS = "max_concurrent_events"
     CONFIG_ALLOW_INTERNATIONAL = "allow_international"
     CONFIG_MACHINE_DETECTION = "machine_detection"
+    CONFIG_WCH_LOGO = "logo"
 
     CONFIG_VONAGE_API_KEY = "nexmo_api_key"
     CONFIG_VONAGE_API_SECRET = "nexmo_api_secret"
@@ -453,6 +460,7 @@ class Channel(TembaModel, DependencyMixin):
             schemes=schemes,
             created_by=user,
             modified_by=user,
+            tps=settings.COURIER_DEFAULT_TPS,
         )
         create_args.update(kwargs)
 
@@ -779,6 +787,9 @@ class Channel(TembaModel, DependencyMixin):
 
         elif URN.FACEBOOK_SCHEME in self.schemes:
             return "%s (%s)" % (self.config.get(Channel.CONFIG_PAGE_NAME, self.name), self.address)
+
+        elif self.channel_type == "WCH":
+            return self.name
 
         return self.address
 
@@ -1119,6 +1130,7 @@ class ChannelEvent(models.Model):
     TYPE_CALL_IN = "mo_call"
     TYPE_CALL_IN_MISSED = "mo_miss"
     TYPE_NEW_CONVERSATION = "new_conversation"
+    TYPE_STOP_CONVERSATION = "stop_conversation"
     TYPE_REFERRAL = "referral"
     TYPE_STOP_CONTACT = "stop_contact"
     TYPE_WELCOME_MESSAGE = "welcome_message"
@@ -1132,6 +1144,7 @@ class ChannelEvent(models.Model):
         (TYPE_CALL_IN_MISSED, _("Missed Incoming Call"), "call-in-missed"),
         (TYPE_STOP_CONTACT, _("Stop Contact"), "stop-contact"),
         (TYPE_NEW_CONVERSATION, _("New Conversation"), "new-conversation"),
+        (TYPE_STOP_CONVERSATION, _("Stop Conversation"), "stop-conversation"),
         (TYPE_REFERRAL, _("Referral"), "referral"),
         (TYPE_WELCOME_MESSAGE, _("Welcome Message"), "welcome-message"),
     )
@@ -1142,7 +1155,7 @@ class ChannelEvent(models.Model):
 
     org = models.ForeignKey(Org, on_delete=models.PROTECT)
     channel = models.ForeignKey(Channel, on_delete=models.PROTECT)
-    event_type = models.CharField(max_length=16, choices=TYPE_CHOICES)
+    event_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
     contact = models.ForeignKey("contacts.Contact", on_delete=models.PROTECT, related_name="channel_events")
     contact_urn = models.ForeignKey(
         "contacts.ContactURN", on_delete=models.PROTECT, null=True, related_name="channel_events"
@@ -1232,39 +1245,48 @@ class ChannelLog(models.Model):
         Gets the request trace as it should be displayed to the given user
         """
         redact_keys = Channel.get_type_from_code(self.channel.channel_type).redact_request_keys
+        force_redact_keys = Channel.get_type_from_code(self.channel.channel_type).force_redact_request_keys
 
-        return self._get_display_value(user, self.request, anon_mask, redact_keys)
+        return self._get_display_value(user, self.request, anon_mask, redact_keys, force_redact_keys)
 
     def get_response_display(self, user, anon_mask):
         """
         Gets the response trace as it should be displayed to the given user
         """
         redact_keys = Channel.get_type_from_code(self.channel.channel_type).redact_response_keys
+        force_redact_keys = Channel.get_type_from_code(self.channel.channel_type).force_redact_response_keys
 
-        return self._get_display_value(user, self.response, anon_mask, redact_keys)
+        return self._get_display_value(user, self.response, anon_mask, redact_keys, force_redact_keys)
 
-    def _get_display_value(self, user, original, mask, redact_keys=()):
+    def _get_display_value(self, user, original, mask, redact_keys=(), force_redact_keys=()):
         """
         Get a part of the log which may or may not have to be redacted to hide sensitive information in anon orgs
         """
 
-        if not self.channel.org.is_anon or user.has_org_perm(self.channel.org, "contacts.contact_break_anon"):
-            return original
+        def basic_reduction():
+            if not self.channel.org.is_anon or user.has_org_perm(self.channel.org, "contacts.contact_break_anon"):
+                return original
 
-        # if this log doesn't have a msg then we don't know what to redact, so redact completely
-        if not self.msg_id:
-            return mask
+            # if this log doesn't have a msg then we don't know what to redact, so redact completely
+            if not self.msg_id:
+                return mask
 
-        needle = self.msg.contact_urn.path
+            needle = self.msg.contact_urn.path
 
-        if redact_keys:
-            redacted = redact.http_trace(original, needle, mask, redact_keys)
-        else:
-            redacted = redact.text(original, needle, mask)
+            if redact_keys:
+                result = redact.http_trace(original, needle, mask, redact_keys)
+            else:
+                result = redact.text(original, needle, mask)
 
-        # if nothing was redacted, don't risk returning sensitive information we didn't find
-        if original == redacted:
-            return mask
+            # if nothing was redacted, don't risk returning sensitive information we didn't find
+            if original == result:
+                return mask
+
+            return result
+
+        redacted = basic_reduction()
+        if force_redact_keys:
+            redacted = redact.http_trace(redacted, "********", mask, force_redact_keys)
 
         return redacted
 
@@ -1487,12 +1509,10 @@ class Alert(SmartModel):
 
         # end any sms alerts that are open and no longer seem valid
         for alert in Alert.objects.filter(alert_type=cls.TYPE_SMS, ended_on=None).distinct("channel_id"):
-            # are there still queued messages?
-
+            # are there still queued or errored messages?
             if (
-                not Msg.objects.filter(
-                    status__in=["Q", "P"], channel_id=alert.channel_id, created_on__lte=thirty_minutes_ago
-                )
+                not Msg.objects.filter(status__in=["Q", "P", "E"], channel_id=alert.channel_id)
+                .exclude(Q(created_on__gte=thirty_minutes_ago) & Q(status__in=["Q", "P"]))
                 .exclude(created_on__lte=day_ago)
                 .exists()
             ):
@@ -1500,11 +1520,11 @@ class Alert(SmartModel):
                     ended_on=timezone.now()
                 )
 
-        # now look for channels that have many unsent messages
+        # now look for channels that have many unsent messages or messages that ware failed
         queued_messages = (
-            Msg.objects.filter(status__in=["Q", "P"])
+            Msg.objects.filter(status__in=["Q", "P", "E"])
             .order_by("channel", "created_on")
-            .exclude(created_on__gte=thirty_minutes_ago)
+            .exclude(Q(created_on__gte=thirty_minutes_ago) & Q(status__in=["Q", "P"]))
             .exclude(created_on__lte=day_ago)
             .exclude(channel=None)
             .values("channel")
@@ -1590,7 +1610,12 @@ class Alert(SmartModel):
             last_seen=self.channel.last_seen,
             sync=self.sync_event,
         )
-        context["unsent_count"] = Msg.objects.filter(channel=self.channel, status__in=["Q", "P"]).count()
+        six_hours_ago = timezone.now() - timedelta(hours=6)
+        context["unsent_count"] = (
+            Msg.objects.filter(channel=self.channel)
+            .filter(Q(status__in=["Q", "P"]) | (Q(status="E") & Q(created_on__gt=six_hours_ago)))
+            .count()
+        )
         context["subject"] = subject
 
         send_template_email(self.channel.alert_email, subject, template, context, self.channel.org.get_branding())
@@ -1646,10 +1671,18 @@ class ChannelConnection(models.Model):
         (ERROR_MACHINE, _("Answering Machine")),  # the call went to an answering machine
     )
 
+    ANSWERED_BY_HUMAN = "H"
+    ANSWERED_BY_MACHINE = "M"
+    ANSWERED_BY_CHOICES = (
+        (ANSWERED_BY_HUMAN, _("Human")),
+        (ANSWERED_BY_MACHINE, _("Machine")),
+    )
+
     org = models.ForeignKey(Org, on_delete=models.PROTECT)
     connection_type = models.CharField(max_length=1, choices=TYPE_CHOICES)
     direction = models.CharField(max_length=1, choices=DIRECTION_CHOICES)
     status = models.CharField(max_length=1, choices=STATUS_CHOICES)
+    answered_by = models.CharField(max_length=1, choices=ANSWERED_BY_CHOICES, null=True)
 
     channel = models.ForeignKey("Channel", on_delete=models.PROTECT, related_name="connections")
     contact = models.ForeignKey("contacts.Contact", on_delete=models.PROTECT, related_name="connections")
@@ -1735,3 +1768,35 @@ class ChannelConnection(models.Model):
                 condition=Q(connection_type="V", status__in=("Q", "E"), next_attempt__isnull=False),
             )
         ]
+
+
+class SMPPLog(models.Model):
+    """
+    A log from an SMPP channel
+    """
+
+    STATUS_WIRED = "W"  # message was handed off to the provider and credits were deducted for it
+    STATUS_ENROUTE = "U"  # acknowledgement
+    STATUS_SENT = "S"  # we have confirmation that a message was sent
+    STATUS_DELIVERED = "D"  # we have confirmation that a message was delivered
+    STATUS_HANDLED = "H"  # we were able to handle the message from the aggregator
+    STATUS_ERRORED = "E"  # there was an error during delivery
+    STATUS_FAILED = "F"  # we gave up on sending this message
+
+    STATUS_CHOICES = (
+        (STATUS_WIRED, _("Wired")),
+        (STATUS_ENROUTE, _("En Route")),
+        (STATUS_SENT, _("Sent")),
+        (STATUS_DELIVERED, _("Delivered")),
+        (STATUS_HANDLED, _("Handled")),
+        (STATUS_ERRORED, _("Error")),
+        (STATUS_FAILED, _("Failed")),
+    )
+
+    channel = models.ForeignKey(Channel, on_delete=models.PROTECT, related_name="smpp_channel_logs")
+    msg = models.ForeignKey("msgs.Msg", on_delete=models.PROTECT, related_name="smpp_msg_logs", null=True)
+    status = models.CharField(max_length=1, choices=STATUS_CHOICES, db_index=True, default=STATUS_WIRED)
+    created_on = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):  # pragma: needs cover
+        return self.channel.name

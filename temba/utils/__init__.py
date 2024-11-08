@@ -135,3 +135,67 @@ def extract_constants(config, reverse=False):
         return {t[2]: t[0] for t in config}
     else:
         return {t[0]: t[2] for t in config}
+
+
+def build_flow_parameters(request_post, fields, values):
+    """
+    Returns the flow parameters as a dict
+    :param request_post: HTTP POST request data
+    :param fields: Names of the fields to find
+    :param values: Names of the values to find
+    :return:
+    """
+    fields = sorted(fields)
+    values = sorted(values)
+
+    params = {}
+    for i, field in enumerate(fields):
+        param_name = str(request_post.get(fields[i])).replace("@trigger.params.", "")
+        params[param_name] = request_post.get(values[i])
+    return params
+
+
+def flow_params_context(request):
+    """
+    Returns the flow parameters as context to be used on get_context function
+    :param request: HTTP request
+    :return:
+    """
+    if request.method != "POST":
+        return dict()
+
+    flow_params_fields = [field for field in request.POST.keys() if "flow_parameter_field" in field]
+    flow_params_values = [field for field in request.POST.keys() if "flow_parameter_value" in field]
+    param_fields = build_flow_parameters(request.POST, flow_params_fields, flow_params_values)
+
+    return dict(
+        param_fields=param_fields,
+        flow_parameters_fields="|".join([f"@trigger.params.{field}" for field in param_fields.keys()]),
+        flow_parameters_values="|".join(param_fields.values()),
+    )
+
+
+def get_image_size(logo_img):
+    from PIL import Image
+
+    from temba.orgs.models import Org
+
+    try:
+        # if using S3 as file storage
+        if str(logo_img).startswith("http"):
+            media_file = Org.get_temporary_file_from_url(logo_img)
+            im = Image.open(media_file)
+        else:
+            # checking if the file comes from sitestatic folder
+            media_replace = "/sitestatic" if "sitestatic/brands" in logo_img else "/media"
+            static_root = (
+                settings.STATIC_ROOT.replace("sitestatic", "static") if settings.DEBUG else settings.STATIC_ROOT
+            )
+            media_root = static_root if "sitestatic/brands" in logo_img else settings.MEDIA_ROOT
+            logo_path = logo_img.split(settings.HOSTNAME)[-1].replace(media_replace, "", 1)
+            logo_path = "%s%s" % (media_root, logo_path)
+            im = Image.open(logo_path)
+        logo_w, logo_h = im.size
+    except Exception:
+        logo_w, logo_h = 0, 0
+    return {"width": logo_w, "height": logo_h}

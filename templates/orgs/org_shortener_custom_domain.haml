@@ -1,0 +1,9 @@
+-extends "smartmin/update.html"
+-load i18n
+
+-block summary
+  -if domain
+    -blocktrans trimmed with custom_domain=domain
+      Custom domain for shortened links: <b>{{ custom_domain }}</b><br>
+  -else
+    -trans "You can set a custom domain (e.g. links.yoursite.com) for shortened links on our platform."

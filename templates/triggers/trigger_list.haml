@@ -42,6 +42,13 @@
                 .count(onclick="goto(event)" href='{{ folder.url }}')
                   {{ folder.count | intcomma }}
 
+          .flex.flex-col
+            -if org_perms.triggers.trigger_create_large_send
+              .w-64.mr-5
+                %temba-modax#create-large-send{ header:'{% trans "Create Large Send" %}', endpoint:"{% url 'triggers.trigger_create_large_send' %}"}
+                  .button-primary.block
+                    -trans "Create Large Send"
+
         .right
           .flex.w-full.items-end.mb-4
             -block action-buttons
@@ -120,6 +127,15 @@
                         -else
                           -trans "is not scheduled"
 
+                      -if obj.extra
+                        |
+                        -trans "Contains "
+                        - if org_perms.triggers.trigger_update
+                          %a.update-trigger{ data-object-id: "{{ obj.id }}", onclick:"updateTrigger(event, {{obj.id}})" }
+                            -trans "flow parameters"
+                        - else
+                          -trans "Contains flow parameters"
+
                     %td(onclick="handleRowSelection(this)" width="250px")
                       -include "includes/recipients.haml" with groups=obj.groups.all contacts=obj.contacts.all
 
@@ -133,7 +149,7 @@
             -block paginator
               .mt-3
                 -include "includes/pagination.haml"
-  
+
   %temba-modax#update-trigger
 -block extra-script
   {{ block.super }}
@@ -147,4 +163,4 @@
       modal.header = '{{ _("Update Trigger")|escapejs }}';
       modal.open = true;
     }
-    
+

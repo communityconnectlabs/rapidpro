@@ -155,7 +155,7 @@
   content: "\e257";
 }
 .icon-bubble:before {
-  content: "\ead8";
+  content: "\e00f";
 }
 .icon-bubble-2:before {
   content: "\e011";
@@ -433,14 +433,20 @@
 .icon-menu:before {
   content: "\e092";
 }
+.icon-menu-1:before {
+  content: "\e069";
+}
+.icon-menu-2:before {
+  content: "\e091";
+}
+.icon-menu-3:before {
+  content: "\e092";
+}
 .icon-menu-4:before {
   content: "\e0c1";
 }
 .icon-menu-5:before {
   content: "\e0c3";
-}
-.icon-menu1:before {
-  content: "\e069";
 }
 .icon-meter-medium:before {
   content: "\e029";
@@ -647,7 +653,7 @@
   content: "\e00c";
 }
 .icon-users-2:before {
-  content: "\e92a";
+  content: "\e03c";
 }
 .icon-vcard:before {
   content: "\e02c";
@@ -777,4 +783,13 @@
 }
 .icon-vonage:before {
   content: "\e91f";
+}
+.icon-two-factor:before {
+  content: "\e91c";
+}
+.icon-hand:before {
+  content: "\e079";
+}
+.icon-help:before {
+  content: "\e91d";
 }

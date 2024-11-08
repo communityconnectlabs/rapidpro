@@ -8,6 +8,7 @@ from .sitemaps import PublicViewSitemap, VideoSitemap
 from .views import (
     Android,
     Blog,
+    DemoPing,
     GenerateCoupon,
     IndexView,
     LeadCRUDL,
@@ -30,6 +31,7 @@ urlpatterns = [
     re_path(r"^public/welcome/$", WelcomeRedirect.as_view(), {}, "public.public_welcome_redirect"),
     re_path(r"^demo/status/$", csrf_exempt(OrderStatus.as_view()), {}, "demo.order_status"),
     re_path(r"^demo/coupon/$", csrf_exempt(GenerateCoupon.as_view()), {}, "demo.generate_coupon"),
+    re_path(r"^demo/ping/$", DemoPing.as_view(), {}, "demo.ping"),
 ]
 
 if DEBUG:  # pragma: needs cover

@@ -1,0 +1,60 @@
+{% load i18n %}
+
+:css
+  .segment-counter-container {
+    padding: 5px 0;
+    display: flex;
+    flex-direction: row-reverse;
+  }
+
+  .multiple-segments {
+    color: #cf2e2c;
+  }
+
+  .money-save {
+    cursor: pointer;
+    color: #4d7dad;
+  }
+
+  .dialog-mask {
+    height: 100vh;
+    background: #0a001f !important;
+  }
+
+
+.segment-counter-container
+  .float-counter
+    .segments{id: "{{ field_name }}-segments"}
+      0 characters / 0 segment
+    .encoding{id: "{{ field_name }}-encoding"}
+      Encoding: GSM/7-bit
+    .money-save.hidden{id: "{{ field_name }}-money-save", onclick: "{{ field_name }}ShowReplaceCharDialog()"}
+      -trans "Want to save some money?"
+
+
+:javascript
+  function initCounter() {
+    let containerQuery = "{{ dialog_query }}";
+    let fieldName = "{{ field_name }}";
+    let container = document.querySelector(containerQuery);
+    let field = container.shadowRoot.querySelector(`[name="${fieldName}"]`).shadowRoot.querySelector("temba-textinput");
+    let segments = container.shadowRoot.querySelector(`#${fieldName}-segments`);
+    let encoding = container.shadowRoot.querySelector(`#${fieldName}-encoding`);
+    let moneySave = container.shadowRoot.querySelector(`#${fieldName}-money-save`);
+    let hiddenFieldsToUpdateValue = container.shadowRoot.querySelector(`[name="${fieldName}"]`).querySelectorAll(`input[type="hidden"][name="${fieldName}"]`)
+    initReplaceCharDialog(fieldName, field, '/api/v2/replace_accented_chars.json', "{{ csrf_token }}", hiddenFieldsToUpdateValue);
+
+    field.addEventListener("change", () => {
+      let message = field.value;
+      let info = getMessageInfo(message);
+      segments.innerText = `${info.count} characters / ${info.segmentCount} segments`;
+
+      toggleElementClass(info.segmentCount > 1, segments, "multiple-segments");
+      toggleElementClass(!(!info.isGSM && info.accentedChars.length > 0 && info.segmentCount > 1), moneySave, "hidden");
+      encoding.innerHTML = !info.isGSM ? `Encoding: <span class="multiple-segments">${info.characterSet}</span>` : `Encoding: ${info.characterSet}`;
+    });
+    setTimeout(() => {
+      field.dispatchEvent(new Event("change"));
+    }, 300);
+  }
+  initCounter();

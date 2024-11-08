@@ -4,7 +4,7 @@
 
 - block pre-form
   .pull-right
-    %a.btn.btn-alert.delete
+    %a.button.button-danger.delete
       -with user.get_owned_orgs as orgs
         -if orgs
           -trans "Delete "
@@ -16,15 +16,19 @@
 
 - block post-form
 
-  - with user.get_owned_orgs as orgs
-    .deletion.hide
-      .title
-        -if orgs
-          -trans "Delete Workspace"
-        -else
-          -trans "Delete Login"
+  -if perms.auth.user_mimic
+    %form.smartmin-form.form-horizontal.user_mimic{action:"{% url 'users.user_mimic' object.id %}", method:"post", enctype:"multipart/form-data"}
+      -csrf_token
+      %div.form-group
+        %label.col-sm-2.control-label
+          Login as
+        %div.col-sm-10
+          %button{type:"submit", class:"button button-primary"}
+            {{object|user_as_string}}
 
-      .body
+  - with user.get_owned_orgs as orgs
+    %temba-dialog#delete-confirmation(header='{% if orgs %}{{_("Delete Workspace")}}{% else %}{{_("Delete Login")}}{% endif %}' primaryButtonName='{{ _("Delete")|escapejs }}' destructive='true')
+      .p-6.body
         - with user.get_owned_orgs as orgs
           -if orgs
             .delete-warning
@@ -49,14 +53,14 @@
 
     $(document).ready(()=>{
       $('.delete').live('click', () => {
-        modal = new ConfirmationModal($('.deletion > .title').html(), $('.deletion > .body').html());
-        modal.addClass('alert');
-        modal.setListeners({onPrimary: function(){
-          $('#delete-form').click();
-        }}, false);
-        modal.setPrimaryButton('{{ _("Delete")|escapejs }}');
-        modal.show();
-
+        let deleteConfirmation = document.querySelector("#delete-confirmation")
+        deleteConfirmation.addEventListener("temba-button-clicked", function(event){
+          if (!event.detail.button.secondary) {
+            $('#delete-form').click();
+          }
+          deleteConfirmation.open = false;
+        });
+        deleteConfirmation.open = true;
       });
     });
 
@@ -78,5 +82,38 @@
 
     .controls #id_groups {
       margin-left: 0px;
+    }
+
+    form.smartmin-form {
+      margin-top: 60px;
+    }
+
+    form.user_mimic {
+      margin-top: 20px
+    }
+
+    form input[type=text], form input[type=password], form input[type=email] {
+      background-color: white;
+      padding: var(--temba-textinput-padding);
+      flex: 1 1 0%;
+      margin: 0px;
+      color: var(--color-widget-text);
+      font-family: var(--font-family);
+      font-size: var(--temba-textinput-font-size);
+      line-height: normal;
+      cursor: text;
+      resize: none;
+      font-weight: 300;
+      width: 100%;
+      border-radius: var(--curvature-widget);
+      cursor: text;
+      background: var(--color-widget-bg);
+      border: 1px solid var(--color-widget-border);
+      transition: all 0.2s ease-in-out 0s;
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      box-shadow: rgb(0 0 0 / 4%) 0px 3px 20px 0px, rgb(0 0 0 / 2%) 0px 1px 2px 0px;
+      caret-color: var(--input-caret);
     }
 

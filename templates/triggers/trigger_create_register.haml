@@ -3,3 +3,34 @@
 
 -block summary
   -trans "Create a message keyword that allows people to join a group."
+
+
+-block fields
+  {{ block.super }}
+
+  %h5.embedded-data-register.hidden
+    -trans "Flow Parameters"
+  #embedded-data-register.hidden
+    #embed-container-register
+
+  %temba-dialog#confirm-register-trigger.hide(header='{{ _("Trigger Confirmation")|escapejs }}' primaryButtonName='{{ _("Confirm")|escapejs }}' destructive='true')
+    .p-6
+
+
+-block extra-script
+  :javascript
+    function onRegisterSuccess(form, htmlString, status, jqXHR) {
+      const requiredFields = ['div.field_keyword', 'div.field_flow']
+      handleSubmissionResponse(requiredFields, form, { htmlString, status, jqXHR });
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+      const options = {
+        formContainerId: '#id-trigger-register',
+        confirmationBoxId: '#confirm-register-trigger',
+        flowFieldId: '#id_flow',
+        postUrl: '{% url "triggers.trigger_create_register" %}',
+        successFunc: onRegisterSuccess
+      };
+      initForm(options);
+    });

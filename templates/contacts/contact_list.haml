@@ -81,8 +81,11 @@
       .lp-frame
         .left
           -if org_perms.contacts.contactimport_create
-            .button-primary.block(onclick="goto(event)" href="{% url 'contacts.contactimport_create' %}")
+            .button-primary.mb-2.block(onclick="goto(event)" href="{% url 'contacts.contactimport_create' %}")
               -trans "Import Contacts"
+            - if org_perms.contacts.contact_invite_participants
+              %a#id_invite_participants.button-light.block{href:"{% url 'contacts.contact_invite_participants' %}"}
+                -trans "Invite Participants"
 
           .lp-nav.upper
             -for folder in folders
@@ -91,7 +94,7 @@
                   {{folder.label}}
                 .count(onclick="goto(event)" href='{{folder.url}}')
                   {{ folder.count | intcomma }}
-          
+
           .secondary-buttons.mb-6
             -if org_perms.contacts.contact_create
               %temba-modax#create-label-modal(header='{% trans "Create Contact" %}' endpoint="{% url 'contacts.contact_create' %}")
@@ -204,7 +207,6 @@
                 .subtitle.ml-1.w-full
                   -block subtitle
 
-
               %form#search-form.mb-4(method="get")
                 %temba-textinput.w-full(placeholder='{% trans "Search" %}' name="search" value="{{search}}")
 
@@ -228,7 +230,7 @@
                 -if paginator.is_es_search and not page_obj.has_next_page and page_obj.number == paginator.num_pages and paginator.count > 10000
                   .text-gray-400.text-sm.self-end.mt-2
                     -trans "To view more than 10,000 search results, save it as a group."
-                
+
           -else
             -include "contacts/empty_include.haml"
 
@@ -270,7 +272,7 @@
           deleteAllConfirmation.open = false;
         });
       }
-      
+
       {% endif %}
 
       function handleRowClicked(event) {

@@ -20,6 +20,7 @@ config/gen
 config/settings.py
 coverage-report
 celerybeat-schedule.db
+celerybeat-schedule
 db
 node_modules
 parser.out
@@ -126,3 +127,16 @@ ansible/site.retry
 
 # autoenv
 .direnv/
+
+# CCL Custom
+env_py3/
+rp-indexer/
+media/cache/
+media/flow_pdf/
+media/duplicates_check/
+temba/settings_test.py
+docker.settings.aptible-prod
+docker.settings.aptible-stage
+docker.settings.prod
+Dockerfile
+.env

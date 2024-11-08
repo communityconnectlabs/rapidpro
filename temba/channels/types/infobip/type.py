@@ -1,6 +1,6 @@
 from django.utils.translation import gettext_lazy as _
 
-from temba.channels.views import AuthenticatedExternalCallbackClaimView
+from temba.channels.types.infobip.views import ClaimView
 from temba.contacts.models import URN
 
 from ...models import ChannelType
@@ -21,7 +21,7 @@ class InfobipType(ChannelType):
     claim_blurb = _("Easily add a two way number you have configured with %(link)s using their APIs.") % {
         "link": '<a href="http://infobip.com">Infobip</a>'
     }
-    claim_view = AuthenticatedExternalCallbackClaimView
+    claim_view = ClaimView
 
     schemes = [URN.TEL_SCHEME]
     max_length = 1600

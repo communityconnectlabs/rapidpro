@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 from datetime import timedelta
+from itertools import chain
 from urllib.parse import quote_plus
 
 import iso8601
@@ -20,13 +21,13 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.functions import Lower, Upper
 from django.forms import Form
-from django.http import Http404, HttpResponse, HttpResponseNotFound, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -198,15 +199,6 @@ class ContactListView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
 
     search_error = None
 
-    def pre_process(self, request, *args, **kwargs):
-        """
-        Don't allow pagination past 200th page
-        """
-        if int(self.request.GET.get("page", "1")) > 200:
-            return HttpResponseNotFound()
-
-        return super().pre_process(request, *args, **kwargs)
-
     @cached_property
     def group(self):
         return self.derive_group()
@@ -317,7 +309,9 @@ class ContactListView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
                 self.parsed_query = results.query if len(results.query) > 0 else None
                 self.save_dynamic_search = results.metadata.allow_as_group
 
-                return IDSliceQuerySet(Contact, results.contact_ids, offset=offset, total=results.total)
+                return IDSliceQuerySet(
+                    Contact, results.contact_ids, offset=offset, total=results.total, active_only=True
+                )
             except SearchException as e:
                 self.search_error = str(e)
 
@@ -390,6 +384,21 @@ class ContactListView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
             )
 
         return rendered
+
+    def get_gear_links(self):
+        links = []
+
+        if self.has_org_perm("contacts.contact_export"):
+            links.append(
+                dict(
+                    id="export-contacts",
+                    title=_("Export"),
+                    modax=_("Export Contacts"),
+                    href=self.derive_export_url(),
+                )
+            )
+
+        return links
 
 
 class ContactForm(forms.ModelForm):
@@ -520,9 +529,7 @@ class UpdateContactForm(ContactForm):
     class Meta:
         model = Contact
         fields = ("name", "language", "groups")
-        widgets = {
-            "name": InputWidget(),
-        }
+        widgets = {"name": InputWidget()}
 
 
 class ExportForm(Form):
@@ -571,6 +578,7 @@ class ContactCRUDL(SmartCRUDL):
         "delete",
         "history",
         "start",
+        "invite_participants",
     )
 
     class Menu(MenuMixin, OrgPermsMixin, SmartTemplateView):
@@ -772,6 +780,8 @@ class ContactCRUDL(SmartCRUDL):
                 event__is_active=True, event__campaign__is_archived=False, scheduled__gte=timezone.now()
             ).order_by("scheduled")
 
+            scheduled_triggers = contact.get_scheduled_triggers()
+
             scheduled_messages = contact.get_scheduled_messages()
 
             merged_upcoming_events = []
@@ -783,6 +793,34 @@ class ContactCRUDL(SmartCRUDL):
                         flow_uuid=fire.event.flow.uuid,
                         flow_name=fire.event.flow.name,
                         scheduled=fire.scheduled,
+                        **(
+                            {}
+                            if not fire.event.campaign
+                            else dict(
+                                trigger_name=fire.event.campaign.name,
+                                trigger_url=reverse("campaigns.campaign_read", kwargs={"pk": fire.event.campaign.id}),
+                            )
+                        ),
+                    )
+                )
+
+            for sched_trigger in scheduled_triggers:
+                merged_upcoming_events.append(
+                    dict(
+                        repeat_period=sched_trigger.schedule.repeat_period,
+                        event_type="F",
+                        message=None,
+                        flow_uuid=sched_trigger.flow.uuid,
+                        flow_name=sched_trigger.flow.name,
+                        scheduled=sched_trigger.schedule.next_fire,
+                        **(
+                            {}
+                            if not sched_trigger
+                            else dict(
+                                trigger_name=f"Triggers {sched_trigger.schedule.get_display()}",
+                                trigger_url=reverse("triggers.trigger_list"),
+                            )
+                        ),
                     )
                 )
 
@@ -795,6 +833,14 @@ class ContactCRUDL(SmartCRUDL):
                         flow_uuid=None,
                         flow_name=None,
                         scheduled=sched_broadcast.schedule.next_fire,
+                        **(
+                            {}
+                            if not sched_broadcast
+                            else dict(
+                                trigger_name=f"Triggers {sched_broadcast.schedule.get_display()}",
+                                trigger_url=reverse("triggers.trigger_list"),
+                            )
+                        ),
                     )
                 )
 
@@ -852,6 +898,23 @@ class ContactCRUDL(SmartCRUDL):
 
             context["all_contact_fields"] = all_contact_fields
 
+            # add opt-out fields
+            try:
+                opt_out_message = ContactField.system_fields.get(org=contact.org, key=ContactField.KEY_OPT_OUT_MSG)
+                opt_out_datetime = ContactField.system_fields.get(org=contact.org, key=ContactField.KEY_OPTED_OUT_ON)
+                opt_out_message.field_type, opt_out_datetime.field_type = (
+                    ContactField.FIELD_TYPE_USER,
+                    ContactField.FIELD_TYPE_USER,
+                )
+                context.update(
+                    {
+                        "opt_out_message": contact.get_field_value(opt_out_message),
+                        "opt_out_datetime": contact.get_field_value(opt_out_datetime),
+                    }
+                )
+            except ContactField.DoesNotExist:
+                pass
+
             # add contact.language to the context
             if contact.language:
                 lang_name = languages.get_name(contact.language)
@@ -878,7 +941,7 @@ class ContactCRUDL(SmartCRUDL):
             links = []
 
             if self.object.status == Contact.STATUS_ACTIVE:
-                if self.has_org_perm("msgs.broadcast_send"):
+                if self.has_org_perm("msgs.broadcast_send") and self.object.get_urn():
                     links.append(
                         dict(
                             id="send-message",
@@ -1121,13 +1184,13 @@ class ContactCRUDL(SmartCRUDL):
             if self.has_org_perm("contacts.contactfield_list") and not is_spa:
                 links.append(dict(title=_("Manage Fields"), href=reverse("contacts.contactfield_list")))
 
-            if self.has_org_perm("contacts.contact_export"):
+            if self.org.get_twilio_client() and self.has_org_perm("flows.flow_launch"):
                 links.append(
                     dict(
-                        id="export-contacts",
-                        title=_("Export"),
-                        modax=_("Export Contacts"),
-                        href=self.derive_export_url(),
+                        id="start-studio-flow",
+                        title=_("Start Studio Flow"),
+                        modax=_("Launch Studio Flow"),
+                        href=reverse("flows.flow_launch_studio_flow"),
                     )
                 )
 
@@ -1151,6 +1214,7 @@ class ContactCRUDL(SmartCRUDL):
                     )
                 )
 
+            links.extend(super().get_gear_links())
             return links
 
         def get_context_data(self, *args, **kwargs):
@@ -1208,6 +1272,7 @@ class ContactCRUDL(SmartCRUDL):
 
         def get_gear_links(self):
             links = []
+
             if self.has_org_perm("contacts.contact_delete"):
                 links.append(
                     dict(
@@ -1218,10 +1283,30 @@ class ContactCRUDL(SmartCRUDL):
                         href="#",
                     )
                 )
+
+            links.extend(super().get_gear_links())
             return links
 
     class Filter(ContactListView, OrgObjPermsMixin):
         template_name = "contacts/contact_filter.haml"
+
+        # fields for NotFoundRedirectMixin
+        redirect_checking_model = ContactGroup
+        redirect_url = "contacts.contact_list"
+        redirect_params = {
+            "filter_key": "uuid",
+            "filter_value": "group",
+            "model_manager": "user_groups",
+            "message": _("Contact group not found."),
+        }
+
+        def has_permission_view_objects(self):
+            group = ContactGroup.all_groups.filter(
+                org=self.request.user.get_org(), uuid=self.kwargs.get("group")
+            ).first()
+            if not group:
+                raise PermissionDenied()
+            return None
 
         def get_gear_links(self):
             links = []
@@ -1549,6 +1634,120 @@ class ContactCRUDL(SmartCRUDL):
             start = FlowStart.create(self.flow, self.request.user, FlowStart.TYPE_MANUAL, contacts=[obj])
             start.async_start()
 
+    class InviteParticipants(ContactListView):
+        title = _("Invite Participants")
+        system_group = ContactGroup.TYPE_ACTIVE
+
+        def get(self, request, *args, **kwargs):
+            contact_uuid = request.GET.get("contact_uuid")
+            if not contact_uuid:
+                return super().get(request, *args, **kwargs)
+
+            org = request.user.get_org()
+            flow_uuid = org.config.get(org.OPTIN_FLOW, None)
+            flow = Flow.objects.filter(org=org, is_active=True, uuid=flow_uuid).exclude(is_archived=True).first()
+            existing_contact = Contact.objects.filter(uuid=contact_uuid).first()
+            send_channel = org.get_send_channel()
+            call_channel = org.get_call_channel()
+
+            if not any((send_channel, call_channel)):
+                messages.error(request, _("To get started you need to add a channel to your account."))
+                result = dict(sent=False)
+            elif existing_contact and flow:
+                flow.async_start(
+                    self.request.user,
+                    list([]),
+                    list([existing_contact]),
+                    restart_participants=True,
+                    include_active=True,
+                )
+                result = dict(sent=True)
+            else:
+                org.config.pop(org.OPTIN_FLOW, None)
+                org.save(update_fields=["config"])
+                messages.error(
+                    request,
+                    _(
+                        "The current opt-in flow doesn't set or unavailable. Please, choose another one before you click 'Invite'."
+                    ),
+                )
+                result = dict(sent=False)
+
+            return HttpResponse(json.dumps(result), content_type="application/json")
+
+        def post(self, request, *args, **kwargs):
+            optin_flow_uuid = request.POST.get("optin_flow_uuid", None)
+            flow = Flow.objects.filter(
+                org=self.org, is_active=True, is_system=False, is_archived=False, uuid=optin_flow_uuid
+            ).first()
+
+            if optin_flow_uuid and flow:
+                self.org.set_optin_flow(request.user, optin_flow_uuid)
+                messages.success(request, _("Opt-in Flow updated."))
+            elif optin_flow_uuid:
+                messages.error(request, _("This opt-in flow can't be selected. Please provide another flow."))
+            else:
+                messages.error(request, _("You haven't provided any opt-in flow."))
+
+            return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
+        def derive_group(self):
+            org = self.request.user.get_org()
+            group_uuid = self.request.GET.get("group", None)
+
+            if group_uuid:
+                try:
+                    return ContactGroup.user_groups.get(uuid=group_uuid, org=org)
+                except ContactGroup.DoesNotExist:
+                    raise Http404
+
+            return super().derive_group()
+
+        def get_gear_links(self):
+            links = []
+
+            # define save search conditions
+            valid_search_condition = self.request.GET.get("search") and not self.search_error
+            has_contactgroup_create_perm = self.has_org_perm("contacts.contactgroup_create")
+
+            if has_contactgroup_create_perm and valid_search_condition:
+                links.append(dict(title=_("Save as Group"), js_class="add-dynamic-group", href="#"))
+
+            if self.has_org_perm("contacts.contactfield_list"):
+                links.append(
+                    dict(
+                        title=_("Manage Fields"), js_class="manage-fields", href=reverse("contacts.contactfield_list")
+                    )
+                )
+
+            if self.has_org_perm("contacts.contact_export"):
+                links.append(dict(title=_("Export"), js_class="export-contacts", href="#"))
+            return links
+
+        def get_context_data(self, *args, **kwargs):
+            context = super().get_context_data(*args, **kwargs)
+            org = self.request.user.get_org()
+            group = self.derive_group()
+            view_url = reverse("contacts.contact_invite_participants")
+
+            counts = ContactGroup.get_system_group_counts(org)
+
+            folders = [dict(count=counts[ContactGroup.TYPE_ACTIVE], label=_("All Contacts"), url=view_url)]
+
+            available_flows = Flow.objects.filter(org=org, is_active=True, is_system=False, is_archived=False)
+            current_optin_flow = available_flows.filter(uuid=org.get_optin_flow())
+            if not current_optin_flow:
+                org.config.pop(org.OPTIN_FLOW, None)
+                org.save(update_fields=["config"])
+
+            context["flows"] = available_flows
+            context["optin_flow"] = org.get_optin_flow()
+            context["folders"] = folders
+            context["current_group"] = group
+            context["contact_fields"] = ContactField.user_fields.active_for_org(org=org).order_by("-priority", "pk")
+
+            return context
+
 
 class ContactGroupCRUDL(SmartCRUDL):
     model = ContactGroup
@@ -1685,6 +1884,7 @@ class ContactGroupCRUDL(SmartCRUDL):
 
         def post_save(self, obj):
             obj = super().post_save(obj)
+            obj.update_flows()
 
             if obj.query and obj.query != self.prev_query:
                 obj.update_query(obj.query)
@@ -1744,7 +1944,7 @@ class ContactFieldForm(forms.ModelForm):
         label = self.cleaned_data["label"]
 
         if not ContactField.is_valid_label(label):
-            raise forms.ValidationError(_("Can only contain letters, numbers and hypens."))
+            raise forms.ValidationError(_("Can only contain letters, numbers and hyphens."))
 
         if not ContactField.is_valid_key(ContactField.make_key(label)):
             raise forms.ValidationError(_("Can't be a reserved word."))
@@ -1998,26 +2198,28 @@ class ContactImportCRUDL(SmartCRUDL):
     class Create(SpaMixin, OrgPermsMixin, SmartCreateView):
         class Form(forms.ModelForm):
             file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=("xls", "xlsx", "csv"))])
+            validate_carrier = forms.BooleanField(required=False)
 
             def __init__(self, *args, org, **kwargs):
                 self.org = org
                 self.headers = None
                 self.mappings = None
                 self.num_records = None
-
+                self.num_duplicates = None
                 super().__init__(*args, **kwargs)
 
             def clean_file(self):
                 file = self.cleaned_data["file"]
-
                 # try to parse the file saving the mappings so we don't have to repeat parsing when saving the import
-                self.mappings, self.num_records = ContactImport.try_to_parse(self.org, file.file, file.name)
+                self.mappings, self.num_records, self.num_duplicates = ContactImport.try_to_parse(
+                    self.org, file.file, file.name
+                )
 
                 return file
 
             class Meta:
                 model = ContactImport
-                fields = ("file",)
+                fields = ("file", "validate_carrier")
 
         form_class = Form
         success_message = ""
@@ -2027,6 +2229,11 @@ class ContactImportCRUDL(SmartCRUDL):
             kwargs = super().get_form_kwargs()
             kwargs["org"] = self.derive_org()
             return kwargs
+
+        def can_validate_upload(self):
+            org = self.derive_org()
+            user = self.get_user()
+            return org.is_connected_to_twilio() and user.is_support()
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
@@ -2038,6 +2245,8 @@ class ContactImportCRUDL(SmartCRUDL):
             context["explicit_clear"] = ContactImport.EXPLICIT_CLEAR
             context["max_records"] = ContactImport.MAX_RECORDS
             context["org_country"] = self.org.default_country
+            context["can_validate_upload"] = self.can_validate_upload()
+
             return context
 
         def pre_save(self, obj):
@@ -2046,6 +2255,8 @@ class ContactImportCRUDL(SmartCRUDL):
             obj.original_filename = self.form.cleaned_data["file"].name
             obj.mappings = self.form.mappings
             obj.num_records = self.form.num_records
+            obj.num_duplicates = self.form.num_duplicates
+            obj.validate_carrier = self.form.cleaned_data.get("validate_carrier")
             return obj
 
     class Preview(SpaMixin, OrgObjPermsMixin, SmartUpdateView):
@@ -2215,6 +2426,7 @@ class ContactImportCRUDL(SmartCRUDL):
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
             context["num_records"] = self.get_object().num_records
+            context["num_duplicates"] = self.get_object().num_duplicates
             return context
 
         def pre_save(self, obj):
@@ -2249,6 +2461,45 @@ class ContactImportCRUDL(SmartCRUDL):
             return obj
 
     class Read(OrgObjPermsMixin, NotificationTargetMixin, SmartReadView):
+        def get(self, *args, **kwargs):
+            unblock = {"true": True, "false": False}.get(str(self.request.GET.get("unblock", "")).lower())
+            if unblock is None:
+                return super().get(*args, **kwargs)
+
+            # extract data which is required to process unblocking
+            try:
+                import_task_raw_query = """
+                SELECT ci.id, ci.is_active, ci.group_id,
+                       json_agg(DISTINCT cb.status) as statuses,
+                       json_agg(cb.blocked_uuids) as blocked_uuids
+                FROM contacts_contactimport ci
+                LEFT JOIN contacts_contactimportbatch cb ON ci.id = cb.contact_import_id
+                WHERE ci.id = %s
+                GROUP BY ci.id, ci.is_active, ci.group_id;
+                """
+                import_task = ContactImport.objects.raw(import_task_raw_query, [self.kwargs.get("pk")])[0]
+                import_task_status = ContactImport.get_overall_status(set(getattr(import_task, "statuses", [])))
+                is_task_completed = import_task_status in (ContactImport.STATUS_COMPLETE, ContactImport.STATUS_FAILED)
+            except IndexError:
+                raise Http404
+
+            # process unblocking
+            if import_task.is_active and is_task_completed:
+                if unblock:
+                    _groups = ContactGroup.contacts.through
+                    import_group = import_task.group
+                    contact_uuids = set(chain(*getattr(import_task, "blocked_uuids", [])))
+                    contacts = Contact.objects.filter(uuid__in=contact_uuids, status=Contact.STATUS_BLOCKED)
+                    _groups.objects.bulk_create(
+                        [_groups(contact=contact, contactgroup=import_group) for contact in contacts],
+                        ignore_conflicts=True,
+                    )
+                    contacts.update(status=Contact.STATUS_ACTIVE)
+                import_task.is_active = False
+                import_task.save(update_fields=["is_active"])
+
+            return super().get(*args, **kwargs)
+
         def get_notification_scope(self) -> tuple:
             return "import:finished", f"contact:{self.object.id}"
 
@@ -2256,6 +2507,7 @@ class ContactImportCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
             context["info"] = self.import_info
             context["is_finished"] = self.is_import_finished()
+            context["is_validated"] = self.is_validated()
             return context
 
         @cached_property
@@ -2264,6 +2516,9 @@ class ContactImportCRUDL(SmartCRUDL):
 
         def is_import_finished(self):
             return self.import_info["status"] in (ContactImport.STATUS_COMPLETE, ContactImport.STATUS_FAILED)
+
+        def is_validated(self):
+            return self.import_info["is_validated"]
 
         def derive_refresh(self):
             return 0 if self.is_import_finished() else 3000
