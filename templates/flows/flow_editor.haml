@@ -424,6 +424,10 @@
         {% if allow_analyzer and analyzer_endpoint %}
         analyzer: '{{analyzer_endpoint}}',
         {% endif %}
+
+        {% if allow_ivr_transcriber and ivr_transcriber_endpoint %}
+        ivr_transcript: '{{ivr_transcriber_endpoint}}',
+        {% endif %}
       },
 
     };
