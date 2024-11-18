@@ -1057,6 +1057,11 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             logger.error(f"Contact update failed: {str(e)}", exc_info=True)
             raise e
 
+        # update the contacts modified_by field because it is not updated on the mailroom side
+        for contact in contacts:
+            contact.modified_by = user
+        Contact.objects.bulk_update(contacts, ["modified_by"])
+
         def modified(contact):
             return len(response.get(contact.id, {}).get("events", [])) > 0
 
