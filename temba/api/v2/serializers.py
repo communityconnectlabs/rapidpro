@@ -944,9 +944,17 @@ class FlowRunReadSerializer(ReadSerializer):
 
     def get_messages(self, obj):
         results = [
-            {"uuid": event.get("msg", {}).get("uuid"), "text": event.get("msg", {}).get("text")}
+            {
+                "uuid": event.get("msg", {}).get("uuid"),
+                "text": event.get("msg", {}).get("text"),
+                **(
+                    {"transcription": event.get("msg", {}).get("transcription")}
+                    if event.get("type") == "ivr_created" and event.get("msg", {}).get("transcription")
+                    else {}
+                ),
+            }
             for event in (obj.events or [])
-            if event.get("type") in ["msg_created", "msg_received"]
+            if event.get("type") in ["msg_created", "msg_received", "ivr_created"]
         ]
         return results
 
