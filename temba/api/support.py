@@ -10,7 +10,6 @@ from django.conf import settings
 from django.http import HttpResponse, HttpResponseServerError
 
 from .models import APIToken
-from ..middleware import ExceptionMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +76,27 @@ class APISessionAuthentication(SessionAuthentication):
     """
 
     def authenticate(self, request):
-        if request:
-            result = super().authenticate(request)
-            if result is not None:
-                u, a = result
-                u.using_token = False
-                return u, a
-            return None
-        return None
+        """
+        # Note
+        The following implementation may be more robust as I encountered silent catastrophic errors during authentication
+        in this method when secure cookies were enabled.
+
+        ```python
+            def authenticate(self, request):
+                if request:
+                    result = super().authenticate(request)
+                    if result is not None:
+                        u, a = result
+                        u.using_token = False
+                        return u, a
+                    return None
+                return None
+        ```
+        """
+        result = super().authenticate(request)
+        if result:
+            result[0].using_token = False
+        return result
 
 class OrgUserRateThrottle(ScopedRateThrottle):
     """

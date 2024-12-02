@@ -1,0 +1,52 @@
+# -----------------------------------------------------------------------------------
+# ***Experimental***
+# =========================
+# Dynamic Settings Loader, allows config based import of target settings module.
+# This is experimental, and uses reflection to load contents of specified settings module to
+# inject into global scope. This allows passing desired config file as an environment variable
+# with out breaking the setting import logic used by django/rapidpro.
+#
+# To use symlink to this file to settings.py and set the TEMBA_SETTINGS variable with desired settings module to load.
+#
+# keith - 2024
+# -----------------------------------------------------------------------------------
+
+import copy
+import warnings
+import importlib
+from .settings_common import *  # noqa
+
+# MUST NOT INCLUDE IN PROD
+import_attributes = {}
+settings_module = os.environ.get("TEMBA_SETTINGS", "temba.settings_dev")
+if settings_module and settings_module != "temba.settings":
+    extended = importlib.import_module(settings_module)
+    # Get all attributes defined in the module, excluding those that are imported or inherited
+    consider = dir(extended)
+    import_attributes = {}
+    for name in consider:
+        c = False
+        if name.startswith("__"):
+            continue
+        x = getattr(extended, name)
+        if isinstance(x, str):
+            pass
+        elif isinstance(x, dict):
+            pass
+        elif isinstance(x, list):
+            pass
+        elif isinstance(x, tuple):
+            pass
+        elif isinstance(x, int):
+            pass
+        elif isinstance(x, float):
+            pass
+        elif isinstance(x, bool):
+            pass
+        elif x is None:
+            pass
+        else:
+            continue
+        import_attributes[name] = x
+    # Add filtered attributes to the global scope
+    globals().update(import_attributes)
