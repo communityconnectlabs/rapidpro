@@ -750,7 +750,7 @@ class TriggerCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertEqual({group2}, set(trigger.exclude_groups.all()))
         self.assertEqual({contact1}, set(trigger.contacts.all()))
 
-        # there is no conflict detection for scheduled triggers so can create the same trigger again
+        # there is conflict detection for scheduled triggers so can not create the same trigger again
         self.assertCreateSubmit(
             create_url,
             {
@@ -762,8 +762,7 @@ class TriggerCRUDLTest(TembaTest, CRUDLTestMixin):
                 "contacts": omnibox_serialize(self.org, [], [contact1], json_encode=True),
                 "exclude_groups": [group2.id],
             },
-            new_obj_query=Trigger.objects.filter(trigger_type="S", flow=flow1).exclude(id=trigger.id),
-            success_status=200,
+            form_errors={"__all__": "There already exists a trigger of this type with these options."},
         )
 
     def test_create_inbound_call(self):

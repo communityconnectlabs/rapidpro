@@ -1453,6 +1453,8 @@ class FlowCRUDL(SmartCRUDL):
             context["feature_filters"] = json.dumps(self.get_features(flow.org, flow))
             context["allow_analyzer"] = self.request.user.is_support()
             context["analyzer_endpoint"] = settings.FLOW_ANALYZER_ENDPOINT
+            context["allow_ivr_transcriber"] = self.request.user.is_support()
+            context["ivr_transcriber_endpoint"] = settings.IVR_TRANSCRIBER_ENDPOINT
 
             # check if there is no other users that edititing current flow
             # then make this user as main editor and set expiration time of editing to this user
