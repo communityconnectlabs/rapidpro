@@ -25,7 +25,8 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
-from django.db.models import Count, Prefetch, Q, QuerySet
+from django.db.models import Count, Prefetch, Q, QuerySet, UUIDField
+from django.db.models.expressions import RawSQL
 from django.http import Http404, HttpResponse, JsonResponse
 from django.template.defaultfilters import slugify
 from django.utils import timezone
@@ -2656,6 +2657,18 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
             Prefetch("contact_urn", queryset=ContactURN.objects.only("scheme", "path", "display")),
             Prefetch("channel", queryset=Channel.objects.only("uuid", "name")),
             Prefetch("labels", queryset=Label.label_objects.only("uuid", "name").order_by("pk")),
+        )
+
+        queryset = queryset.annotate(
+            flow_run_uuid=RawSQL(
+                """
+                SELECT uuid
+                FROM flows_flowrun fr, jsonb_array_elements(fr.events) as event 
+                WHERE event #>>'{msg,uuid}' = msgs_msg.uuid::text LIMIT 1
+                """,
+                params={},
+                output_field=UUIDField(),
+            )
         )
 
         # incoming folder gets sorted by 'modified_on'
