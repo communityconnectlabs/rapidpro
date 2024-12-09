@@ -14,6 +14,7 @@ import boto3
 import iso8601
 import pytz
 import regex
+from django.contrib.postgres.indexes import GinIndex
 from django_redis import get_redis_connection
 from packaging.version import Version
 from smartmin.models import SmartModel
@@ -1489,6 +1490,7 @@ class FlowRun(RequireUpdateFieldsMixin, models.Model):
                 condition=Q(status__in=("A", "W")),
                 include=("contact",),
             ),
+            GinIndex(name="flows_flowrun_events_idx", fields=("events",)),
         ]
 
 
