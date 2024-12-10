@@ -14,7 +14,6 @@ import boto3
 import iso8601
 import pytz
 import regex
-from django.contrib.postgres.indexes import GinIndex
 from django_redis import get_redis_connection
 from packaging.version import Version
 from smartmin.models import SmartModel
@@ -23,6 +22,7 @@ from xlsxlite.writer import XLSXBook
 from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.core.files.temp import NamedTemporaryFile
 from django.db import models, transaction
 from django.db.models import Count, Max, Q, Sum

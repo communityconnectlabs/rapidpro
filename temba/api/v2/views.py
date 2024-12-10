@@ -2663,7 +2663,7 @@ class MessagesEndpoint(ListAPIMixin, BaseAPIView):
             flow_run_uuid=RawSQL(
                 """
                 SELECT uuid
-                FROM flows_flowrun fr, jsonb_array_elements(fr.events) as event 
+                FROM flows_flowrun fr, jsonb_array_elements(fr.events) as event
                 WHERE event #>>'{msg,uuid}' = msgs_msg.uuid::text LIMIT 1
                 """,
                 params={},
