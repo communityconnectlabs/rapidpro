@@ -22,6 +22,7 @@ from xlsxlite.writer import XLSXBook
 from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.indexes import GinIndex
 from django.core.files.temp import NamedTemporaryFile
 from django.db import models, transaction
 from django.db.models import Count, Max, Q, Sum
@@ -1489,6 +1490,7 @@ class FlowRun(RequireUpdateFieldsMixin, models.Model):
                 condition=Q(status__in=("A", "W")),
                 include=("contact",),
             ),
+            GinIndex(name="flows_flowrun_events_idx", fields=("events",)),
         ]
 
 
