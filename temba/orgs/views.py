@@ -4870,26 +4870,56 @@ class OrgCRUDL(SmartCRUDL):
                 initial=False,
             )
 
-            message = forms.CharField(
-                required=False,
-                label=_("Message"),
-                widget=CompletionTextarea(
-                    attrs={
-                        "style": "--textarea-height:110px",
-                        "placeholder": _("Type the message here"),
-                        "widget_only": True,
-                    }
-                ),
-            )
-
             def __init__(self, *args, **kwargs):
                 self.org = kwargs["org"]
                 del kwargs["org"]
                 super().__init__(*args, **kwargs)
 
+                default_message = (self.org.config or {}).get("opt_out_message_back", "")
+                message = (self.org.config or {}).get("opt_out_message_back_i18n") or {}
+                self.languages = []
+
+                # add in all of our languages for message forms
+                for index, lang_code in enumerate(self.org.flow_languages):
+                    lang_name = languages.get_name(lang_code)
+
+                    if index == 0:
+                        # if it's our primary language, allow use to steal the 'base' message
+                        initial = message.get(lang_code, message.get("base", default_message))
+                    else:
+                        # otherwise, its just a normal language
+                        initial = message.get(lang_code, default_message)
+
+                    field = forms.CharField(
+                        widget=CompletionTextarea(attrs={"widget_only": True}),
+                        required=False,
+                        label=lang_name,
+                        initial=initial,
+                    )
+
+                    self.fields[lang_code] = field
+                    field.language = dict(name=lang_name, iso_code=lang_code)
+                    self.languages.append(field)
+
+                # determine our base language if necessary
+                base_language = self.org.flow_languages[0] if self.org.flow_languages else "base"
+
+                # add our default language, we'll insert it at the front of the list
+                if base_language and base_language not in self.fields:
+                    field = forms.CharField(
+                        widget=CompletionTextarea(attrs={"widget_only": True}),
+                        required=False,
+                        label=_("Default"),
+                        initial=message.get(base_language, default_message),
+                    )
+
+                    self.fields[base_language] = field
+                    field.language = dict(iso_code=base_language, name="Default")
+                    self.languages.insert(0, field)
+
             class Meta:
                 model = Org
-                fields = ("message", "disable_opt_out")
+                fields = ["disable_opt_out"]
 
         success_message = ""
         form_class = OptOutMessageForm
@@ -4909,11 +4939,19 @@ class OrgCRUDL(SmartCRUDL):
         def form_valid(self, form):
             org = self.request.user.get_org()
             current_config = org.config or {}
-            if form.cleaned_data.get("message"):
-                current_config.update(dict(opt_out_message_back=form.cleaned_data.get("message")))
+
+            translations = {}
+            for iso_code in (self.org.flow_languages or ["base"]):
+                if iso_code in form.cleaned_data and form.cleaned_data.get(iso_code, "").strip():
+                    translations[iso_code] = form.cleaned_data.get(iso_code, "").strip()
+
+            if translations and any(translations.values()):
+                if "opt_out_message_back" in current_config:
+                    current_config.pop("opt_out_message_back")
+                current_config.update(dict(opt_out_message_back_i18n=translations))
             else:
                 try:
-                    current_config.pop("opt_out_message_back")
+                    current_config.pop("opt_out_message_back_i18n")
                 except KeyError:
                     pass
 
