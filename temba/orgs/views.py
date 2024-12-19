@@ -4941,7 +4941,7 @@ class OrgCRUDL(SmartCRUDL):
             current_config = org.config or {}
 
             translations = {}
-            for iso_code in (self.org.flow_languages or ["base"]):
+            for iso_code in self.org.flow_languages or ["base"]:
                 if iso_code in form.cleaned_data and form.cleaned_data.get(iso_code, "").strip():
                     translations[iso_code] = form.cleaned_data.get(iso_code, "").strip()
 
