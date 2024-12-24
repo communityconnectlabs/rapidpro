@@ -8,7 +8,7 @@ import uuid
 from collections import defaultdict
 from datetime import timedelta
 from subprocess import CalledProcessError, check_call
-
+import argparse
 import pytz
 from django_redis import get_redis_connection
 
@@ -29,8 +29,7 @@ from temba.orgs.models import Org
 from temba.utils import chunk_list
 from temba.utils.dates import datetime_to_timestamp, timestamp_to_datetime
 
-class Command(BaseCommand):
-    """
+UPDATED__ = """
     # Sandbox Configuration Tool for RapidPro
 
     ## Description
@@ -273,14 +272,431 @@ class Command(BaseCommand):
     """
 
 
-    help = "Stub"
+class SandboxArgParser:
+    """
+    A helper class that organizes all argument definitions for the sandbox_setup command.
+    """
+
+    @staticmethod
+    def common(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """
+        Adds common arguments used across multiple subcommands.
+        """
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            default=0,
+            help="Set Verbosity Level, e.g. -vv for more detail."
+        )
+        return parser
+
+    @staticmethod
+    def common_details(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """
+        Adds arguments that specify which entities to include/exclude.
+        """
+        parser.add_argument(
+            "--include-orgs",
+            action=argparse.BooleanOptionalAction,
+            help="Include Orgs.",
+            default=True
+        )
+        parser.add_argument(
+            "--include-users",
+            action=argparse.BooleanOptionalAction,
+            help="Include Users.",
+            default=True
+        )
+        parser.add_argument(
+            "--include-flows",
+            action=argparse.BooleanOptionalAction,
+            help="Include Flows.",
+            default=True
+        )
+        parser.add_argument(
+            "--include-triggers",
+            action=argparse.BooleanOptionalAction,
+            help="Include Triggers.",
+            default=True
+        )
+        parser.add_argument(
+            "--include-contacts",
+            action=argparse.BooleanOptionalAction,
+            help="Include Org Contacts.",
+            default=True
+        )
+        parser.add_argument(
+            "--include-meta",
+            action=argparse.BooleanOptionalAction,
+            help="Include Org Contact Metadata.",
+            default=True
+        )
+        parser.add_argument(
+            "--include-history",
+            action=argparse.BooleanOptionalAction,
+            help="Include Flow Run History.",
+            default=False
+        )
+        return parser
+
+    @staticmethod
+    def common_scenarios(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """
+        Adds scenario-inclusion/exclusion arguments, plus the common details.
+        """
+        parser.add_argument(
+            "--scenario",
+            type=str,
+            action="append",
+            dest="scenarios",
+            help="Specify specific scenarios to include (defaults to all)."
+        )
+        parser.add_argument(
+            "--exclude-scenario",
+            type=str,
+            action="append",
+            dest="exclude_scenarios",
+            help="Specify specific scenarios to exclude."
+        )
+        SandboxArgParser.common_details(parser)
+        return parser
+
+    @staticmethod
+    def common_data_protection(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """
+        Adds arguments that control whether data is reset or overwritten.
+        """
+        parser.add_argument(
+            "--reset",
+            action=argparse.BooleanOptionalAction,
+            help="Reset existing data for impacted entities.",
+            default=False
+        )
+        parser.add_argument(
+            "--overwrite",
+            action=argparse.BooleanOptionalAction,
+            help="Overwrite local changes.",
+            default=False
+        )
+        return parser
+
+    @staticmethod
+    def common_config(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """
+        Adds arguments for configuration paths, user credentials, plus scenario logic.
+        """
+        parser.add_argument(
+            "--config",
+            type=str,
+            action="store",
+            dest="config",
+            help="Path to configuration file."
+        )
+        parser.add_argument(
+            "--user",
+            type=str,
+            action="store",
+            dest="user",
+            help="Root User (default: system username @ communityconnectlabs.com)."
+        )
+        parser.add_argument(
+            "--password",
+            type=str,
+            action="store",
+            dest="password",
+            default="ccl-rapidpro-root-5234",
+            help="Root User Password (default: 'ccl-rapidpro-root-5234')."
+        )
+        SandboxArgParser.common_scenarios(parser)
+        return parser
+
+    #
+    # Subcommand Definitions
+    #
+
+    @staticmethod
+    def init_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'init' command.
+        """
+        parser = subparsers.add_parser(
+            "init",
+            help="Initialize sandbox environment."
+        )
+        SandboxArgParser.common_config(parser)
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def migrate_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'migrate' command, which includes 'update' and 'rollback' actions.
+        """
+        parser = subparsers.add_parser(
+            "migrate",
+            help="Migrate sandbox configurations."
+        )
+
+        # Migrate sub-subparsers
+        migrate_subparsers = parser.add_subparsers(
+            dest="action",
+            title="migrate command",
+            help="update | rollback",
+            required=True
+        )
+
+        # update
+        update_parser = migrate_subparsers.add_parser(
+            "update",
+            help="Apply migrations to a specific version (or head)."
+        )
+        update_parser.add_argument(
+            "--tag",
+            type=str,
+            action="store",
+            dest="tag",
+            help="Version to migrate up to (default: head)."
+        )
+        SandboxArgParser.common_scenarios(update_parser)
+        SandboxArgParser.common_data_protection(update_parser)
+        SandboxArgParser.common(update_parser)
+
+        # rollback
+        rollback_parser = migrate_subparsers.add_parser(
+            "rollback",
+            help="Rollback migrations to a previous version."
+        )
+        rollback_parser.add_argument(
+            "--tag",
+            type=str,
+            action="store",
+            dest="tag",
+            help="Version to rollback to (default: last tag)."
+        )
+        SandboxArgParser.common_scenarios(rollback_parser)
+        SandboxArgParser.common_data_protection(rollback_parser)
+        SandboxArgParser.common(rollback_parser)
+
+    @staticmethod
+    def reset_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'reset' command.
+        """
+        parser = subparsers.add_parser(
+            "reset",
+            help="Reset sandbox configurations."
+        )
+        SandboxArgParser.common_config(parser)
+        SandboxArgParser.common_data_protection(parser)
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def export_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'export' command.
+        """
+        parser = subparsers.add_parser(
+            "export",
+            help="Export sandbox current data."
+        )
+        parser.add_argument(
+            "--file",
+            type=str,
+            action="store",
+            dest="config",
+            help="Destination file for export."
+        )
+        SandboxArgParser.common_scenarios(parser)
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def import_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'import' command.
+        """
+        parser = subparsers.add_parser(
+            "import",
+            help="Import sandbox scenarios."
+        )
+        parser.add_argument(
+            "--file",
+            type=str,
+            action="store",
+            dest="config",
+            help="Source file for import."
+        )
+        SandboxArgParser.common_data_protection(parser)
+        SandboxArgParser.common_scenarios(parser)
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def status_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'status' command.
+        """
+        parser = subparsers.add_parser(
+            "status",
+            help="Show sandbox status."
+        )
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def list_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'list' command.
+        """
+        parser = subparsers.add_parser(
+            "list",
+            help="List sandbox configurations."
+        )
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def validate_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'validate' command.
+        """
+        parser = subparsers.add_parser(
+            "validate",
+            help="Validate sandbox data integrity."
+        )
+        SandboxArgParser.common_scenarios(parser)
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def report_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'report' command.
+        """
+        parser = subparsers.add_parser(
+            "report",
+            help="Generate sandbox data integrity report."
+        )
+        SandboxArgParser.common_scenarios(parser)
+        SandboxArgParser.common(parser)
+
+    @staticmethod
+    def config_subparser(subparsers: argparse._SubParsersAction) -> None:
+        """
+        Subparser for 'config' command with sub-subcommands: save, edit, load.
+        """
+        # Top-level 'save' parser (it’s a bit unusual that we name the top-level parser "save"
+        # but we’ll follow the original code’s structure):
+        parser = subparsers.add_parser(
+            "save",
+            help="Sandbox Config."
+        )
+
+        config_subparsers = parser.add_subparsers(
+            dest="config",
+            title="config command",
+            help="save | edit | load",
+            required=True
+        )
+
+        # save
+        save_parser = config_subparsers.add_parser(
+            "save",
+            help="Save sandbox configurations."
+        )
+        save_parser.add_argument(
+            "--file",
+            type=str,
+            action="store",
+            dest="config",
+            help="Destination file for saving configurations."
+        )
+        SandboxArgParser.common_scenarios(save_parser)
+        SandboxArgParser.common(save_parser)
+
+        # edit
+        edit_parser = config_subparsers.add_parser(
+            "edit",
+            help="Edit sandbox configurations."
+        )
+        edit_parser.add_argument(
+            "--file",
+            type=str,
+            action="store",
+            dest="config",
+            help="Configuration file to edit."
+        )
+        edit_parser.add_argument(
+            "--interactive",
+            action=argparse.BooleanOptionalAction,
+            help="Enable interactive mode.",
+            default=True
+        )
+        SandboxArgParser.common_scenarios(edit_parser)
+        SandboxArgParser.common(edit_parser)
+
+        # load
+        load_parser = config_subparsers.add_parser(
+            "load",
+            help="Load sandbox configurations."
+        )
+        load_parser.add_argument(
+            "--file",
+            type=str,
+            action="store",
+            dest="config",
+            help="Configuration file to load."
+        )
+        load_parser.add_argument(
+            "--apply",
+            action=argparse.BooleanOptionalAction,
+            help="Apply configuration as soon as loaded.",
+            default=False
+        )
+        SandboxArgParser.common_data_protection(load_parser)
+        SandboxArgParser.common_scenarios(load_parser)
+        SandboxArgParser.common(load_parser)
+
+    @staticmethod
+    def build_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """
+        Build the main parser by attaching all subcommands.
+        """
+        subparsers = parser.add_subparsers(
+            dest="subcommand",
+            title="subcommands",
+            help="init | migrate | reset | export | import | status | list | config | validate | report",
+            required=True
+        )
+
+        # Register each subcommand
+        SandboxArgParser.init_subparser(subparsers)
+        SandboxArgParser.migrate_subparser(subparsers)
+        SandboxArgParser.reset_subparser(subparsers)
+        SandboxArgParser.export_subparser(subparsers)
+        SandboxArgParser.import_subparser(subparsers)
+        SandboxArgParser.status_subparser(subparsers)
+        SandboxArgParser.list_subparser(subparsers)
+        SandboxArgParser.config_subparser(subparsers)
+        SandboxArgParser.validate_subparser(subparsers)
+        SandboxArgParser.report_subparser(subparsers)
+
+        return parser
+
+
+class Command(BaseCommand):
+    UPDATED__
+    help = "Sandbox Setup Command"
 
     def add_arguments(self, parser):
-        parser.add_argument("--stub", type=int, action="store", dest="stub", default=10)
+        """
+        Override Django's add_arguments to build out our subcommands via SandboxArgParser.
+        """
+        SandboxArgParser.build_parser(parser)
 
+    def handle(self, *args, **options):
+        """
+        Handle the command after arguments are parsed.
+        """
+        self._log(f"Received options: {options}\n")
 
-    def handle(self, *args, **kwargs):
-        self._log("Stub")
+        # Normally, you'd dispatch logic here based on `options['subcommand']`,
+        # plus any sub-subcommand or further arguments.
 
     def _log(self, text):
         self.stdout.write(text, ending="")
