@@ -2,10 +2,54 @@
 -load smartmin i18n humanize
 
 
+-block extra-style
+  {{ block.super }}
+  :css
+    #languages {
+      display: flex;
+      flex-direction: row;
+      justify-content: end;
+      gap: 3px;
+    }
+
+    .language {
+      --textarea-height: 110px;
+    }
+
+-block extra-script
+  :javascript
+    var initTranslations = () => {
+      var formax = document.querySelector("#id-opt_out_message > div.formax-container > div.formax-form");
+      var body = formax.querySelector("div > div > div > form.smartmin-form");
+      var languageLinks = body.querySelectorAll(".show_language");
+
+      languageLinks.forEach((link, index) => {
+        link.addEventListener('click', (event) => {
+          body.querySelectorAll('.language').forEach((section) => {
+            section.style.display = section.classList.contains(event.target.dataset.iso) ? 'block' : 'none';
+          });
+        });
+        body.querySelector("." + link.dataset.iso).style.display = index === 0 ? 'block' : 'none';
+      });
+    }
+    document.addEventListener('DOMContentLoaded', initTranslations);
+    document.addEventListener('temba-formax-ready', initTranslations);
+
 -block summary
   -trans "Set up an opt-out response message."
 
 
 -block fields
-  -render_field "message"
+  #languages
+    -if form.languages|length > 1
+      -for field in form.languages
+        {%if forloop.counter0 > 0%} | {% endif %}
+        -if field.language.name
+          %a.show_language{data-iso:"{{field.language.iso_code}}", href:"javascript:void(0);"}><
+            {{field.language.name}}
+
+  -for field in form.languages
+    .language{class:'{{field.language.iso_code}} {%if forloop.counter0 > 0%}hide{%endif%}'}
+      -render_field field.language.iso_code
+
   -render_field "disable_opt_out"
