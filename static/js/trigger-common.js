@@ -80,14 +80,23 @@ function handleSubmissionResponse(requiredFields, form, responseData) {
   const { htmlString, jqXHR } = responseData;
   const responseForm = $($.parseHTML(htmlString));
   const hasErrors = responseForm.find('div.error').length > 0;
+  const hasNonFieldErrors = responseForm.find('div.form-errors>ul.errorlist.nonfield>li').length > 0;
   if (hasErrors) {
     for (let i = 0; i < requiredFields.length; i += 1) {
       const fieldId = requiredFields[i];
       $(form).find(fieldId).html(responseForm.find(fieldId));
     }
   }
+
+  if (hasNonFieldErrors) {
+    if($(form).find('div.form-errors').length > 0) {
+      $(form).find('div.form-errors').replaceWith(responseForm.find('div.form-errors'));
+    } else {
+      $(form).prepend(responseForm.find('div.form-errors'));
+    }
+  }
   
-  if (!hasErrors) {
+  if (!hasErrors && !hasNonFieldErrors) {
     window.document.location.href = jqXHR.getResponseHeader('REDIRECT') || '/trigger/';
   }
 }
