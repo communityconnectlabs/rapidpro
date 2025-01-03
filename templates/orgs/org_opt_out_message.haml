@@ -8,6 +8,7 @@
     #languages {
       display: flex;
       flex-direction: row;
+      flex-wrap: wrap;
       justify-content: end;
       gap: 3px;
     }
@@ -28,6 +29,12 @@
           body.querySelectorAll('.language').forEach((section) => {
             section.style.display = section.classList.contains(event.target.dataset.iso) ? 'block' : 'none';
           });
+          languageLinks.forEach((l) => {
+            l.classList.remove('active');
+            if (l.dataset.iso === event.target.dataset.iso) {
+              l.classList.add('active');
+            }
+          });
         });
         body.querySelector("." + link.dataset.iso).style.display = index === 0 ? 'block' : 'none';
       });
@@ -45,7 +52,7 @@
       -for field in form.languages
         {%if forloop.counter0 > 0%} | {% endif %}
         -if field.language.name
-          %a.show_language{data-iso:"{{field.language.iso_code}}", href:"javascript:void(0);"}><
+          %a.show_language{data-iso:"{{field.language.iso_code}}", href:"javascript:void(0);", class: "{% if forloop.first %}active{% endif %}"}><
             {{field.language.name}}
 
   -for field in form.languages
