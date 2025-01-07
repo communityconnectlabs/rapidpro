@@ -1235,7 +1235,6 @@ class MsgReadSerializer(ReadSerializer):
     status = serializers.SerializerMethodField()
     archived = serializers.SerializerMethodField()
     visibility = serializers.SerializerMethodField()
-    flow_run_uuid = serializers.UUIDField()
     flow = serializers.SerializerMethodField()
     labels = fields.LabelField(many=True)
     media = serializers.SerializerMethodField()  # deprecated
@@ -1285,7 +1284,6 @@ class MsgReadSerializer(ReadSerializer):
             "visibility",
             "text",
             "flow",
-            "flow_run_uuid",
             "labels",
             "attachments",
             "created_on",
