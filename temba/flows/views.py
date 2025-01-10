@@ -483,6 +483,7 @@ class FlowCRUDL(SmartCRUDL):
         "dialogflow_api",
         "show_templates",
         "monitoring",
+        "exit",
     )
 
     model = Flow
@@ -872,6 +873,26 @@ class FlowCRUDL(SmartCRUDL):
 
             # do the actual deletion
             flow.release(self.request.user)
+
+            # we can't just redirect so as to make our modal do the right thing
+            return self.render_modal_response()
+
+    class Exit(AllowOnlyActiveFlowMixin, ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+        fields = ("id",)
+        cancel_url = "uuid@flows.flow_editor"
+        success_message = ""
+        submit_button_name = _("Exit")
+
+        def get_success_url(self):
+            return reverse("flows.flow_list")
+
+        def post(self, request, *args, **kwargs):
+            flow = self.get_object()
+            self.object = flow
+
+            r = get_redis_connection()
+            flow_key = f"active-flow-editor-{flow.uuid}"
+            r.delete(flow_key)
 
             # we can't just redirect so as to make our modal do the right thing
             return self.render_modal_response()
@@ -1574,7 +1595,8 @@ class FlowCRUDL(SmartCRUDL):
                         modax=_(f'Copy "{self.object.name}" as template'),
                     )
                 )
-            links.append(dict(divider=True)),
+
+            links.append(dict(divider=True))
 
             if self.has_org_perm("orgs.org_export"):
                 links.append(dict(title=_("Export Definition"), href=f"{reverse('orgs.org_export')}?flow={flow.id}"))
@@ -1615,6 +1637,18 @@ class FlowCRUDL(SmartCRUDL):
                         title=_("Service"),
                         posterize=True,
                         href=f'{reverse("orgs.org_service")}?organization={flow.org_id}&redirect_url={reverse("flows.flow_editor", args=[flow.uuid])}',
+                    )
+                )
+
+            links.append(dict(divider=True))
+
+            if self.has_org_perm("flows.flow_update") and not flow.is_archived:
+                links.append(
+                    dict(
+                        id="exit-flow",
+                        title=_("Exit flow"),
+                        href=f"{reverse('flows.flow_exit', args=[self.object.pk])}",
+                        modax=_("Exit Flow"),
                     )
                 )
 
