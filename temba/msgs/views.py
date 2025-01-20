@@ -75,7 +75,12 @@ class SendMessageForm(Form):
 
     text = forms.CharField(
         widget=CompletionTextarea(
-            attrs={"placeholder": _("Hi @contact.name!"), "widget_only": True, "counter": "temba-charcount"}
+            attrs={
+                "placeholder": _("Hi @contact.name!"),
+                "widget_only": True,
+                "counter": "temba-charcount",
+                "spellchecker": True,
+            }
         )
     )
 
@@ -229,7 +234,7 @@ class InboxView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
 class BroadcastForm(forms.ModelForm):
     message = forms.CharField(
         required=True,
-        widget=CompletionTextarea(attrs={"placeholder": _("Hi @contact.name!")}),
+        widget=CompletionTextarea(attrs={"placeholder": _("Hi @contact.name!"), "spellchecker": True}),
         max_length=Broadcast.MAX_TEXT_LEN,
     )
 

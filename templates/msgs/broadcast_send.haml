@@ -35,6 +35,16 @@
     %input.btn.btn-primary(type="submit" value="{{ submit_button_name }}")
 
 
+-block modal-script
+  {{ block.super }}
+  :javascript
+    $(document).ready(function() {
+      const modalBody = document.querySelector("#send-message-modal").shadowRoot.querySelector(".modax-body");
+      const spellChecker = modalBody.querySelector("temba-completion").shadowRoot.querySelector("temba-spell-checked-textinput");
+      correctPositionOfSpellChecker(modalBody, spellChecker);
+    });
+
+
 -block modal-extra-style
   {{ block.super }}
 

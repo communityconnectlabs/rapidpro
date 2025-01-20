@@ -589,7 +589,7 @@ class CampaignEventForm(forms.ModelForm):
                 initial = message.get(lang_code, "")
 
             field = forms.CharField(
-                widget=CompletionTextarea(attrs={"widget_only": True}),
+                widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
                 required=False,
                 label=lang_name,
                 initial=initial,
@@ -620,6 +620,7 @@ class CampaignEventForm(forms.ModelForm):
                             "Hi @contact.name! This is just a friendly reminder to apply your fertilizer."
                         ),
                         "widget_only": True,
+                        "spellchecker": True
                     }
                 ),
                 required=False,

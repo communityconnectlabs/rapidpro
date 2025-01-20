@@ -198,7 +198,7 @@ class RegisterTriggerForm(BaseTriggerForm):
     )
 
     response = forms.CharField(
-        widget=CompletionTextarea(attrs={"placeholder": _("Hi @contact.name!")}),
+        widget=CompletionTextarea(attrs={"placeholder": _("Hi @contact.name!"), "spellchecker": True}),
         required=False,
         label=ngettext_lazy("Response", "Responses", 1),
         help_text=_("The message to send in response after they join the group (optional)"),

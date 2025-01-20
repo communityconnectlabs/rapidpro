@@ -4891,7 +4891,7 @@ class OrgCRUDL(SmartCRUDL):
                         initial = message.get(lang_code, default_message)
 
                     field = forms.CharField(
-                        widget=CompletionTextarea(attrs={"widget_only": True}),
+                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
                         required=False,
                         label=lang_name,
                         initial=initial,
@@ -4907,7 +4907,7 @@ class OrgCRUDL(SmartCRUDL):
                 # add our default language, we'll insert it at the front of the list
                 if base_language and base_language not in self.fields:
                     field = forms.CharField(
-                        widget=CompletionTextarea(attrs={"widget_only": True}),
+                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
                         required=False,
                         label=_("Default"),
                         initial=message.get(base_language, default_message),
