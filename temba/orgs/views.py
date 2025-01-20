@@ -4030,7 +4030,7 @@ class OrgCRUDL(SmartCRUDL):
                 formax.add_section("accounts", reverse("orgs.org_accounts"), icon="icon-users", action="redirect")
 
             if self.has_org_perm("orgs.org_languages"):
-                formax.add_section("languages", reverse("orgs.org_languages"), icon="icon-language")
+                formax.add_section("languages", reverse("orgs.org_languages"), icon="icon-language", action="redirect")
                 formax.add_section("translations", reverse("orgs.org_translations"), icon="icon-language")
 
             if self.has_org_perm("orgs.org_country") and org.get_branding().get("location_support"):
@@ -4338,7 +4338,8 @@ class OrgCRUDL(SmartCRUDL):
                 model = Org
                 fields = ("primary_lang", "other_langs")
 
-        success_message = ""
+        success_message = _("Languages successfully updated")
+        success_url = "@orgs.org_home"
         form_class = Form
 
         def get_form_kwargs(self):
