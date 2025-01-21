@@ -39,7 +39,7 @@
   {{ block.super }}
   :javascript
     $(document).ready(function() {
-      const modalBody = document.querySelector("#send-message-modal").shadowRoot.querySelector(".modax-body");
+      const modalBody = document.querySelector("#send-message-modal, #send-message").shadowRoot.querySelector(".modax-body");
       const spellChecker = modalBody.querySelector("temba-completion").shadowRoot.querySelector("temba-spell-checked-textinput");
       correctPositionOfSpellChecker(modalBody, spellChecker);
     });

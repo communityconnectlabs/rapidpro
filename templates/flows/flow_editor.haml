@@ -235,6 +235,9 @@
         sessionTimeoutModal.classList.remove("hide");
         sessionTimeoutModal.open = true;
       })
+
+      var createTemplateFlowDialog = document.getElementById("create-template-flow").shadowRoot.querySelector(".modax-body");
+      correctPositionOfSpellChecker(createTemplateFlowDialog, createTemplateFlowDialog.querySelector("temba-completion").shadowRoot.querySelector("temba-spell-checked-textinput"));
     });
 
     function handleEditorLoaded() {
