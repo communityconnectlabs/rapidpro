@@ -620,7 +620,7 @@ class CampaignEventForm(forms.ModelForm):
                             "Hi @contact.name! This is just a friendly reminder to apply your fertilizer."
                         ),
                         "widget_only": True,
-                        "spellchecker": True
+                        "spellchecker": True,
                     }
                 ),
                 required=False,
