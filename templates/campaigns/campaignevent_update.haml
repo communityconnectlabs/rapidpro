@@ -36,11 +36,6 @@
       display = 'none';
     }
 
-    // Spellchecker correction display
-    body.querySelectorAll('.language').forEach((section) => {
-      correctPositionOfSpellChecker(body, section.querySelector("temba-completion").shadowRoot.querySelector("temba-spell-checked-textinput"));
-    });
-
     flowSelect.addEventListener('change', function(event) {
       var option = event.target.values[0];
       var isBackground = option.type == "B";

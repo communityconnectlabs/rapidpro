@@ -29,29 +29,3 @@ function spellCheckerFunc(text) {
       .catch((error) => reject(error));
   });
 }
-
-function correctPositionOfSpellChecker(parent, checker) {
-  checker.addEventListener("temba-spell-corrections-found", (evt) => {
-    setTimeout(() => {
-      let corrections = checker.shadowRoot.querySelectorAll(".spell-correction");
-      corrections.forEach(correction => {
-        correction.onmouseenter = (e) => {
-          e.preventDefault();
-          let tooltip = correction.querySelector(".tooltip");
-          let tooltipRect = tooltip.getBoundingClientRect();
-          let parentRect = parent.getBoundingClientRect();
-          if (Array.from(tooltip.classList).some(c => ["top", "bottom", "left", "right"].includes(c))) return;
-          if (parentRect.x > tooltipRect.x + 10) {
-            tooltip.classList.add("right");
-          } else if (parentRect.x + parentRect.width < tooltipRect.x + tooltipRect.width + 10) {
-            tooltip.classList.add("left");
-          } else if (parentRect.y > tooltipRect.y + 10) {
-            tooltip.classList.add("bottom");
-          } else {
-            tooltip.classList.add("top");
-          }
-        };
-      });
-    }, 10);
-  });
-}
