@@ -38,11 +38,6 @@
         });
         body.querySelector("." + link.dataset.iso).style.display = index === 0 ? 'block' : 'none';
       });
-
-      // Spellchecker correction display
-      body.querySelectorAll('.language').forEach((section) => {
-        correctPositionOfSpellChecker(body, section.querySelector("temba-completion").shadowRoot.querySelector("temba-spell-checked-textinput"));
-      });
     }
     document.addEventListener('DOMContentLoaded', initTranslations);
     document.addEventListener('temba-formax-ready', initTranslations);
