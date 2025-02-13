@@ -3412,7 +3412,7 @@ class FlowTemplateForm(forms.ModelForm):
         max_length=200,
         label=_("Description"),
         required=False,
-        widget=CompletionTextarea(attrs={"placeholder": _("Enter description here")}),
+        widget=CompletionTextarea(attrs={"placeholder": _("Enter description here"), "spellchecker": True}),
     )
     group_text = forms.ChoiceField(
         required=True,
