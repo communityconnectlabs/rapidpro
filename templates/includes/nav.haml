@@ -207,7 +207,7 @@
 
   -if request.user.is_superuser or perms.auth.user_list
     -if not user_org
-      %a{href:"{% url 'orgs.user_list' %}", class:"{% active request 'users' %}"}
+      %a{href:"{% url 'orgs.user_list' %}", class:"{% active request 'user' %}"}
         .circle
           .icon-users-2.icon-3
         .title
@@ -227,6 +227,13 @@
         .icon-channel-android
       .title
         -trans "android"
+
+  -if request.user.is_superuser
+    %a{href:"{% url 'events.customereventconfig_list' %}", class:"{% active request 'customereventconfig' %}"}
+      .circle
+        .icon-newspaper
+      .title
+        -trans "logging"
 
   -if not request.user.is_anonymous
     %a{href:"{% url 'dashboard.dashboard_home' %}", class:"{% active request 'dashboard(?!/flows)' %}"}

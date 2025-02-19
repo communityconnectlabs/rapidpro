@@ -1,10 +1,13 @@
 import logging
 
-from typing import Type, Iterable, Union
 from abc import ABCMeta, abstractmethod
+from functools import lru_cache
+from typing import Type, Iterable, Union
 
 from django.db import models
 from django.db.models import Q
+from django.urls.resolvers import get_resolver
+
 from temba.orgs.models import Org
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
@@ -139,11 +142,19 @@ class CustomerEventConfig(models.Model):
         on_delete=models.CASCADE,
         related_name='customer_events',
     )
+    method = models.CharField(max_length=16, choices=[(m.value, m.value) for m in HTTPMethod], default=HTTPMethod.GET)
     action = models.CharField(max_length=124, help_text="The action that triggers the event")
     action_description = models.CharField(max_length=256, help_text="A description of the action")
-    handlers = ArrayField(models.CharField(
-        max_length=64,
-        choices=CustomerEventHandler.choices()),
+    notification_template = models.TextField(
+        blank=True,
+        help_text="The template to use for notifications",
+        default="",
+    )
+    handlers = ArrayField(
+        models.CharField(
+            max_length=64,
+            choices=CustomerEventHandler.choices()
+        ),
         default=list,
         help_text="The handlers that should be called when the event is triggered"
     )
@@ -168,3 +179,13 @@ class CustomerEventConfig(models.Model):
         event = CustomerEvent(org=org, user=user, description=self.action_description)
         for handler in CustomerEventHandler.handlers_for(self.handlers, self.handlers_configs):
             handler.handle(event)
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def action_choices(cls):
+        def not_callable(x):
+            return not callable(x) and any(str(x).startswith(prefix) for prefix in [
+                'api.v2.', 'msgs.', 'orgs.', 'contacts.', 'flows.', 'triggers.', 'schedules.', 'labels.', 'channels.'
+            ])
+        actions = list(sorted(filter(not_callable, get_resolver().reverse_dict.keys())))
+        return list([(action, action) for action in actions])
