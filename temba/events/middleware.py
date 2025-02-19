@@ -1,4 +1,4 @@
-from pprint import pprint
+from django.urls import resolve
 
 
 class CustomerEventMiddleware:
@@ -7,7 +7,8 @@ class CustomerEventMiddleware:
 
     def __call__(self, *args, **kwargs):
         request = args[0]
-        print("CustomerEventMiddleware", request.method, request.path, request.org, request.user)
-        # todo: add logic to check if event is in the list of events that have handlers and call the handler
+        url_name = resolve(request.path).url_name or ""
+
+        print("Request path: ", url_name)
         response = self.get_response(*args, **kwargs)
         return response
