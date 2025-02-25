@@ -1,4 +1,5 @@
 from django.urls import resolve
+
 from temba.events.models import CustomerEventConfig
 
 
