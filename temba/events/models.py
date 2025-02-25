@@ -4,9 +4,13 @@ from abc import ABCMeta, abstractmethod
 from functools import lru_cache
 from typing import Type, Iterable, Union
 
+import requests
+from django.core.mail import send_mail
 from django.db import models
 from django.db.models import Q
+from django.http import HttpRequest
 from django.urls.resolvers import get_resolver
+from django.template import Context, Template
 
 from temba.orgs.models import Org
 from django.contrib.auth.models import User
@@ -23,6 +27,7 @@ class CustomerEvent:
     org: Org
     user: User
     description: str
+    request: HttpRequest
 
 
 class HTTPMethod(Enum):
@@ -38,7 +43,7 @@ class HandlerConfigMixin(metaclass=ABCMeta):
     """
     Base class for handler configuration, successor classes should define the required fields for the handler
     """
-    pass
+    template: str = ""
 
 
 class HandlerMixin(metaclass=ABCMeta):
@@ -64,10 +69,11 @@ class CustomerEventHandler:
     class WebhookHandler(HandlerMixin):
         @dataclass
         class WebhookHandlerConfig(HandlerConfigMixin):
-            method: HTTPMethod
-            url: str
-            headers: dict
-            body: Union[dict, str]
+            template: str = ""
+            method: HTTPMethod = HTTPMethod.GET
+            url: str = ""
+            headers: dict = dict
+            body: Union[dict, str] = dict
 
         handler_type: str = "webhook"
         config: WebhookHandlerConfig = None
@@ -76,15 +82,23 @@ class CustomerEventHandler:
             self.config = CustomerEventHandler.WebhookHandler.WebhookHandlerConfig(**config)
 
         def handle(self, event: CustomerEvent):
-            logger.error(f"WebhookHandler received event: {event}, but no implementation is provided")
+            template = Template(self.config.template)
+            message = template.render(Context({"event": event}))
+            requests.request(
+                method=self.config.method.value,
+                url=self.config.url,
+                headers=self.config.headers,
+                json=self.config.body if isinstance(self.config.body, dict) else None,
+                data=message if not isinstance(self.config.body, dict) else None
+            )
 
     class EmailHandler(HandlerMixin):
         @dataclass
         class EmailHandlerConfig(HandlerConfigMixin):
-            subject: str
-            template: str
-            to: str
-            cc: str
+            template: str = ""
+            subject: str = ""
+            to: str = ""
+            cc: str = ""
 
         handler_type: str = "email"
         config: EmailHandlerConfig = None
@@ -93,14 +107,15 @@ class CustomerEventHandler:
             self.config = CustomerEventHandler.EmailHandler.EmailHandlerConfig(**config)
 
         def handle(self, event: CustomerEvent):
-            logger.error(f"EmailHandler received event: {event}, but no implementation is provided")
+            template = Template(self.config.template)
+            message = template.render(Context({"event": event}))
+            send_mail(self.config.subject, message, self.config.to, self.config.cc.split(","))
 
     class SlackHandler(HandlerMixin):
         @dataclass
         class SlackHandlerConfig(HandlerConfigMixin):
-            token: str
-            channel: str
-            message: str
+            template: str = ""
+            webhook_url: str = ""
 
         handler_type: str = "slack"
         config: SlackHandlerConfig = None
@@ -109,7 +124,13 @@ class CustomerEventHandler:
             self.config = CustomerEventHandler.SlackHandler.SlackHandlerConfig(**config)
 
         def handle(self, event: CustomerEvent):
-            logger.error(f"SlackHandler received event: {event}, but no implementation is provided")
+            template = Template(self.config.template)
+            message = template.render(Context({"event": event}))
+            response = requests.post(
+                self.config.webhook_url,
+                json={"text": message},
+                headers={"Content-Type": "application/json"}
+            )
 
     __handlers_map = {
         WebhookHandler.handler_type: WebhookHandler,
@@ -122,11 +143,14 @@ class CustomerEventHandler:
         return [(handler, handler.capitalize()) for handler in cls.__handlers_map.keys()]
 
     @classmethod
-    def handlers_for(cls, handler_types: list[str], handlers_configs: dict) -> Iterable[HandlerMixin]:
-        for handler_type in handler_types:
+    def handlers_for(cls, handlers_types: list[str], handlers_configs: dict, template: str) -> Iterable[HandlerMixin]:
+        for handler_type in handlers_types:
             handler_class: Union[Type[HandlerMixin], None] = cls.__handlers_map.get(handler_type)
             if handler_class is not None:
-                yield handler_class(config=handlers_configs.get(handler_type, {}))
+                yield handler_class(config={
+                    "template": template,
+                    **handlers_configs.get(handler_type, {})
+                })
 
 
 class CustomerEventConfig(models.Model):
@@ -175,9 +199,18 @@ class CustomerEventConfig(models.Model):
     def __str__(self):
         return f"{'All Orgs' if self.system_wide else self.org} - {self.action}, handlers: {self.handlers}"
 
-    def handle(self, org: Org, user: User):
-        event = CustomerEvent(org=org, user=user, description=self.action_description)
-        for handler in CustomerEventHandler.handlers_for(self.handlers, self.handlers_configs):
+    def handle(self, request: HttpRequest, org: Org, user: User):
+        event = CustomerEvent(
+            request=request,
+            org=org,
+            user=user,
+            description=self.action_description,
+        )
+        for handler in CustomerEventHandler.handlers_for(
+            handlers_types=self.handlers,
+            handlers_configs=self.handlers_configs,
+            template=self.notification_template
+        ):
             handler.handle(event)
 
     @classmethod
@@ -187,5 +220,5 @@ class CustomerEventConfig(models.Model):
             return not callable(x) and any(str(x).startswith(prefix) for prefix in [
                 'api.v2.', 'msgs.', 'orgs.', 'contacts.', 'flows.', 'triggers.', 'schedules.', 'labels.', 'channels.'
             ])
-        actions = list(sorted(filter(not_callable, get_resolver().reverse_dict.keys())))
+        actions = sorted(filter(not_callable, get_resolver().reverse_dict.keys()))
         return list([(action, action) for action in actions])
