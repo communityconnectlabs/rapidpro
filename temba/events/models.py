@@ -61,6 +61,11 @@ class HandlerMixin(metaclass=ABCMeta):
     def handle(self, event: CustomerEvent):
         pass
 
+    @classmethod
+    @abstractmethod
+    def get_config_class(cls) -> Type[HandlerConfigMixin]:
+        pass
+
 
 class CustomerEventHandler:
     """
@@ -92,6 +97,10 @@ class CustomerEventHandler:
                 data=message if not isinstance(self.config.body, dict) else None
             )
 
+        @classmethod
+        def get_config_class(cls) -> Type[HandlerConfigMixin]:
+            return cls.WebhookHandlerConfig
+
     class EmailHandler(HandlerMixin):
         @dataclass
         class EmailHandlerConfig(HandlerConfigMixin):
@@ -111,6 +120,10 @@ class CustomerEventHandler:
             message = template.render(Context({"event": event}))
             send_mail(self.config.subject, message, self.config.to, self.config.cc.split(","))
 
+        @classmethod
+        def get_config_class(cls) -> Type[HandlerConfigMixin]:
+            return cls.EmailHandlerConfig
+
     class SlackHandler(HandlerMixin):
         @dataclass
         class SlackHandlerConfig(HandlerConfigMixin):
@@ -126,11 +139,15 @@ class CustomerEventHandler:
         def handle(self, event: CustomerEvent):
             template = Template(self.config.template)
             message = template.render(Context({"event": event}))
-            response = requests.post(
+            requests.post(
                 self.config.webhook_url,
                 json={"text": message},
                 headers={"Content-Type": "application/json"}
             )
+
+        @classmethod
+        def get_config_class(cls) -> Type[HandlerConfigMixin]:
+            return cls.SlackHandlerConfig
 
     __handlers_map = {
         WebhookHandler.handler_type: WebhookHandler,
@@ -151,6 +168,12 @@ class CustomerEventHandler:
                     "template": template,
                     **handlers_configs.get(handler_type, {})
                 })
+
+    @classmethod
+    def get_configs_for(cls, handler_type: str):
+        config_cls = cls.__handlers_map.get(handler_type)
+        assert config_cls is not None, f"Handler type {handler_type} not found"
+        return config_cls.get_config_class()
 
 
 class CustomerEventConfig(models.Model):

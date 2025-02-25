@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from django import forms
 from django.utils.translation import gettext_lazy as _
 from smartmin.views import SmartCRUDL, SmartListView, SmartCreateView, SmartUpdateView, SmartDeleteView
@@ -62,11 +63,18 @@ class CustomerEventConfigForm(forms.ModelForm):
 
     def clean_handlers_configs(self):
         handlers_configs = self.cleaned_data.get("handlers_configs") or {}
+        cleaned_configs = {}
         handlers = self.cleaned_data.get("handlers") or []
         for handler in handlers:
-            if handler not in handlers_configs:
-                handlers_configs[handler] = {}
-        return handlers_configs
+            try:
+                config_class = CustomerEventHandler.get_configs_for(handler)
+                cleaned_configs[handler] = asdict(config_class(**handlers_configs[handler]))
+                cleaned_configs[handler].pop("template", None)
+            except KeyError:
+                raise forms.ValidationError(f"Configuration for handler '{handler}' is missing")
+            except AssertionError as e:
+                raise forms.ValidationError(str(e))
+        return cleaned_configs
 
 
 class CustomerEventsCRUDL(SmartCRUDL):
