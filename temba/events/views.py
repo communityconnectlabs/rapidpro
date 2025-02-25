@@ -45,7 +45,7 @@ class CustomerEventConfigForm(forms.ModelForm):
     )
     handlers_configs = forms.JSONField(
         label="Handlers Configs",
-        widget=forms.HiddenInput(),
+        widget=InputWidget(attrs={"placeholder": _("Provide configurations for each selected handler"), "textarea": True}),
         required=False,
     )
 
@@ -74,6 +74,7 @@ class CustomerEventsCRUDL(SmartCRUDL):
     actions = ('list', 'create', 'update', 'delete')
 
     class List(BulkActionMixin, SmartListView):
+        ordering = ("action",)
         search_fields = ("action", "action_description")
         link_fields = ("action", "action_description")
         fields = ("method", "action", "action_description", "handlers", "org", "system_wide")
