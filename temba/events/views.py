@@ -1,11 +1,14 @@
 from dataclasses import asdict
+
+from smartmin.views import SmartCreateView, SmartCRUDL, SmartDeleteView, SmartListView, SmartUpdateView
+
 from django import forms
 from django.utils.translation import gettext_lazy as _
-from smartmin.views import SmartCRUDL, SmartListView, SmartCreateView, SmartUpdateView, SmartDeleteView
-from .models import CustomerEventConfig, CustomerEventHandler, HTTPMethod
+
 from ..orgs.models import Org
+from ..utils.fields import CheckboxWidget, InputWidget, SelectMultipleWidget, SelectWidget
 from ..utils.views import BulkActionMixin
-from ..utils.fields import InputWidget, SelectWidget, SelectMultipleWidget, CheckboxWidget
+from .models import CustomerEventConfig, CustomerEventHandler, HTTPMethod
 
 
 class CustomerEventConfigForm(forms.ModelForm):
@@ -46,14 +49,22 @@ class CustomerEventConfigForm(forms.ModelForm):
     )
     handlers_configs = forms.JSONField(
         label="Handlers Configs",
-        widget=InputWidget(attrs={"placeholder": _("Provide configurations for each selected handler"), "textarea": True}),
+        widget=InputWidget(
+            attrs={"placeholder": _("Provide configurations for each selected handler"), "textarea": True}
+        ),
         required=False,
     )
 
     class Meta:
         model = CustomerEventConfig
         fields = [
-            "method", "action", "action_description", "handlers", "system_wide", "org", "notification_template",
+            "method",
+            "action",
+            "action_description",
+            "handlers",
+            "system_wide",
+            "org",
+            "notification_template",
             "handlers_configs",
         ]
 
@@ -79,14 +90,14 @@ class CustomerEventConfigForm(forms.ModelForm):
 
 class CustomerEventsCRUDL(SmartCRUDL):
     model = CustomerEventConfig
-    actions = ('list', 'create', 'update', 'delete')
+    actions = ("list", "create", "update", "delete")
 
     class List(BulkActionMixin, SmartListView):
         ordering = ("action",)
         search_fields = ("action", "action_description")
         link_fields = ("action", "action_description")
         fields = ("method", "action", "action_description", "handlers", "org", "system_wide")
-        results_title = 'Customer Event Configurations'
+        results_title = "Customer Event Configurations"
 
     class Create(SmartCreateView):
         form_class = CustomerEventConfigForm
@@ -97,6 +108,7 @@ class CustomerEventsCRUDL(SmartCRUDL):
     class Delete(SmartDeleteView):
         def get_success_url(self):
             return reversed("events.customereventconfig_list")
+
         def get_cancel_url(self):
             return reversed("events.customereventconfig_list")
 

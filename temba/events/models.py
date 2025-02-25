@@ -1,23 +1,22 @@
 import logging
-
 from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
+from enum import Enum
 from functools import lru_cache
-from typing import Type, Iterable, Union
+from typing import Iterable, Type, Union
 
 import requests
+
+from django.contrib.auth.models import User
+from django.contrib.postgres.fields import ArrayField
 from django.core.mail import send_mail
 from django.db import models
 from django.db.models import Q
 from django.http import HttpRequest
-from django.urls.resolvers import get_resolver
 from django.template import Context, Template
+from django.urls.resolvers import get_resolver
 
 from temba.orgs.models import Org
-from django.contrib.auth.models import User
-from django.contrib.postgres.fields import ArrayField
-from dataclasses import dataclass
-from enum import Enum
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +42,7 @@ class HandlerConfigMixin(metaclass=ABCMeta):
     """
     Base class for handler configuration, successor classes should define the required fields for the handler
     """
+
     template: str = ""
 
 
@@ -50,6 +50,7 @@ class HandlerMixin(metaclass=ABCMeta):
     """
     Base class for handlers, successor classes should define the handler_type and implement the handle method and config
     """
+
     handler_type: str = "unknown_handler"
     config: HandlerConfigMixin = None
 
@@ -71,6 +72,7 @@ class CustomerEventHandler:
     """
     Factory class for creating handlers based on the handler_type
     """
+
     class WebhookHandler(HandlerMixin):
         @dataclass
         class WebhookHandlerConfig(HandlerConfigMixin):
@@ -94,7 +96,7 @@ class CustomerEventHandler:
                 url=self.config.url,
                 headers=self.config.headers,
                 json=self.config.body if isinstance(self.config.body, dict) else None,
-                data=message if not isinstance(self.config.body, dict) else None
+                data=message if not isinstance(self.config.body, dict) else None,
             )
 
         @classmethod
@@ -140,9 +142,7 @@ class CustomerEventHandler:
             template = Template(self.config.template)
             message = template.render(Context({"event": event}))
             requests.post(
-                self.config.webhook_url,
-                json={"text": message},
-                headers={"Content-Type": "application/json"}
+                self.config.webhook_url, json={"text": message}, headers={"Content-Type": "application/json"}
             )
 
         @classmethod
@@ -152,7 +152,7 @@ class CustomerEventHandler:
     __handlers_map = {
         WebhookHandler.handler_type: WebhookHandler,
         EmailHandler.handler_type: EmailHandler,
-        SlackHandler.handler_type: SlackHandler
+        SlackHandler.handler_type: SlackHandler,
     }
 
     @classmethod
@@ -164,10 +164,7 @@ class CustomerEventHandler:
         for handler_type in handlers_types:
             handler_class: Union[Type[HandlerMixin], None] = cls.__handlers_map.get(handler_type)
             if handler_class is not None:
-                yield handler_class(config={
-                    "template": template,
-                    **handlers_configs.get(handler_type, {})
-                })
+                yield handler_class(config={"template": template, **handlers_configs.get(handler_type, {})})
 
     @classmethod
     def get_configs_for(cls, handler_type: str):
@@ -181,13 +178,14 @@ class CustomerEventConfig(models.Model):
     A model to store the configuration for customer events
     Being used by `CustomerEventMiddleware` to obtain the handler configuration data for the specific event
     """
+
     system_wide = models.BooleanField(default=False)
     org = models.ForeignKey(
-        'orgs.Org',
+        "orgs.Org",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
-        related_name='customer_events',
+        related_name="customer_events",
     )
     method = models.CharField(max_length=16, choices=[(m.value, m.value) for m in HTTPMethod], default=HTTPMethod.GET)
     action = models.CharField(max_length=124, help_text="The action that triggers the event")
@@ -198,25 +196,16 @@ class CustomerEventConfig(models.Model):
         default="",
     )
     handlers = ArrayField(
-        models.CharField(
-            max_length=64,
-            choices=CustomerEventHandler.choices()
-        ),
+        models.CharField(max_length=64, choices=CustomerEventHandler.choices()),
         default=list,
-        help_text="The handlers that should be called when the event is triggered"
+        help_text="The handlers that should be called when the event is triggered",
     )
-    handlers_configs = models.JSONField(
-        default=dict,
-        help_text="The configuration for the handlers"
-    )
+    handlers_configs = models.JSONField(default=dict, help_text="The configuration for the handlers")
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['system_wide', 'org', 'action'], name='unique_action'),
-            models.CheckConstraint(
-                check=(Q(system_wide=True) | Q(org__isnull=False)),
-                name='system_wide_or_org'
-            ),
+            models.UniqueConstraint(fields=["system_wide", "org", "action"], name="unique_action"),
+            models.CheckConstraint(check=(Q(system_wide=True) | Q(org__isnull=False)), name="system_wide_or_org"),
         ]
 
     def __str__(self):
@@ -230,9 +219,7 @@ class CustomerEventConfig(models.Model):
             description=self.action_description,
         )
         for handler in CustomerEventHandler.handlers_for(
-            handlers_types=self.handlers,
-            handlers_configs=self.handlers_configs,
-            template=self.notification_template
+            handlers_types=self.handlers, handlers_configs=self.handlers_configs, template=self.notification_template
         ):
             handler.handle(event)
 
@@ -240,8 +227,20 @@ class CustomerEventConfig(models.Model):
     @lru_cache(maxsize=None)
     def action_choices(cls):
         def not_callable(x):
-            return not callable(x) and any(str(x).startswith(prefix) for prefix in [
-                'api.v2.', 'msgs.', 'orgs.', 'contacts.', 'flows.', 'triggers.', 'schedules.', 'labels.', 'channels.'
-            ])
+            return not callable(x) and any(
+                str(x).startswith(prefix)
+                for prefix in [
+                    "api.v2.",
+                    "msgs.",
+                    "orgs.",
+                    "contacts.",
+                    "flows.",
+                    "triggers.",
+                    "schedules.",
+                    "labels.",
+                    "channels.",
+                ]
+            )
+
         actions = sorted(filter(not_callable, get_resolver().reverse_dict.keys()))
         return list([(action, action) for action in actions])
