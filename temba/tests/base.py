@@ -717,6 +717,10 @@ class TembaTest(TembaTestMixin, SmartminTest):
     """
 
     def setUp(self):
+        middlewares = settings.MIDDLEWARE
+        middlewares = [m for m in middlewares if m != "temba.events.middleware.CustomerEventMiddleware"]
+        self.override = override_settings(MIDDLEWARE=middlewares)
+        self.override.enable()
         self.setUpOrgs()
 
         # OrgRole.group is a cached property so get that cached before test starts to avoid query count differences
