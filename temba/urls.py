@@ -23,6 +23,7 @@ urlpatterns = [
     re_path(r"^", include("temba.classifiers.urls")),
     re_path(r"^", include("temba.contacts.urls")),
     re_path(r"^", include("temba.dashboard.urls")),
+    re_path(r"^", include("temba.events.urls")),
     re_path(r"^", include("temba.reports.urls")),
     re_path(r"^", include("temba.flows.urls")),
     re_path(r"^", include("temba.globals.urls")),

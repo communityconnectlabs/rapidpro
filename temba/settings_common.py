@@ -224,6 +224,7 @@ MIDDLEWARE = (
     "temba.middleware.ConsentMiddleware",
     "temba.middleware.BrandingMiddleware",
     "temba.middleware.OrgMiddleware",
+    "temba.events.middleware.CustomerEventMiddleware",
     "temba.middleware.LanguageMiddleware",
     "temba.middleware.TimezoneMiddleware",
 )
@@ -279,6 +280,7 @@ INSTALLED_APPS = (
     "temba.request_logs",
     "temba.classifiers",
     "temba.dashboard",
+    "temba.events",
     "temba.globals",
     "temba.public",
     "temba.policies",
