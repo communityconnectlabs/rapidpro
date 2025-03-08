@@ -56,8 +56,8 @@ class BrandingMiddleware:
         brand_key = host
 
         # ignore subdomains
-        if len(brand_key.split(".")) > 2:  # pragma: needs cover
-            brand_key = ".".join(brand_key.split(".")[-2:])
+        # if len(brand_key.split(".")) > 2:  # pragma: needs cover
+        #     brand_key = ".".join(brand_key.split(".")[-2:])
 
         # prune off the port
         if ":" in brand_key:
