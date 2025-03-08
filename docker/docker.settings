@@ -172,6 +172,49 @@ BRANDING["rapidpro.io"]["welcome_packs"] = [dict(size=500, name="Trial"),
                                             dict(size=30000, name="Silver"),
                                             dict(size=100000, name="Gold")]
 BRANDING["rapidpro.io"]["welcome_topup"] = int(os.environ.get("BRANDING_WELCOME_TOPUP", "1000"))
+BRANDING["rapidpro.io"]["styles"] = ["brands/rapidpro/font/style.css"]
+BRANDING["app.communityconnectlabs.com"] = BRANDING["rapidpro.io"]
+BRANDING["dev.communityconnectlabs.com"] = BRANDING["rapidpro.io"]
+
+BRANDING["dev.communitycx.co"] = {
+    "slug": "ccx",
+    "name": "CommunityCX",
+    "org": "CommunityCX",
+    "colors": dict(primary="#09466e"),
+    "styles": ["brands/ccx/font/style.css"],
+    "default_plan": TOPUP_PLAN,
+    "welcome_topup": 1000,
+    "email": "support@communitycx.co",
+    "support_email": "support@communitycx.co",
+    "link": "https://dev.communitycx.co",
+    "api_link": "https://dev.communitycx.co",
+    "docs_link": "https://communityconnectlabs-help.freshdesk.com/support/home",
+    "domain": "dev.communitycx.co",
+    "ticket_domain": "tickets.communitycx.co",
+    "favico": "brands/ccx/icon.png",
+    "splash": "brands/ccx/splash.jpg",
+    "logo": "brands/ccx/ccx-logo.png",
+    "allow_signups": False,
+    "flow_types": ["M", "V", "B", "S"],
+    "location_support": True,
+    "tiers": dict(multi_user=0, multi_org=0),
+    "bundles": [],
+    "welcome_packs": [
+        dict(size=500, name="Trial"),
+        dict(size=2500, name="Bronze"),
+        dict(size=30000, name="Silver"),
+        dict(size=100000, name="Gold")
+    ],
+    "title": _("Reimagining Government Services"),
+    "description": _("Reimagining Government Services."),
+    "credits": f"Copyright &copy; {timezone.now().year} CommunityCX. All Rights Reserved.",
+    "support_widget": False,
+}
+app_communitycx = copy.deepcopy(BRANDING["dev.communitycx.co"])
+app_communitycx["link"] = "https://app.communitycx.co"
+app_communitycx["api_link"] = "https://app.communitycx.co"
+app_communitycx["domain"] = "app.communitycx.co"
+BRANDING["app.communitycx.co"] = app_communitycx
 
 COMPRESS_ENABLED = os.environ.get("COMPRESS_ENABLED", "true") == "true"
 COMPRESS_OFFLINE = False
