@@ -205,8 +205,8 @@ BRANDING["dev.communitycx.co"] = {
         dict(size=30000, name="Silver"),
         dict(size=100000, name="Gold")
     ],
-    "title": _("Reimagining Government Services"),
-    "description": _("Reimagining Government Services."),
+    "title": "Reimagining Government Services",
+    "description": "Reimagining Government Services.",
     "credits": f"Copyright &copy; {timezone.now().year} CommunityCX. All Rights Reserved.",
     "support_widget": False,
 }
