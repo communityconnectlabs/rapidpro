@@ -3,6 +3,7 @@ from dataclasses import asdict
 from smartmin.views import SmartCreateView, SmartCRUDL, SmartDeleteView, SmartListView, SmartUpdateView
 
 from django import forms
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from ..orgs.models import Org
@@ -46,8 +47,15 @@ class CustomerEventConfigForm(forms.ModelForm):
         label="Notification Template",
         widget=InputWidget(attrs={"placeholder": _("Enter notification template"), "textarea": True}),
         required=False,
+        help_text=_(
+            "The template to use for notifications. "
+            "You can use Django template syntax to format the message. "
+            "Use event.[org|user|description|view_context|request|args|kwargs] "
+            "to access the event data."
+        ),
     )
     handlers_configs = forms.JSONField(
+        initial=dict,
         label="Handlers Configs",
         widget=InputWidget(
             attrs={"placeholder": _("Provide configurations for each selected handler"), "textarea": True}
@@ -107,10 +115,10 @@ class CustomerEventsCRUDL(SmartCRUDL):
 
     class Delete(SmartDeleteView):
         def get_success_url(self):
-            return reversed("events.customereventconfig_list")
+            return reverse("events.customereventconfig_list")
 
         def get_cancel_url(self):
-            return reversed("events.customereventconfig_list")
+            return reverse("events.customereventconfig_list")
 
         def get_redirect_url(self, **kwargs):
             return self.get_success_url()
