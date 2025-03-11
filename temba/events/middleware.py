@@ -1,10 +1,10 @@
 import logging
 
-from django.urls import resolve
 from rest_framework.response import Response as DRFResponse
 
-from temba.events.models import CustomerEventConfig
+from django.urls import resolve
 
+from temba.events.models import CustomerEventConfig
 
 logger = logging.getLogger(__name__)
 
