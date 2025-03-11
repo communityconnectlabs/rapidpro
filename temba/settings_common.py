@@ -224,9 +224,9 @@ MIDDLEWARE = (
     "temba.middleware.ConsentMiddleware",
     "temba.middleware.BrandingMiddleware",
     "temba.middleware.OrgMiddleware",
-    "temba.events.middleware.CustomerEventMiddleware",
     "temba.middleware.LanguageMiddleware",
     "temba.middleware.TimezoneMiddleware",
+    "temba.events.middleware.CustomerEventMiddleware",
 )
 
 # security middleware configuration

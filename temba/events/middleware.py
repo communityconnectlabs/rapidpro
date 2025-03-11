@@ -1,6 +1,12 @@
+import logging
+
 from django.urls import resolve
+from rest_framework.response import Response as DRFResponse
 
 from temba.events.models import CustomerEventConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 class CustomerEventMiddleware:
@@ -19,5 +25,14 @@ class CustomerEventMiddleware:
         if not config.system_wide and config.org != request.org:
             return response
 
-        config.handle(request, request.org, request.user)
+        view_context = {}
+        if hasattr(response, "context_data"):
+            view_context = response.context_data
+        elif isinstance(response, DRFResponse):
+            view_context = response.data
+
+        try:
+            config.handle(request, request.org, request.user, view_context, list(args), kwargs)
+        except Exception as e:
+            logger.error(f"Error handling customer event: {e}")
         return response

@@ -27,6 +27,9 @@ class CustomerEvent:
     user: User
     description: str
     request: HttpRequest
+    view_context: dict
+    args: list
+    kwargs: dict
 
 
 class HTTPMethod(Enum):
@@ -211,12 +214,15 @@ class CustomerEventConfig(models.Model):
     def __str__(self):
         return f"{'All Orgs' if self.system_wide else self.org} - {self.action}, handlers: {self.handlers}"
 
-    def handle(self, request: HttpRequest, org: Org, user: User):
+    def handle(self, request: HttpRequest, org: Org, user: User, view_context: dict, args: list, kwargs: dict):
         event = CustomerEvent(
             request=request,
             org=org,
             user=user,
             description=self.action_description,
+            view_context=view_context,
+            args=args,
+            kwargs=kwargs,
         )
         for handler in CustomerEventHandler.handlers_for(
             handlers_types=self.handlers, handlers_configs=self.handlers_configs, template=self.notification_template
