@@ -3,7 +3,23 @@
 
 -block login-title
   -trans "Welcome Back"
-      
+
+
+-block extra-style
+  :css
+    .input {
+      width: 100%;
+    }
+
+    #ms-login-button {
+      width: 100%;
+    }
+
+    #ms-login-button img {
+      width: 20px;
+      display: inline-block;
+    }
+
 -block login-content
 
   {% analytics_hook 'login' %}
@@ -62,6 +78,12 @@
 
       %div(class='mt-6 w-6/12')
         %input.button-primary(type="submit" value='{{_("Sign In")}}')
+
+    %div{class:"md\:w-full mt-8"}
+      %hr{class:"mb-8"}
+      %a.button-primary#ms-login-button(href="{% url 'social:begin' 'azuread-oauth2' %}")
+        %img.mr-1(src="{{STATIC_URL}}images/microsoft-icon.ico")
+        Sign in with your Microsoft ID
 
 -block extra-script
   %script
