@@ -1,8 +1,8 @@
+from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.contrib import messages
 
 
 def require_pre_registered_user(strategy, details, backend, user=None, *args, **kwargs):
