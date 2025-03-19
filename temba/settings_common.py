@@ -300,7 +300,6 @@ INSTALLED_APPS = (
     "temba.airtime",
     "temba.sql",
     "temba.links",
-
     # Social-auth app
     "social_django",
 )
