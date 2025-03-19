@@ -1046,10 +1046,7 @@ LOGOUT_URL = "/users/logout/"
 LOGIN_REDIRECT_URL = "/org/choose/"
 LOGOUT_REDIRECT_URL = "/"
 
-AUTHENTICATION_BACKENDS = (
-    "social_core.backends.azuread.AzureADOAuth2",
-    "smartmin.backends.CaseInsensitiveBackend",
-)
+AUTHENTICATION_BACKENDS = ("smartmin.backends.CaseInsensitiveBackend",)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
