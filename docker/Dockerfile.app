@@ -15,7 +15,7 @@ COPY ./pyproject.toml /rapidpro/pyproject.toml
 COPY ./poetry.lock /rapidpro/poetry.lock
 
 RUN pip3 install --upgrade pip setuptools
-RUN pip3 install -U poetry
+RUN pip3 install -U poetry==1.6.1
 
 RUN poetry export --without-hashes --output pip-freeze.txt
 
