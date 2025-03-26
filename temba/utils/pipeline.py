@@ -1,8 +1,12 @@
+import logging
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+
+
+logger = logging.getLogger(__name__)
 
 
 def require_pre_registered_user(strategy, details, backend, user=None, *args, **kwargs):
@@ -26,8 +30,7 @@ def associate_by_email(backend, details, user=None, *args, **kwargs):
     """
     Associate the social auth user with an existing user by email.
     """
-    if user:
-        return {"user": user}
+    logger.info(f"associate_by_email: {details}")
 
     email = details.get("email")
     if email:
