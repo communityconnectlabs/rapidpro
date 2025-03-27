@@ -1524,5 +1524,10 @@ SOCIAL_AUTH_URL_NAMESPACE = "social"
 SOCIAL_AUTH_JSONFIELD_ENABLED = True
 SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = True
 
-SOCIAL_AUTH_AZUREAD_OAUTH2_AUTHORIZATION_URL = "https://login.microsoftonline.com/common/oauth2/authorize"
+SOCIAL_AUTH_AZUREAD_OAUTH2_EXTRA_DATA = ["id_token"]
+SOCIAL_AUTH_AZUREAD_OAUTH2_AUTH_EXTRA_ARGUMENTS = {
+    "prompt": "select_account"  # Forces account selection
+}
+
+SOCIAL_AUTH_AZUREAD_OAUTH2_AUTHORIZATION_URL = "https://login.microsoftonline.com/common/oauth2/authorize?prompt=select_account"
 SOCIAL_AUTH_AZUREAD_OAUTH2_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/token"
