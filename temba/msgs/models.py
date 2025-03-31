@@ -1407,3 +1407,49 @@ class MessageExternalIDMap(models.Model):
     created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
     modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
     request_logs = JSONField(blank=True, null=True)
+
+
+class Conversation(models.Model):
+    """
+    A conversation is a collection of messages between a contact and manager
+    """
+
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversations")
+    contact = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="conversations")
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversations_created")
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def create(cls, org, contact, channel):
+        return cls.objects.create(org=org, contact=contact, channel=channel)
+
+    def __str__(self):
+        return f"{self.contact} - {self.created_by}"
+
+
+class ConversationTopic(models.Model):
+    """
+    A conversation topic is a group of templates
+    """
+    name = models.CharField(max_length=256)
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_topics")
+
+    def __str__(self):
+        return self.name
+
+
+class ConversationTemplate(models.Model):
+    """
+    A conversation template is a first message that can be send to contact when conversation is started
+    """
+
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_templates")
+    text = models.TextField()
+    topic = models.ForeignKey(ConversationTopic, on_delete=models.PROTECT, related_name="conversation_templates")
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversation_templates_created")
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.contact} - {self.created_by}"
