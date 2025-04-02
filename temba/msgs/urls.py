@@ -1,4 +1,4 @@
-from .views import BroadcastCRUDL, LabelCRUDL, MsgCRUDL, ConversationCRUDL
+from .views import BroadcastCRUDL, ConversationCRUDL, LabelCRUDL, MsgCRUDL
 
 urlpatterns = MsgCRUDL().as_urlpatterns()
 urlpatterns += BroadcastCRUDL().as_urlpatterns()

@@ -53,7 +53,7 @@ from temba.utils.fields import (
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
-from .models import Broadcast, ExportMessagesTask, Label, LabelCount, Msg, Schedule, SystemLabel, Conversation
+from .models import Broadcast, Conversation, ExportMessagesTask, Label, LabelCount, Msg, Schedule, SystemLabel
 from .tasks import export_messages_task
 
 
@@ -1238,11 +1238,9 @@ class ConversationCRUDL(SmartCRUDL):
                 ignore_conflicts=True,
             )
 
-
         def post_save(self, obj):
             on_transaction_commit(lambda: obj.send_async())
             return obj
-
 
     class List(SpaMixin, OrgPermsMixin, NotificationTargetMixin, SmartListView):
         paginate_by = None
@@ -1256,8 +1254,10 @@ class ConversationCRUDL(SmartCRUDL):
             search = self.request.GET.get("search", "")
             context = super().get_context_data(**kwargs)
             context["chats_count"] = self.derive_queryset().count()
-            context["chats"] = self.derive_queryset().order_by(*self.default_order).filter(
-                **({} if not search else {"contact__name__icontains": search})
+            context["chats"] = (
+                self.derive_queryset()
+                .order_by(*self.default_order)
+                .filter(**({} if not search else {"contact__name__icontains": search}))
             )
 
             return context
