@@ -16,26 +16,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='ConversationTopic',
-            fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=256)),
-                ('org', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='conversation_topics', to='orgs.org')),
-            ],
-        ),
-        migrations.CreateModel(
-            name='ConversationTemplate',
-            fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('text', models.TextField()),
-                ('created_on', models.DateTimeField(auto_now_add=True)),
-                ('modified_on', models.DateTimeField(auto_now=True)),
-                ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='conversation_templates_created', to=settings.AUTH_USER_MODEL)),
-                ('org', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='conversation_templates', to='orgs.org')),
-                ('topic', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='conversation_templates', to='msgs.conversationtopic')),
-            ],
-        ),
-        migrations.CreateModel(
             name='Conversation',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),

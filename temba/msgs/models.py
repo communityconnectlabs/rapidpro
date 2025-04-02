@@ -1422,30 +1422,3 @@ class Conversation(models.Model):
 
     def __str__(self):
         return f"{self.contact} - {self.created_by}"
-
-
-class ConversationTopic(models.Model):
-    """
-    A conversation topic is a group of templates
-    """
-    name = models.CharField(max_length=256)
-    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_topics")
-
-    def __str__(self):
-        return self.name
-
-
-class ConversationTemplate(models.Model):
-    """
-    A conversation template is a first message that can be send to contact when conversation is started
-    """
-
-    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_templates")
-    text = models.TextField()
-    topic = models.ForeignKey(ConversationTopic, on_delete=models.PROTECT, related_name="conversation_templates")
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversation_templates_created")
-    created_on = models.DateTimeField(auto_now_add=True)
-    modified_on = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.contact} - {self.created_by}"
