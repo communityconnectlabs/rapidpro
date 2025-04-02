@@ -1,0 +1,161 @@
+-extends "smartmin/list.html"
+-load smartmin temba i18n contacts compress humanize
+
+-block page-title
+  {{ title }}
+
+-block temba-store
+  -if not is_spa
+    %temba-store(
+      completion="/mr/docs/{{ LANGUAGE_CODE }}/editor.json"
+      fields="/api/v2/fields.json"
+      globals="/api/v2/globals.json"
+      groups="/api/v2/groups.json")
+
+-block extra-style
+  {{block.super}}
+  :css
+    temba-select[name='ticket-status'] {
+      margin-top: -1em;
+    }
+    
+    temba-contact-chat {
+      transition: all 200ms ease-in-out;
+      transition-delay: 200ms;
+    }
+
+    .empty {
+      position: absolute;
+      transition: all 200ms ease-in-out;
+      transition-delay: 200ms;
+      opacity: 0;
+      padding: 3px 40px;
+    }
+
+    .empty h2 {
+      font-size: 36px;
+      margin-top: 16px;
+    }
+
+    .popper {
+      font-size: 48px;
+      display: inline;
+    }
+
+    temba-select[name='ticket-status'] {
+      margin-bottom: 1em;
+    }
+
+    .ticket-list {
+      flex-basis: 300px; 
+      flex-grow: 0; 
+      flex-shrink: 0;
+      transition: all 200ms ease-in;
+    }
+
+    temba-menu {
+      height: 100%;
+    }
+    
+    @media only screen and (max-width: 850px) {
+      .ticket-list {
+        flex-basis: 200px; 
+      }
+
+    }
+
+    @media only screen and (max-width: 768px) {
+      .ticket-list {
+        flex-basis: 125px; 
+      }
+      .widget-container {          
+        margin-top:16px !important;
+        padding-top:0px !important;
+        margin-bottom:-120px;
+        padding-bottom:120px;
+      }
+    }
+
+    .list-item:hover {
+      background: var(--color-link-primary-hover);
+      color: var(--color-text-light);
+      border-radius: var(--curvature-widget);
+    }
+
+-block extra-script
+  {{ block.super }}
+    
+  :javascript
+    function selectChat(chatID) {
+      const url = new URL(window.location);
+      const params = new URLSearchParams(url.search);
+
+      // Modify or add query params
+      params.set('chatID', chatID);
+
+      // Navigate to the new URL (reloads the page)
+      window.location.href = `${url.pathname}?${params.toString()}`;
+    }
+
+
+-block content
+    #pjax
+      -block pjax
+        .lp-frame
+          .left
+            .flex.flex-col
+              -if org_perms.msgs.broadcast_send
+                .w-64.mr-5
+                  %temba-modax#send-message-modal{ header:'{% trans "Send Message" %}', endpoint:"{% url 'msgs.conversation_start' %}" }
+                    .button-primary.block
+                      -trans "Send Message"
+              .lp-nav.upper
+                .lp-nav-item{'class': 'font-normal' }
+                  .name
+                    Chats
+                  .count
+                    {{ chats_count | intcomma }}
+
+          .right
+            .flex.widget-container(style="{% if is_spa%}margin:0;padding:0;height:100%{%else%}height:calc(100vh - 265px);margin-top:-27px;margin-bottom: -27px;{%endif%}")
+              .ticket-list.flex.flex-col(class="{% if is_spa%} {% else %}m-4 pt-4 mr-2{%endif%}")
+                %form#search-form.mb-4(method="get")
+                  %temba-textinput.w-full(placeholder='{% trans "Search" %}' name="search" value="{{search}}")
+
+                .flex.flex-grow(style="max-height:100%;")
+                  %ul.w-full.p-1(style="border: 1px solid var(--color-widget-border);border-radius: var(--curvature-widget);background: var(--color-widget-bg);")
+                    - for chat in chats
+                      %li.w-full.p-1.cursor-pointer.list-item(onclick="selectChat({{chat.id}})")
+                        =chat.contact
+
+
+
+              .flex-grow.flex-col.h-full(style="" class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
+                .empty
+                  -if chats_count > 0
+                    %h2
+                      .popper
+                        🎉
+
+                      -blocktrans trimmed
+                        All done!
+                    .mt-4
+                      -blocktrans trimmed
+                        Nice work, there aren't any more tickets here that need your attention.
+
+                  -else
+                    %h2
+                      -blocktrans trimmed
+                        Tickets
+
+                    .mt-6
+                      -blocktrans with name=brand.name trimmed
+                        {{name}} Tickets makes it easy to chat directly with your contacts.
+
+                    .mt-4
+                      -blocktrans trimmed
+                        Sometimes an automated chatbot isn't enough. When your contacts need to chat with a real person, you can use the
+                        Open Ticket action to open a new ticket.
+
+
+                %temba-contact-chat(agent="{{request.user.email}}" -temba-refreshed="handleContactHistoryUpdated" -temba-content-changed="handleTicketUpdated" monitor="true")
