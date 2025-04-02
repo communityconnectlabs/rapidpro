@@ -142,6 +142,13 @@
       .title 
         -trans "messages"
 
+  -if org_perms.msgs.msg_inbox and not request.user.is_superuser
+    %a{href:"{% url 'msgs.conversation_list' %}", class:"{% active request 'conversation' %}"}
+      .circle
+        .icon-group.icon-2
+      .title
+        -trans "1<>1 messaging"
+
   -if org_perms.contacts.contact_list and not request.user.is_superuser
     %a{href:"{% url 'contacts.contact_list' %}", class:"{% active request 'contact|imports' %}"}
       .circle
