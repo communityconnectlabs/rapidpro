@@ -91,18 +91,19 @@
       const params = new URLSearchParams(url.search);
 
       // Modify or add query params
-      params.set('contactUUID', contactUUID);
-
-      // Update the URL without reloading the page
-      window.history.pushState({}, '', `${url.pathname}?${params}`);
 
       var chat = document.querySelector("temba-contact-chat");
-      if(contactUUID) {
+      if(contactUUID && contactUUID !== "null") {
         chat.contactUUID = contactUUID;
+        params.set('contactUUID', contactUUID);
       } else {
         chat.contactUUID = null;
         chat.currentContact = null;
+        params.delete('contactUUID');
       }
+
+      // Update the URL without reloading the page
+      window.history.pushState({}, '', `${url.pathname}${Array.from(params).length ? '?': ''}${params}`);
 
       // Mark option as selected
       const options = document.querySelectorAll(".chats-list > .list-item");
@@ -146,6 +147,24 @@
                     Chats
                   .count
                     {{ chats_count | intcomma }}
+
+              -if templates
+                .lp-nav.lower
+                  .font-normal.uppercase.text-xs.text-gray-500.pb-1
+                    - trans "Templates"
+                  .inner-scroll
+                    -for template in templates
+                      .lp-nav-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
+                        .name
+                          {{ template.name }}
+                        %a.icon-remove-2.ml-auto{href: "{% url 'msgs.conversation_delete_template' template.id %}"}
+
+
+              .flex-grow
+                -if org_perms.msgs.broadcast_send
+                  %temba-modax#create-label-modal{ header:'{% trans "Create Template" %}', endpoint:"{% url 'msgs.conversation_create_template' %}"}
+                    .button-light.block.mt-3
+                      - trans "Create Template"
 
           .right
             .flex.widget-container(style="{% if is_spa%}margin:0;padding:0;height:100%{%else%}height:calc(100vh - 265px);margin-top:-27px;margin-bottom: -27px;{%endif%}")

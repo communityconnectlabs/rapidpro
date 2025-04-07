@@ -53,7 +53,17 @@ from temba.utils.fields import (
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
-from .models import Broadcast, Conversation, ExportMessagesTask, Label, LabelCount, Msg, Schedule, SystemLabel
+from .models import (
+    Broadcast,
+    Conversation,
+    ConversationTemplate,
+    ExportMessagesTask,
+    Label,
+    LabelCount,
+    Msg,
+    Schedule,
+    SystemLabel,
+)
 from .tasks import export_messages_task
 
 
@@ -1112,12 +1122,48 @@ class LabelCRUDL(SmartCRUDL):
 
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
-    actions = ("list", "start")
+    actions = ("list", "start", "create_template", "delete_template")
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
+        class StartConversationForm(Form):
+            omnibox = OmniboxField(
+                label=_("Recipients"),
+                required=False,
+                help_text=_("The contacts to send the message to"),
+                widget=OmniboxChoice(
+                    attrs={
+                        "placeholder": _("Recipients, enter contacts or groups"),
+                        "widget_only": True,
+                        "groups": True,
+                        "contacts": True,
+                        "urns": True,
+                    }
+                ),
+            )
+
+            template = forms.ModelChoiceField(
+                queryset=ConversationTemplate.objects.none(),
+                widget=SelectWidget(),
+            )
+
+            def __init__(self, org, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+
+                self.org = org
+                self.fields["omnibox"].default_country = org.default_country_code
+                self.fields["template"].queryset = ConversationTemplate.objects.filter(org=self.org)
+
+            def clean(self):
+                cleaned = super().clean()
+                if self.is_valid():
+                    omnibox = cleaned.get("omnibox")
+                    if not omnibox:
+                        self.add_error("omnibox", _("At least one recipient is required."))
+                return cleaned
+
         title = _("Send Message")
-        form_class = SendMessageForm
-        fields = ("omnibox", "text")
+        form_class = StartConversationForm
+        fields = ("omnibox", "template")
         success_url = "@msgs.conversation_list"
         submit_button_name = _("Send")
         permission = "msgs.broadcast_send"
@@ -1177,8 +1223,9 @@ class ConversationCRUDL(SmartCRUDL):
             user = self.request.user
             org = user.get_org()
 
-            text = form.cleaned_data["text"]
             omnibox = omnibox_deserialize(org, form.cleaned_data["omnibox"])
+            template = form.cleaned_data["template"]
+            text = template.text
 
             groups = list(omnibox["groups"])
             contacts = list(omnibox["contacts"])
@@ -1213,7 +1260,7 @@ class ConversationCRUDL(SmartCRUDL):
             )
 
             if "HTTP_X_PJAX" in self.request.META:
-                success_url = "hide"
+                success_url = reverse("msgs.conversation_list")
                 response = self.render_to_response(self.get_context_data(success_url=success_url))
                 response["Temba-Success"] = success_url
                 return response
@@ -1254,6 +1301,7 @@ class ConversationCRUDL(SmartCRUDL):
             search = self.request.GET.get("search", "")
             context = super().get_context_data(**kwargs)
             context["chats_count"] = self.derive_queryset().count()
+            context["templates"] = ConversationTemplate.objects.filter(org=self.request.user.get_org())
             context["chats"] = (
                 self.derive_queryset()
                 .order_by(*self.default_order)
@@ -1261,3 +1309,65 @@ class ConversationCRUDL(SmartCRUDL):
             )
 
             return context
+
+    class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
+        class ConversationTemplateForm(forms.ModelForm):
+            name = forms.CharField(
+                widget=InputWidget(),
+            )
+            text = forms.CharField(
+                widget=CompletionTextarea(
+                    attrs={
+                        "label": "Text",
+                        "placeholder": _("Hi @contact.name!"),
+                        "widget_only": True,
+                        "counter": "temba-charcount",
+                        "spellchecker": True,
+                    }
+                )
+            )
+
+            class Meta:
+                model = ConversationTemplate
+                fields = ("name", "text")
+                labels = {"name": _("Name"), "text": _("Text")}
+
+        model = ConversationTemplate
+        permission = "msgs.broadcast_send"
+        success_url = "@msgs.conversation_list"
+        form_class = ConversationTemplateForm
+        fields = ("name", "text")
+
+        def form_valid(self, form):
+            user = self.request.user
+            org = user.get_org()
+
+            text = form.cleaned_data["text"]
+            name = form.cleaned_data["name"]
+
+            ConversationTemplate.objects.create(
+                org=org,
+                name=name,
+                text=text,
+            )
+
+            if "HTTP_X_PJAX" in self.request.META:
+                success_url = reverse("msgs.conversation_list")
+                response = self.render_to_response(self.get_context_data(success_url=success_url))
+                response["Temba-Success"] = success_url
+                return response
+
+            return HttpResponseRedirect(self.get_success_url())
+
+    class DeleteTemplate(OrgObjPermsMixin, SmartDeleteView):
+        model = ConversationTemplate
+        permission = "msgs.broadcast_send"
+
+        def get_success_url(self):
+            return reverse("msgs.conversation_list")
+
+        def get_cancel_url(self):
+            return reverse("msgs.conversation_list")
+
+        def get_redirect_url(self, **kwargs):
+            return reverse("msgs.conversation_list")
