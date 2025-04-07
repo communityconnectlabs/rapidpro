@@ -1422,3 +1422,16 @@ class Conversation(models.Model):
 
     def __str__(self):
         return f"{self.contact} - {self.created_by}"
+
+
+class ConversationTemplate(models.Model):
+    """
+    A conversation template is used to start new conversation (a first message to be sent)
+    """
+
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_templates")
+    name = models.CharField(max_length=128, unique=True)
+    text = models.TextField()
+
+    def __str__(self):
+        return self.name
