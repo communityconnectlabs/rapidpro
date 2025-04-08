@@ -1,10 +1,10 @@
 import logging
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-
 
 logger = logging.getLogger(__name__)
 
