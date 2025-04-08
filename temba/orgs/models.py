@@ -176,6 +176,7 @@ class OrgRole(Enum):
     VIEWER = ("V", _("Viewer"), _("Viewers"), "Viewers", "viewers", "org_viewers")
     AGENT = ("T", _("Agent"), _("Agents"), "Agents", "agents", "org_agents")
     SURVEYOR = ("S", _("Surveyor"), _("Surveyors"), "Surveyors", "surveyors", "org_surveyors")
+    CHAT_USER = ("C", _("Chat User"), _("Chat Users"), "Chat User", "chat_users", "org_chat_users")
 
     def __init__(self, code: str, display: str, display_plural: str, group_name: str, m2m_name: str, rel_name: str):
         self.code = code
@@ -350,6 +351,7 @@ class Org(SmartModel):
     viewers = models.ManyToManyField(User, related_name=OrgRole.VIEWER.rel_name)
     agents = models.ManyToManyField(User, related_name=OrgRole.AGENT.rel_name)
     surveyors = models.ManyToManyField(User, related_name=OrgRole.SURVEYOR.rel_name)
+    chat_users = models.ManyToManyField(User, related_name=OrgRole.CHAT_USER.rel_name)
 
     language = models.CharField(
         verbose_name=_("Default Language"),

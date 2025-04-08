@@ -1046,6 +1046,13 @@ GROUP_PERMISSIONS = {
     ),
     "Prometheus": (),
     "Chat User": (
+        "contacts.contact_api",
+        "contacts.contact_history",
+        "contacts.contact_omnibox",
+        "contacts.contactgroup_api",
+        "contacts.contactfield_api",
+        "globals.global_api",
+        "msgs.broadcast_api",
         "msgs.conversation_list",
         "msgs.conversation_start",
     ),

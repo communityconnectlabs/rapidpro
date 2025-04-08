@@ -1166,7 +1166,6 @@ class ConversationCRUDL(SmartCRUDL):
         fields = ("omnibox", "template")
         success_url = "@msgs.conversation_list"
         submit_button_name = _("Send")
-        permission = "msgs.broadcast_send"
 
         blockers = {
             "no_send_channel": _(
@@ -1302,7 +1301,6 @@ class ConversationCRUDL(SmartCRUDL):
     class List(SpaMixin, OrgPermsMixin, NotificationTargetMixin, SmartListView):
         paginate_by = None
         default_order = ("contact__name",)
-        permission = "msgs.msg_inbox"
 
         def derive_queryset(self, **kwargs):
             return Conversation.objects.filter(org=self.request.user.get_org())
@@ -1343,7 +1341,6 @@ class ConversationCRUDL(SmartCRUDL):
                 labels = {"name": _("Name"), "text": _("Text")}
 
         model = ConversationTemplate
-        permission = "msgs.broadcast_send"
         success_url = "@msgs.conversation_list"
         form_class = ConversationTemplateForm
         fields = ("name", "text")
@@ -1371,7 +1368,6 @@ class ConversationCRUDL(SmartCRUDL):
 
     class DeleteTemplate(OrgObjPermsMixin, SmartDeleteView):
         model = ConversationTemplate
-        permission = "msgs.broadcast_send"
 
         def get_success_url(self):
             return reverse("msgs.conversation_list")
