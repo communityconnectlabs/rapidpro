@@ -558,6 +558,7 @@ PERMISSIONS = {
         "sent_voice",
     ),
     "msgs.broadcast": ("api", "detail", "schedule", "schedule_list", "schedule_read", "send"),
+    "msgs.conversation": ("list", "start", "create_template", "delete_template"),
     "msgs.label": ("api", "create_folder", "delete_folder"),
     "orgs.topup": ("manage",),
     "policies.policy": ("admin", "history", "give_consent"),
@@ -767,6 +768,10 @@ GROUP_PERMISSIONS = {
         "msgs.msg_sent",
         "msgs.msg_sent_voice",
         "msgs.msg_update",
+        "msgs.conversation_list",
+        "msgs.conversation_start",
+        "msgs.conversation_create_template",
+        "msgs.conversation_delete_template",
         "policies.policy_read",
         "policies.policy_list",
         "policies.policy_give_consent",
@@ -891,6 +896,10 @@ GROUP_PERMISSIONS = {
         "msgs.msg_sent",
         "msgs.msg_sent_voice",
         "msgs.msg_update",
+        "msgs.conversation_list",
+        "msgs.conversation_start",
+        "msgs.conversation_create_template",
+        "msgs.conversation_delete_template",
         "policies.policy_read",
         "policies.policy_list",
         "policies.policy_give_consent",
@@ -1036,6 +1045,10 @@ GROUP_PERMISSIONS = {
         "policies.policy_give_consent",
     ),
     "Prometheus": (),
+    "Chat User": (
+        "msgs.conversation_list",
+        "msgs.conversation_start",
+    ),
 }
 
 # -----------------------------------------------------------------------------------
