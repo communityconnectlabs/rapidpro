@@ -136,7 +136,7 @@
         .lp-frame
           .left
             .flex.flex-col
-              -if org_perms.msgs.broadcast_send
+              -if org_perms.msgs.conversation_start
                 .w-64.mr-5
                   %temba-modax#send-message-modal{ header:'{% trans "Send Message" %}', endpoint:"{% url 'msgs.conversation_start' %}" }
                     .button-primary.block
@@ -157,11 +157,12 @@
                       .lp-nav-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
                         .name
                           {{ template.name }}
-                        %a.icon-remove-2.ml-auto{href: "{% url 'msgs.conversation_delete_template' template.id %}"}
+                        -if org_perms.msgs.conversation_delete_template
+                          %a.icon-remove-2.ml-auto{href: "{% url 'msgs.conversation_delete_template' template.id %}"}
 
 
               .flex-grow
-                -if org_perms.msgs.broadcast_send
+                -if org_perms.msgs.conversation_create_template
                   %temba-modax#create-label-modal{ header:'{% trans "Create Template" %}', endpoint:"{% url 'msgs.conversation_create_template' %}"}
                     .button-light.block.mt-3
                       - trans "Create Template"

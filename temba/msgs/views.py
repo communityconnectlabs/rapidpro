@@ -25,7 +25,7 @@ from django.utils.translation import gettext_lazy as _
 
 from temba.archives.models import Archive
 from temba.channels.models import Channel
-from temba.contacts.models import Contact, ContactGroup
+from temba.contacts.models import URN, Contact, ContactGroup, ContactURN
 from temba.contacts.search.omnibox import omnibox_deserialize, omnibox_query, omnibox_results_to_dict
 from temba.formax import FormaxMixin
 from temba.notifications.views import NotificationTargetMixin
@@ -1166,7 +1166,6 @@ class ConversationCRUDL(SmartCRUDL):
         fields = ("omnibox", "template")
         success_url = "@msgs.conversation_list"
         submit_button_name = _("Send")
-        permission = "msgs.broadcast_send"
 
         blockers = {
             "no_send_channel": _(
@@ -1179,18 +1178,18 @@ class ConversationCRUDL(SmartCRUDL):
             initial = super().derive_initial()
             org = self.request.user.get_org()
 
-            urn_ids = [_ for _ in self.request.GET.get("u", "").split(",") if _]
+            urns = [_ for _ in self.request.GET.get("u", "").split(",") if _]
             msg_ids = [_ for _ in self.request.GET.get("m", "").split(",") if _]
             contact_uuids = [_ for _ in self.request.GET.get("c", "").split(",") if _]
 
-            if msg_ids or contact_uuids or urn_ids:
+            if msg_ids or contact_uuids or urns:
                 params = {}
                 if len(msg_ids) > 0:
                     params["m"] = ",".join(msg_ids)
                 if len(contact_uuids) > 0:
                     params["c"] = ",".join(contact_uuids)
-                if len(urn_ids) > 0:
-                    params["u"] = ",".join(urn_ids)
+                if len(urns) > 0:
+                    params["u"] = ",".join(urns)
 
                 results = omnibox_query(org, **params)
                 initial["omnibox"] = omnibox_results_to_dict(org, results, version="2")
@@ -1229,7 +1228,17 @@ class ConversationCRUDL(SmartCRUDL):
 
             groups = list(omnibox["groups"])
             contacts = list(omnibox["contacts"])
-            urns = list(omnibox["urns"])
+            urn_strings = list(omnibox["urns"])
+            urns = []
+
+            for urn_as_string in urn_strings:
+                scheme, path, query, display = URN.to_parts(urn_as_string)
+                urn_as_string = URN.from_parts(scheme, path)
+                urn = ContactURN.objects.filter(identity=urn_as_string).first()
+                if not urn:
+                    contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
+                    urn = contact.urns.first()
+                urns.append(urn)
 
             broadcast = Broadcast.create(
                 org,
@@ -1237,7 +1246,7 @@ class ConversationCRUDL(SmartCRUDL):
                 text,
                 groups=groups,
                 contacts=contacts,
-                urns=urns,
+                urns=urn_strings,
                 schedule=None,
                 status=Msg.STATUS_QUEUED,
                 template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
@@ -1292,7 +1301,6 @@ class ConversationCRUDL(SmartCRUDL):
     class List(SpaMixin, OrgPermsMixin, NotificationTargetMixin, SmartListView):
         paginate_by = None
         default_order = ("contact__name",)
-        permission = "msgs.msg_inbox"
 
         def derive_queryset(self, **kwargs):
             return Conversation.objects.filter(org=self.request.user.get_org())
@@ -1333,7 +1341,6 @@ class ConversationCRUDL(SmartCRUDL):
                 labels = {"name": _("Name"), "text": _("Text")}
 
         model = ConversationTemplate
-        permission = "msgs.broadcast_send"
         success_url = "@msgs.conversation_list"
         form_class = ConversationTemplateForm
         fields = ("name", "text")
@@ -1361,7 +1368,6 @@ class ConversationCRUDL(SmartCRUDL):
 
     class DeleteTemplate(OrgObjPermsMixin, SmartDeleteView):
         model = ConversationTemplate
-        permission = "msgs.broadcast_send"
 
         def get_success_url(self):
             return reverse("msgs.conversation_list")

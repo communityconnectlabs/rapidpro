@@ -1274,7 +1274,14 @@ class OrgTest(TembaTest):
         self.assertEqual(response.status_code, 200)
 
         self.assertEqual(
-            [("A", "Administrator"), ("E", "Editor"), ("V", "Viewer"), ("T", "Agent"), ("S", "Surveyor")],
+            [
+                ("A", "Administrator"),
+                ("E", "Editor"),
+                ("V", "Viewer"),
+                ("T", "Agent"),
+                ("S", "Surveyor"),
+                ("C", "Chat User"),
+            ],
             response.context["form"].fields["invite_role"].choices,
         )
 

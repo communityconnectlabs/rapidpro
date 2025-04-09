@@ -142,7 +142,7 @@
       .title 
         -trans "messages"
 
-  -if org_perms.msgs.msg_inbox and not request.user.is_superuser
+  -if org_perms.msgs.conversation_list and not request.user.is_superuser
     %a{href:"{% url 'msgs.conversation_list' %}", class:"{% active request 'conversation' %}"}
       .circle
         .icon-group.icon-2
