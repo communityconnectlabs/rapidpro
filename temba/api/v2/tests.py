@@ -4832,7 +4832,7 @@ class APITest(TembaTest):
 
         self.assertEndpointAccess(endpoint_url)
 
-        with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 6):
+        with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 7):
             response = self.fetchJSON(endpoint_url, readonly_models={User})
 
         resp_json = response.json()

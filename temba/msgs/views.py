@@ -25,9 +25,10 @@ from django.utils.translation import gettext_lazy as _
 
 from temba.archives.models import Archive
 from temba.channels.models import Channel
-from temba.contacts.models import ContactGroup
+from temba.contacts.models import URN, Contact, ContactGroup, ContactURN
 from temba.contacts.search.omnibox import omnibox_deserialize, omnibox_query, omnibox_results_to_dict
 from temba.formax import FormaxMixin
+from temba.notifications.views import NotificationTargetMixin
 from temba.orgs.models import Org
 from temba.orgs.views import (
     DependencyDeleteModal,
@@ -52,7 +53,17 @@ from temba.utils.fields import (
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
-from .models import Broadcast, ExportMessagesTask, Label, LabelCount, Msg, Schedule, SystemLabel
+from .models import (
+    Broadcast,
+    Conversation,
+    ConversationTemplate,
+    ExportMessagesTask,
+    Label,
+    LabelCount,
+    Msg,
+    Schedule,
+    SystemLabel,
+)
 from .tasks import export_messages_task
 
 
@@ -1107,3 +1118,262 @@ class LabelCRUDL(SmartCRUDL):
             response = HttpResponse()
             response["Temba-Success"] = self.get_success_url()
             return response
+
+
+class ConversationCRUDL(SmartCRUDL):
+    model = Conversation
+    actions = ("list", "start", "create_template", "delete_template")
+
+    class Start(OrgPermsMixin, ModalMixin, SmartFormView):
+        class StartConversationForm(Form):
+            omnibox = OmniboxField(
+                label=_("Recipients"),
+                required=False,
+                help_text=_("The contacts to send the message to"),
+                widget=OmniboxChoice(
+                    attrs={
+                        "placeholder": _("Recipients, enter contacts or groups"),
+                        "widget_only": True,
+                        "groups": True,
+                        "contacts": True,
+                        "urns": True,
+                    }
+                ),
+            )
+
+            template = forms.ModelChoiceField(
+                queryset=ConversationTemplate.objects.none(),
+                widget=SelectWidget(),
+            )
+
+            def __init__(self, org, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+
+                self.org = org
+                self.fields["omnibox"].default_country = org.default_country_code
+                self.fields["template"].queryset = ConversationTemplate.objects.filter(org=self.org)
+
+            def clean(self):
+                cleaned = super().clean()
+                if self.is_valid():
+                    omnibox = cleaned.get("omnibox")
+                    if not omnibox:
+                        self.add_error("omnibox", _("At least one recipient is required."))
+                return cleaned
+
+        title = _("Send Message")
+        form_class = StartConversationForm
+        fields = ("omnibox", "template")
+        success_url = "@msgs.conversation_list"
+        submit_button_name = _("Send")
+
+        blockers = {
+            "no_send_channel": _(
+                'To get started you need to <a href="%(link)s">add a channel</a> to your workspace which will allow '
+                "you to send messages to your contacts."
+            ),
+        }
+
+        def derive_initial(self):
+            initial = super().derive_initial()
+            org = self.request.user.get_org()
+
+            urns = [_ for _ in self.request.GET.get("u", "").split(",") if _]
+            msg_ids = [_ for _ in self.request.GET.get("m", "").split(",") if _]
+            contact_uuids = [_ for _ in self.request.GET.get("c", "").split(",") if _]
+
+            if msg_ids or contact_uuids or urns:
+                params = {}
+                if len(msg_ids) > 0:
+                    params["m"] = ",".join(msg_ids)
+                if len(contact_uuids) > 0:
+                    params["c"] = ",".join(contact_uuids)
+                if len(urns) > 0:
+                    params["u"] = ",".join(urns)
+
+                results = omnibox_query(org, **params)
+                initial["omnibox"] = omnibox_results_to_dict(org, results, version="2")
+            return initial
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            context["blockers"] = self.get_blockers(self.request.org)
+            context["recipient_count"] = int(self.request.GET.get("count", 0))
+            return context
+
+        def get_blockers(self, org) -> list:
+            blockers = []
+
+            if org.is_suspended:
+                blockers.append(Org.BLOCKER_SUSPENDED)
+            elif org.is_flagged:
+                blockers.append(Org.BLOCKER_FLAGGED)
+            if not org.get_send_channel():
+                blockers.append(self.blockers["no_send_channel"] % {"link": reverse("channels.channel_claim")})
+
+            return blockers
+
+        def form_valid(self, form):
+            user = self.request.user
+            org = user.get_org()
+
+            omnibox = omnibox_deserialize(org, form.cleaned_data["omnibox"])
+            template = form.cleaned_data["template"]
+            text = template.text
+
+            groups = list(omnibox["groups"])
+            contacts = list(omnibox["contacts"])
+            urn_strings = list(omnibox["urns"])
+            urns = []
+
+            for urn_as_string in urn_strings:
+                scheme, path, query, display = URN.to_parts(urn_as_string)
+                urn_as_string = URN.from_parts(scheme, path)
+                urn = ContactURN.objects.filter(identity=urn_as_string).first()
+                if not urn:
+                    contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
+                    urn = contact.urns.first()
+                urns.append(urn)
+
+            broadcast = Broadcast.create(
+                org,
+                user,
+                text,
+                groups=groups,
+                contacts=contacts,
+                urns=urn_strings,
+                schedule=None,
+                status=Msg.STATUS_QUEUED,
+                template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
+            )
+            self.start_connversations(
+                org,
+                user,
+                groups=groups,
+                contacts=contacts,
+                urns=urns,
+            )
+
+            self.post_save(broadcast)
+            super().form_valid(form)
+
+            analytics.track(
+                self.request.user,
+                "temba.broadcast_created",
+                dict(contacts=len(contacts), groups=len(groups), urns=len(urns)),
+            )
+
+            if "HTTP_X_PJAX" in self.request.META:
+                success_url = reverse("msgs.conversation_list")
+                response = self.render_to_response(self.get_context_data(success_url=success_url))
+                response["Temba-Success"] = success_url
+                return response
+
+            return HttpResponseRedirect(self.get_success_url())
+
+        def start_connversations(self, org, user, groups, contacts, urns):
+            contact_ids = [contact.id for contact in contacts]
+            contact_ids += Contact.objects.filter(all_groups__in=groups).values_list("id", flat=True)
+            contact_ids += Contact.objects.filter(urns__in=urns).values_list("id", flat=True)
+            contact_ids = list(set(contact_ids))
+            contacts = Contact.objects.filter(id__in=contact_ids, conversations__isnull=True)
+            Conversation.objects.bulk_create(
+                [
+                    Conversation(
+                        org=org,
+                        contact=contact,
+                        created_by=user,
+                    )
+                    for contact in contacts
+                ],
+                ignore_conflicts=True,
+            )
+
+        def post_save(self, obj):
+            on_transaction_commit(lambda: obj.send_async())
+            return obj
+
+    class List(SpaMixin, OrgPermsMixin, NotificationTargetMixin, SmartListView):
+        paginate_by = None
+        default_order = ("contact__name",)
+
+        def derive_queryset(self, **kwargs):
+            return Conversation.objects.filter(org=self.request.user.get_org())
+
+        def get_context_data(self, **kwargs):
+            search = self.request.GET.get("search", "")
+            context = super().get_context_data(**kwargs)
+            context["chats_count"] = self.derive_queryset().count()
+            context["templates"] = ConversationTemplate.objects.filter(org=self.request.user.get_org())
+            context["chats"] = (
+                self.derive_queryset()
+                .order_by(*self.default_order)
+                .filter(**({} if not search else {"contact__name__icontains": search}))
+            )
+
+            return context
+
+    class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
+        class ConversationTemplateForm(forms.ModelForm):
+            name = forms.CharField(
+                widget=InputWidget(),
+            )
+            text = forms.CharField(
+                widget=CompletionTextarea(
+                    attrs={
+                        "label": "Text",
+                        "placeholder": _("Hi @contact.name!"),
+                        "widget_only": True,
+                        "counter": "temba-charcount",
+                        "spellchecker": True,
+                    }
+                )
+            )
+
+            class Meta:
+                model = ConversationTemplate
+                fields = ("name", "text")
+                labels = {"name": _("Name"), "text": _("Text")}
+
+        model = ConversationTemplate
+        success_url = "@msgs.conversation_list"
+        form_class = ConversationTemplateForm
+        fields = ("name", "text")
+
+        def form_valid(self, form):
+            user = self.request.user
+            org = user.get_org()
+
+            text = form.cleaned_data["text"]
+            name = form.cleaned_data["name"]
+
+            ConversationTemplate.objects.create(
+                org=org,
+                name=name,
+                text=text,
+            )
+
+            if "HTTP_X_PJAX" in self.request.META:
+                success_url = reverse("msgs.conversation_list")
+                response = self.render_to_response(self.get_context_data(success_url=success_url))
+                response["Temba-Success"] = success_url
+                return response
+
+            return HttpResponseRedirect(self.get_success_url())
+
+    class DeleteTemplate(OrgObjPermsMixin, SmartDeleteView):
+        model = ConversationTemplate
+
+        def get_success_url(self):
+            return reverse("msgs.conversation_list")
+
+        def get_cancel_url(self):
+            return reverse("msgs.conversation_list")
+
+        def get_redirect_url(self, **kwargs):
+            return reverse("msgs.conversation_list")
