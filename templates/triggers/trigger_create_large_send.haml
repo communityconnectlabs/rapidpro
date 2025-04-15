@@ -331,5 +331,7 @@
       setTimeout(setupModal, 200);
       const body = document.querySelector("#create-large-send").getBody();
       const datePickerElem = body.querySelector('#id_start_time').shadowRoot.querySelector('lit-flatpickr');
-      datePickerElem.setAttribute('minDate', new Date(new Date().toLocaleString('en-US', { timeZone: '{{ org_timezone }}' })).toJSON().substring(0, 10));
+      const currentDate = new Date().toLocaleString('en-US', { timeZone: '{{ org_timezone }}' });
+      const minDate = moment(currentDate).format('YYYY-MM-DD');
+      datePickerElem.setAttribute('minDate', minDate);
     });
