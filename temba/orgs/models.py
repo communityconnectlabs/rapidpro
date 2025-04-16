@@ -2302,6 +2302,10 @@ def is_support_user(user):
     return user.groups.filter(name="Customer Support").exists()
 
 
+def is_chat_user(user):
+    return user.groups.filter(name="Chat User").exists()
+
+
 def set_org(obj, org):
     obj._org = org
 
@@ -2413,6 +2417,7 @@ User.set_org = set_org
 User.is_alpha = is_alpha_user
 User.is_beta = is_beta_user
 User.is_support = is_support_user
+User.is_chat_user = is_chat_user
 User.get_user_orgs = get_user_orgs
 User.get_org_group = get_org_group
 User.get_owned_orgs = get_owned_orgs
