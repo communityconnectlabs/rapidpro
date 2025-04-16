@@ -334,4 +334,7 @@
       const currentDate = new Date().toLocaleString('en-US', { timeZone: '{{ org_timezone }}' });
       const minDate = moment(currentDate).format('YYYY-MM-DD');
       datePickerElem.setAttribute('minDate', minDate);
+
+      const chunkElem = body.querySelector('#id_chunk_size').shadowRoot.querySelector('input.textinput');
+      chunkElem.setAttribute("type", "number");
     });
