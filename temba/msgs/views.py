@@ -1366,17 +1366,20 @@ class ConversationCRUDL(SmartCRUDL):
 
             return HttpResponseRedirect(self.get_success_url())
 
-    class DeleteTemplate(OrgObjPermsMixin, SmartDeleteView):
-        model = ConversationTemplate
+    class DeleteTemplate(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+        fields = ("id",)
+        submit_button_name = _("Delete")
+        success_url = "@msgs.conversation_list"
+        cancel_url = "@msgs.conversation_list"
 
-        def get_success_url(self):
-            return reverse("msgs.conversation_list")
+        def get_object(self, *args, **kwargs):
+            return ConversationTemplate.objects.get(org=self.request.user.get_org(), pk=self.kwargs["pk"])
 
-        def get_cancel_url(self):
-            return reverse("msgs.conversation_list")
-
-        def get_redirect_url(self, **kwargs):
-            return reverse("msgs.conversation_list")
+        def post(self, request, *args, **kwargs):
+            self.get_object().delete()
+            response = HttpResponse()
+            response["Temba-Success"] = self.get_success_url()
+            return response
 
     class PreviewTemplate(OrgObjPermsMixin, SmartReadView):
         model = ConversationTemplate

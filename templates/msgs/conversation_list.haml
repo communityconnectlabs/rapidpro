@@ -82,6 +82,14 @@
       border-radius: var(--curvature-widget);
     }
 
+    .template-item:hover {
+      color: unset !important;
+    }
+
+    .template-item:hover > temba-modax > .icon-remove-2, .template-item:hover > .name {
+      color: rgb(var(--primary-rgb));
+    }
+
 -block extra-script
   {{ block.super }}
 
@@ -152,11 +160,12 @@
                     - trans "Templates"
                   .inner-scroll
                     -for template in templates
-                      .lp-nav-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
+                      .lp-nav-item.template-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
                         .name
                           {{ template.name }}
                         -if org_perms.msgs.conversation_delete_template
-                          %a.icon-remove-2.ml-auto{href: "{% url 'msgs.conversation_delete_template' template.id %}"}
+                          %temba-modax.ml-auto.delete-template-modal{ header:'{% trans "Delete Template" %}', endpoint:"{% url 'msgs.conversation_delete_template' template.id %}"}
+                            .icon-remove-2
 
 
               .flex-grow
