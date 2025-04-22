@@ -17,7 +17,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.db.models.functions.text import Upper
 from django.forms import Form
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -1122,7 +1122,7 @@ class LabelCRUDL(SmartCRUDL):
 
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
-    actions = ("list", "start", "create_template", "delete_template")
+    actions = ("list", "start", "create_template", "delete_template", "preview_template")
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
         class StartConversationForm(Form):
@@ -1377,3 +1377,14 @@ class ConversationCRUDL(SmartCRUDL):
 
         def get_redirect_url(self, **kwargs):
             return reverse("msgs.conversation_list")
+
+    class PreviewTemplate(OrgObjPermsMixin, SmartReadView):
+        model = ConversationTemplate
+
+        def derive_queryset(self):
+            queryset = super().derive_queryset()
+            return queryset.filter(org=self.request.user.get_org())
+
+        def render_to_response(self, context, **response_kwargs):
+            data = dict(template_text=context["object"].text)
+            return JsonResponse(data)
