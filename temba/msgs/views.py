@@ -53,6 +53,7 @@ from temba.utils.fields import (
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
+from ..mailroom import MailroomException
 from .models import (
     Broadcast,
     Conversation,
@@ -1234,11 +1235,14 @@ class ConversationCRUDL(SmartCRUDL):
             for urn_as_string in urn_strings:
                 scheme, path, query, display = URN.to_parts(urn_as_string)
                 urn_as_string = URN.from_parts(scheme, path)
-                urn = ContactURN.objects.filter(identity=urn_as_string).first()
-                if not urn:
-                    contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
-                    urn = contact.urns.first()
-                urns.append(urn)
+                try:
+                    urn = ContactURN.objects.filter(org=org, identity=urn_as_string).first()
+                    if not urn:
+                        contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
+                        urn = contact.urns.first()
+                    urns.append(urn)
+                except MailroomException:
+                    pass
 
             broadcast = Broadcast.create(
                 org,
@@ -1251,7 +1255,7 @@ class ConversationCRUDL(SmartCRUDL):
                 status=Msg.STATUS_QUEUED,
                 template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
             )
-            self.start_connversations(
+            first_contact = self.start_connversations(
                 org,
                 user,
                 groups=groups,
@@ -1270,18 +1274,19 @@ class ConversationCRUDL(SmartCRUDL):
 
             if "HTTP_X_PJAX" in self.request.META:
                 success_url = reverse("msgs.conversation_list")
+                success_url = f"{success_url}?contactUUID={first_contact.uuid}" if first_contact else success_url
                 response = self.render_to_response(self.get_context_data(success_url=success_url))
                 response["Temba-Success"] = success_url
                 return response
 
             return HttpResponseRedirect(self.get_success_url())
 
-        def start_connversations(self, org, user, groups, contacts, urns):
+        def start_connversations(self, org, user, groups, contacts, urns) -> Contact:
             contact_ids = [contact.id for contact in contacts]
-            contact_ids += Contact.objects.filter(all_groups__in=groups).values_list("id", flat=True)
-            contact_ids += Contact.objects.filter(urns__in=urns).values_list("id", flat=True)
+            contact_ids += Contact.objects.filter(org=org, all_groups__in=groups).values_list("id", flat=True)
+            contact_ids += Contact.objects.filter(org=org, urns__in=urns).values_list("id", flat=True)
             contact_ids = list(set(contact_ids))
-            contacts = Contact.objects.filter(id__in=contact_ids, conversations__isnull=True)
+            contacts = Contact.objects.filter(org=org, id__in=contact_ids, conversations__isnull=True)
             Conversation.objects.bulk_create(
                 [
                     Conversation(
@@ -1293,6 +1298,7 @@ class ConversationCRUDL(SmartCRUDL):
                 ],
                 ignore_conflicts=True,
             )
+            return Contact.objects.filter(org=org, id__in=contact_ids).first()
 
         def post_save(self, obj):
             on_transaction_commit(lambda: obj.send_async())
