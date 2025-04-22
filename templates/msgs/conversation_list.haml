@@ -82,6 +82,14 @@
       border-radius: var(--curvature-widget);
     }
 
+    .template-item:hover {
+      color: unset !important;
+    }
+
+    .template-item:hover > temba-modax > .icon-remove-2, .template-item:hover > .name {
+      color: rgb(var(--primary-rgb));
+    }
+
 -block extra-script
   {{ block.super }}
 
@@ -115,12 +123,10 @@
       });
     }
 
-    function handleContactHistoryUpdated(event) {
-      // tell our list to refresh since we know things happened
-      var tickets = document.querySelector("temba-ticket-list");
-      if (tickets) {
-        tickets.refresh();
-      }
+    function clearSearch() {
+      const url = new URL(window.location);
+      url.searchParams.delete('search');
+      window.location.href = url.toString();
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -142,7 +148,7 @@
                     .button-primary.block
                       -trans "Send Message"
               .lp-nav.upper
-                .lp-nav-item{'class': 'font-normal' }
+                .lp-nav-item{'class': 'font-normal', 'onclick': 'clearSearch()' }
                   .name
                     Chats
                   .count
@@ -154,11 +160,12 @@
                     - trans "Templates"
                   .inner-scroll
                     -for template in templates
-                      .lp-nav-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
+                      .lp-nav-item.template-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
                         .name
                           {{ template.name }}
                         -if org_perms.msgs.conversation_delete_template
-                          %a.icon-remove-2.ml-auto{href: "{% url 'msgs.conversation_delete_template' template.id %}"}
+                          %temba-modax.ml-auto.delete-template-modal{ header:'{% trans "Delete Template" %}', endpoint:"{% url 'msgs.conversation_delete_template' template.id %}"}
+                            .icon-remove-2
 
 
               .flex-grow
@@ -173,11 +180,11 @@
                 %form#search-form.mb-4(method="get")
                   %temba-textinput.w-full(placeholder='{% trans "Search" %}' name="search" value="{{search}}")
 
-                .flex.flex-grow(style="max-height:100%;")
-                  %ul.w-full.p-1.chats-list(style="border: 1px solid var(--color-widget-border);border-radius: var(--curvature-widget);background: var(--color-widget-bg);")
+                .flex.flex-grow.relative(style="max-height: calc(100% - 49px);")
+                  %ul.w-full.p-1.chats-list.overflow-y-auto(style="border: 1px solid var(--color-widget-border);border-radius: var(--curvature-widget);background: var(--color-widget-bg);")
                     - for chat in chats
                       %li.w-full.p-1.cursor-pointer.list-item(onclick='selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
                         =chat.contact
 
               .flex-grow.flex-col.h-full(style="" class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
-                %temba-contact-chat.h-full(agent="{{request.user.email}}" -temba-refreshed="handleContactHistoryUpdated" monitor="true")
+                %temba-contact-chat.h-full(agent="{{request.user.email}}" monitor="true")

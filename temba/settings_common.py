@@ -560,7 +560,7 @@ PERMISSIONS = {
         "sent_voice",
     ),
     "msgs.broadcast": ("api", "detail", "schedule", "schedule_list", "schedule_read", "send"),
-    "msgs.conversation": ("list", "start", "create_template", "delete_template"),
+    "msgs.conversation": ("list", "start", "create_template", "delete_template", "preview_template"),
     "msgs.label": ("api", "create_folder", "delete_folder"),
     "orgs.topup": ("manage",),
     "policies.policy": ("admin", "history", "give_consent"),
@@ -774,6 +774,7 @@ GROUP_PERMISSIONS = {
         "msgs.conversation_start",
         "msgs.conversation_create_template",
         "msgs.conversation_delete_template",
+        "msgs.conversation_preview_template",
         "policies.policy_read",
         "policies.policy_list",
         "policies.policy_give_consent",
@@ -902,6 +903,7 @@ GROUP_PERMISSIONS = {
         "msgs.conversation_start",
         "msgs.conversation_create_template",
         "msgs.conversation_delete_template",
+        "msgs.conversation_preview_template",
         "policies.policy_read",
         "policies.policy_list",
         "policies.policy_give_consent",
@@ -1057,6 +1059,7 @@ GROUP_PERMISSIONS = {
         "msgs.broadcast_api",
         "msgs.conversation_list",
         "msgs.conversation_start",
+        "msgs.conversation_preview_template",
     ),
 }
 
