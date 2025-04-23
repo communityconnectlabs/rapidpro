@@ -394,6 +394,7 @@ class BaseLargeSendForm(forms.ModelForm):
     chunk_size = forms.IntegerField(
         label=_("Chunks"),
         max_value=CHUNK_MAX_LIMIT,
+        min_value=1,
         help_text=_("I want to split the message to this many pieces. Max: 500"),
         widget=InputWidget(attrs={"type": "number", "max": CHUNK_MAX_LIMIT, "placeholder": _("Enter chunk size")}),
     )
@@ -891,6 +892,11 @@ class TriggerCRUDL(SmartCRUDL):
         success_url = "@triggers.trigger_list"
         success_message = ""
 
+        def get_context_data(self, *args, **kwargs):
+            context = super().get_context_data(*args, **kwargs)
+            context["org_timezone"] = self.org.timezone
+            return context
+
         def get_form_kwargs(self):
             kwargs = super().get_form_kwargs()
             kwargs["user"] = self.request.user
@@ -932,6 +938,14 @@ class TriggerCRUDL(SmartCRUDL):
 
             created_groups = []
             group_name = f"Large Send - {start_time.strftime('%Y-%m-%d')}"
+
+            try:
+                chunk_size = int(chunk_size)
+            except ValueError:
+                chunk_size = 1
+
+            if chunk_size == 0:
+                chunk_size = 1
 
             max_in_group = math.ceil(len(contacts) / chunk_size)
             chunk_count = 1
@@ -982,7 +996,16 @@ class TriggerCRUDL(SmartCRUDL):
             start_time = self.request.POST.get("start_time")
             limit_time = self.request.POST.get("limit_time", "false")
             groups = self.request.POST.get("groups", "").split(",")
-            chunk_size = int(self.request.POST.get("chunk_size"))
+            chunk_size = self.request.POST.get("chunk_size")
+
+            try:
+                chunk_size = int(chunk_size)
+            except ValueError:
+                chunk_size = 1
+
+            if chunk_size == 0:
+                chunk_size = 1
+
             contacts = []
 
             for group_id in groups:

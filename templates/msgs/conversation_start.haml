@@ -1,0 +1,21 @@
+-extends "smartmin/form.html"
+-load smartmin temba i18n contacts compress humanize
+
+-block modal-script
+ =block.super
+ :javascript
+    $(document).ready(function() {
+      let modax = document.querySelector("#send-message-modal");
+      let body = modax.shadowRoot.querySelector(".modax-body");
+      let templateSelect = body.querySelector("#id_template");
+      let loadTemplateText = () => {
+        let selectedId = Number.parseInt(templateSelect?.hiddenInputs[0]?.value);
+        if (!isNaN(selectedId)) {
+          fetch(`/conversation/preview_template/${selectedId}/`).then(response => response.json()).then(data => {
+            templateSelect.shadowRoot.querySelector("temba-field").helpText = data.template_text;
+          }).catch(console.error);
+        }
+      }
+      templateSelect.addEventListener("change", loadTemplateText);
+      setTimeout(loadTemplateText, 300);
+    });

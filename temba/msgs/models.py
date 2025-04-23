@@ -1407,3 +1407,31 @@ class MessageExternalIDMap(models.Model):
     created_on = models.DateTimeField(auto_created=True, blank=True, help_text="When this item was originally created")
     modified_on = models.DateTimeField(auto_now=True, blank=True, help_text="When this item was last modified")
     request_logs = JSONField(blank=True, null=True)
+
+
+class Conversation(models.Model):
+    """
+    A conversation is a collection of messages between a contact and manager
+    """
+
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversations")
+    contact = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="conversations")
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversations_created")
+    created_on = models.DateTimeField(auto_now_add=True)
+    modified_on = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.contact} - {self.created_by}"
+
+
+class ConversationTemplate(models.Model):
+    """
+    A conversation template is used to start new conversation (a first message to be sent)
+    """
+
+    org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_templates")
+    name = models.CharField(max_length=128, unique=True)
+    text = models.TextField()
+
+    def __str__(self):
+        return self.name
