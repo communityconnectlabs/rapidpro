@@ -286,3 +286,33 @@ def cache_twilio_stats_task():
             r.delete("org__twilio_stats__%d" % org.id)
             # call twilio_stats property to make 'redis_cached_property' work and store value in redis db
             _ = org.twilio_stats
+
+
+@shared_task(track_started=True, name="check_outbound_inbound_per_org_task")
+def check_outbound_inbound_per_org_task():
+    """
+    This task checks the outbound and inbound messages per org and sends a message to a Slack channel.
+    """
+    now = timezone.now()
+    end = pytz.utc.normalize(now.astimezone(pytz.utc)).replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday = end - timedelta(days=1)
+    yesterday_date = yesterday.date().strftime("%m-%d-%Y")
+    text = f"*CCL Customer Daily Report - {yesterday_date}* \n\n"
+
+    for org in Org.objects.filter(is_active=True).order_by("name"):
+        activity = org.contact_activity.last()
+        if activity:
+            text += (
+                f"*{org.name}*"
+                f"\n_Outbound: {activity.outgoing_count}_"
+                f"\n_Incoming: {activity.incoming_count}_"
+                f"\n_Contact Count: {activity.contact_count}_"
+                f"\n_Active Contact Count: {activity.active_contact_count}_\n\n"
+            )
+
+    url = settings.CUSTOMER_DAILY_REPORT_WEBHOOK_URL
+    headers = {"Content-Type": "application/json"}
+    data = {"text": text}
+    response = requests.post(url, json=data, headers=headers)
+    if response.status_code == 200:
+        logging.info(f"Message posted successfully to Slack from {yesterday_date}")
