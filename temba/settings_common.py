@@ -1185,7 +1185,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "preload-twilio-statistic": {"task": "cache_twilio_stats_task", "schedule": timedelta(minutes=30)},
     "block-deactivated-contacts": {"task": "block_deactivated_contacts_task", "schedule": crontab(hour=0, minute=30)},
-    "check-outbound-inbound-per-org": {"task": "check_outbound_inbound_per_org_task", "schedule": crontab(hour=5, minute=0)},
+    "check-outbound-inbound-per-org": {
+        "task": "check_outbound_inbound_per_org_task",
+        "schedule": crontab(hour=5, minute=0),
+    },
 }
 
 # -----------------------------------------------------------------------------------
