@@ -1252,7 +1252,6 @@ class ConversationCRUDL(SmartCRUDL):
             groups = list(omnibox["groups"])
             contacts = list(omnibox["contacts"])
             urn_strings = list(omnibox["urns"])
-            urns = []
 
             for urn_as_string in urn_strings:
                 scheme, path, query, display = URN.to_parts(urn_as_string)
@@ -1262,7 +1261,7 @@ class ConversationCRUDL(SmartCRUDL):
                     if not urn:
                         contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
                         urn = contact.urns.first()
-                    urns.append(urn)
+                    contacts.append(urn.contact)
                 except MailroomException:
                     pass
 
@@ -1272,7 +1271,7 @@ class ConversationCRUDL(SmartCRUDL):
                 text,
                 groups=groups,
                 contacts=contacts,
-                urns=urn_strings,
+                urns=[],
                 schedule=None,
                 status=Msg.STATUS_QUEUED,
                 template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
@@ -1282,16 +1281,13 @@ class ConversationCRUDL(SmartCRUDL):
                 user,
                 groups=groups,
                 contacts=contacts,
-                urns=urns,
             )
 
             self.post_save(broadcast)
             super().form_valid(form)
 
             analytics.track(
-                self.request.user,
-                "temba.broadcast_created",
-                dict(contacts=len(contacts), groups=len(groups), urns=len(urns)),
+                self.request.user, "temba.broadcast_created", dict(contacts=len(contacts), groups=len(groups))
             )
 
             if "HTTP_X_PJAX" in self.request.META:
@@ -1303,10 +1299,9 @@ class ConversationCRUDL(SmartCRUDL):
 
             return HttpResponseRedirect(self.get_success_url())
 
-        def start_connversations(self, org, user, groups, contacts, urns) -> Contact:
+        def start_connversations(self, org, user, groups, contacts) -> Contact:
             contact_ids = [contact.id for contact in contacts]
             contact_ids += Contact.objects.filter(org=org, all_groups__in=groups).values_list("id", flat=True)
-            contact_ids += Contact.objects.filter(org=org, urns__in=urns).values_list("id", flat=True)
             contact_ids = list(set(contact_ids))
             contacts = Contact.objects.filter(org=org, id__in=contact_ids, conversations__isnull=True)
             Conversation.objects.bulk_create(
