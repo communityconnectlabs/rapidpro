@@ -1121,9 +1121,31 @@ class LabelCRUDL(SmartCRUDL):
             return response
 
 
+class ConversationTemplateForm(forms.ModelForm):
+    name = forms.CharField(
+        widget=InputWidget(),
+    )
+    text = forms.CharField(
+        widget=CompletionTextarea(
+            attrs={
+                "label": "Text",
+                "placeholder": _("Hi @contact.name!"),
+                "widget_only": True,
+                "counter": "temba-charcount",
+                "spellchecker": True,
+            }
+        )
+    )
+
+    class Meta:
+        model = ConversationTemplate
+        fields = ("name", "text")
+        labels = {"name": _("Name"), "text": _("Text")}
+
+
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
-    actions = ("list", "start", "create_template", "delete_template", "preview_template")
+    actions = ("list", "start", "create_template", "update_template", "delete_template", "preview_template")
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
         class StartConversationForm(Form):
@@ -1325,27 +1347,6 @@ class ConversationCRUDL(SmartCRUDL):
             return context
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
-        class ConversationTemplateForm(forms.ModelForm):
-            name = forms.CharField(
-                widget=InputWidget(),
-            )
-            text = forms.CharField(
-                widget=CompletionTextarea(
-                    attrs={
-                        "label": "Text",
-                        "placeholder": _("Hi @contact.name!"),
-                        "widget_only": True,
-                        "counter": "temba-charcount",
-                        "spellchecker": True,
-                    }
-                )
-            )
-
-            class Meta:
-                model = ConversationTemplate
-                fields = ("name", "text")
-                labels = {"name": _("Name"), "text": _("Text")}
-
         model = ConversationTemplate
         success_url = "@msgs.conversation_list"
         form_class = ConversationTemplateForm
@@ -1371,6 +1372,11 @@ class ConversationCRUDL(SmartCRUDL):
                 return response
 
             return HttpResponseRedirect(self.get_success_url())
+
+    class UpdateTemplate(ModalMixin, OrgObjPermsMixin, SmartUpdateView):
+        model = ConversationTemplate
+        form_class = ConversationTemplateForm
+        permission = "msgs.conversation_create_template"
 
     class DeleteTemplate(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
         fields = ("id",)
