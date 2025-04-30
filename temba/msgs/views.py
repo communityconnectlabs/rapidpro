@@ -1323,7 +1323,10 @@ class ConversationCRUDL(SmartCRUDL):
 
     class List(SpaMixin, OrgPermsMixin, NotificationTargetMixin, SmartListView):
         paginate_by = None
-        default_order = ("contact__name",)
+        default_order = (
+            "-modified_on",
+            "contact__name",
+        )
 
         def derive_queryset(self, **kwargs):
             return Conversation.objects.filter(org=self.request.user.get_org())
