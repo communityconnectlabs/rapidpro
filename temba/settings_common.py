@@ -1185,6 +1185,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "preload-twilio-statistic": {"task": "cache_twilio_stats_task", "schedule": timedelta(minutes=30)},
     "block-deactivated-contacts": {"task": "block_deactivated_contacts_task", "schedule": crontab(hour=0, minute=30)},
+    "check-outbound-inbound-per-org": {
+        "task": "check_outbound_inbound_per_org_task",
+        "schedule": crontab(hour=5, minute=0),
+    },
 }
 
 # -----------------------------------------------------------------------------------
@@ -1554,3 +1558,5 @@ SOCIAL_AUTH_AZUREAD_OAUTH2_AUTHORIZATION_URL = (
     "https://login.microsoftonline.com/common/oauth2/authorize?prompt=select_account"
 )
 SOCIAL_AUTH_AZUREAD_OAUTH2_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/token"
+
+CUSTOMER_DAILY_REPORT_WEBHOOK_URL = os.environ.get("CUSTOMER_DAILY_REPORT_WEBHOOK_URL", "")
