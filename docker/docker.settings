@@ -303,3 +303,7 @@ TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", "false") == "true"
 
 FLOW_ANALYZER_ENDPOINT = os.environ.get("FLOW_ANALYZER_ENDPOINT", None)
 IVR_TRANSCRIBER_ENDPOINT = os.environ.get("IVR_TRANSCRIBER_ENDPOINT", None)
+
+AUTHENTICATION_BACKENDS = AUTHENTICATION_BACKENDS + (
+    "social_core.backends.azuread.AzureADOAuth2",
+)

@@ -31,6 +31,53 @@
     .p-6
       Please confirm you want to send on the following schedule:
 
+-block modal-extra-style
+  {{block.super}}
+  %link{rel:"stylesheet", href:"{{ STATIC_URL }}css/tailwind.css", type:"text/css"}
+  %link{type:'text/css', rel:'stylesheet', href:"{{ STATIC_URL }}fonts/temba/style.css", media:'all'}
+  :css
+    .embedded-data-large-send {
+      margin: 0 0 5px 4px;
+      font-weight: 400;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      line-height: normal;
+      color: rgb(119, 119, 119);
+    }
+
+    .embed-row {
+      display: flex;
+    }
+
+    .embed-field-large-send, .embed-value-large-send {
+      width: 49%;
+      margin: 0 5px 5px 0;
+    }
+
+    .embed-field-large-send > input, .embed-value-large-send > input {
+      width: calc(100% - 18px);
+      font-size: 13px;
+      padding: 9px;
+      border-radius: var(--curvature-widget);;
+      border: 1px solid var(--color-widget-border);
+      color: var(--color-widget-text);
+      outline: none;
+    }
+
+    .embed-field-large-send > input:read-only {
+      background: #eee;
+    }
+
+    .embed-value-large-send > input:focus {
+      background: var(--color-widget-bg-focused);
+      border-color: var(--color-focus);
+      box-shadow: var(--widget-box-shadow-focused);
+    }
+
+    .hidden {
+      display: none;
+    }
+
 -block modal-script
   {{block.super}}
 
@@ -174,7 +221,7 @@
           const count = index + 1;
           let currentChunk = chunkList[index];
           if (!currentChunk) return null;
-          const formatted = moment(new Date(scheduleTime)).format('MMMM Do YYYY, h:mm a');
+          const formatted = moment(new Date(scheduleTime).toLocaleString('en-US', { timeZone: '{{ org_timezone }}' })).format('MMMM Do YYYY, h:mm a');
           const message = `Chunk ${count} -> ${currentChunk} contact ${formatted}`;
           return `<div class="px-4 py-2 ${bgColor}">${message}</div>`;
         }).join('');
@@ -244,12 +291,7 @@
 
       const confirmSubmitButton = confirmationDialog.shadowRoot.querySelector('temba-button[destructive]');
       const confirmationCancelButton = confirmationFooter.querySelector('temba-button[secondary]');
-      const startTime = startTimeTextInput.shadowRoot.querySelector('temba-field');
-      const datePickerElem = startTimeTextInput.shadowRoot
-        .querySelector('temba-field')
-        .querySelector('lit-flatpickr');
 
-      datePickerElem.setAttribute('minDate', new Date().toJSON().substring(0, 10));
       confirmSubmitButton.onclick = submitForm;
       confirmationFooter.removeChild(confirmationCancelButton);
 
@@ -287,4 +329,12 @@
 
     $(document).ready(function () {
       setTimeout(setupModal, 200);
+      const body = document.querySelector("#create-large-send").getBody();
+      const datePickerElem = body.querySelector('#id_start_time').shadowRoot.querySelector('lit-flatpickr');
+      const currentDate = new Date().toLocaleString('en-US', { timeZone: '{{ org_timezone }}' });
+      const minDate = moment(currentDate).format('YYYY-MM-DD');
+      datePickerElem.setAttribute('minDate', minDate);
+
+      const chunkElem = body.querySelector('#id_chunk_size').shadowRoot.querySelector('input.textinput');
+      chunkElem.setAttribute("type", "number");
     });
