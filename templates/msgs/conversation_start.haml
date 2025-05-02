@@ -9,7 +9,7 @@
       let body = modax.shadowRoot.querySelector(".modax-body");
       let templateSelect = body.querySelector("#id_template");
       let loadTemplateText = () => {
-        let selectedId = Number.parseInt(templateSelect?.hiddenInputs[0]?.value);
+        let selectedId = Number.parseInt(templateSelect?.value?.value);
         if (!isNaN(selectedId)) {
           fetch(`/conversation/preview_template/${selectedId}/`).then(response => response.json()).then(data => {
             templateSelect.shadowRoot.querySelector("temba-field").helpText = data.template_text;
