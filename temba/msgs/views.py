@@ -1254,12 +1254,11 @@ class ConversationCRUDL(SmartCRUDL):
             urn_strings = list(omnibox["urns"])
 
             for urn_as_string in urn_strings:
-                scheme, path, query, display = URN.to_parts(urn_as_string)
-                urn_as_string = URN.from_parts(scheme, path)
+                urn_as_string = URN.normalize(urn_as_string, org.default_country_code)
                 try:
                     urn = ContactURN.objects.filter(org=org, identity=urn_as_string).first()
                     if not urn:
-                        contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
+                        contact = Contact.create(org, user, "", "", [urn_as_string], {}, [])
                         urn = contact.urns.first()
                     contacts.append(urn.contact)
                 except MailroomException:
