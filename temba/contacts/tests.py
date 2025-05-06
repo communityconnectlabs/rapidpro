@@ -5996,7 +5996,7 @@ class ContactImportTest(TembaTest):
                     "uuid": "17c4388a-024f-4e67-937a-13be78a70766",
                     "fields": {
                         "a_number": "1234.5678",
-                        "a_date": "2020-10-19",
+                        "a_date": "2020-10-19T00:00:00+02:00",
                         "a_time": "13:17:00",
                         "a_datetime": "2020-10-19T13:18:00+02:00",
                         "price": "123.45",
