@@ -1121,9 +1121,31 @@ class LabelCRUDL(SmartCRUDL):
             return response
 
 
+class ConversationTemplateForm(forms.ModelForm):
+    name = forms.CharField(
+        widget=InputWidget(),
+    )
+    text = forms.CharField(
+        widget=CompletionTextarea(
+            attrs={
+                "label": "Text",
+                "placeholder": _("Hi @contact.name!"),
+                "widget_only": True,
+                "counter": "temba-charcount",
+                "spellchecker": True,
+            }
+        )
+    )
+
+    class Meta:
+        model = ConversationTemplate
+        fields = ("name", "text")
+        labels = {"name": _("Name"), "text": _("Text")}
+
+
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
-    actions = ("list", "start", "create_template", "delete_template", "preview_template")
+    actions = ("list", "start", "create_template", "update_template", "delete_template", "preview_template")
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
         class StartConversationForm(Form):
@@ -1230,17 +1252,15 @@ class ConversationCRUDL(SmartCRUDL):
             groups = list(omnibox["groups"])
             contacts = list(omnibox["contacts"])
             urn_strings = list(omnibox["urns"])
-            urns = []
 
             for urn_as_string in urn_strings:
-                scheme, path, query, display = URN.to_parts(urn_as_string)
-                urn_as_string = URN.from_parts(scheme, path)
+                urn_as_string = URN.normalize(urn_as_string, org.default_country_code)
                 try:
                     urn = ContactURN.objects.filter(org=org, identity=urn_as_string).first()
                     if not urn:
-                        contact = Contact.create(org, user, display, "", [urn_as_string], {}, [])
+                        contact = Contact.create(org, user, "", "", [urn_as_string], {}, [])
                         urn = contact.urns.first()
-                    urns.append(urn)
+                    contacts.append(urn.contact)
                 except MailroomException:
                     pass
 
@@ -1250,7 +1270,7 @@ class ConversationCRUDL(SmartCRUDL):
                 text,
                 groups=groups,
                 contacts=contacts,
-                urns=urn_strings,
+                urns=[],
                 schedule=None,
                 status=Msg.STATUS_QUEUED,
                 template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
@@ -1260,16 +1280,13 @@ class ConversationCRUDL(SmartCRUDL):
                 user,
                 groups=groups,
                 contacts=contacts,
-                urns=urns,
             )
 
             self.post_save(broadcast)
             super().form_valid(form)
 
             analytics.track(
-                self.request.user,
-                "temba.broadcast_created",
-                dict(contacts=len(contacts), groups=len(groups), urns=len(urns)),
+                self.request.user, "temba.broadcast_created", dict(contacts=len(contacts), groups=len(groups))
             )
 
             if "HTTP_X_PJAX" in self.request.META:
@@ -1281,10 +1298,9 @@ class ConversationCRUDL(SmartCRUDL):
 
             return HttpResponseRedirect(self.get_success_url())
 
-        def start_connversations(self, org, user, groups, contacts, urns) -> Contact:
+        def start_connversations(self, org, user, groups, contacts) -> Contact:
             contact_ids = [contact.id for contact in contacts]
             contact_ids += Contact.objects.filter(org=org, all_groups__in=groups).values_list("id", flat=True)
-            contact_ids += Contact.objects.filter(org=org, urns__in=urns).values_list("id", flat=True)
             contact_ids = list(set(contact_ids))
             contacts = Contact.objects.filter(org=org, id__in=contact_ids, conversations__isnull=True)
             Conversation.objects.bulk_create(
@@ -1306,7 +1322,10 @@ class ConversationCRUDL(SmartCRUDL):
 
     class List(SpaMixin, OrgPermsMixin, NotificationTargetMixin, SmartListView):
         paginate_by = None
-        default_order = ("contact__name",)
+        default_order = (
+            "-modified_on",
+            "contact__name",
+        )
 
         def derive_queryset(self, **kwargs):
             return Conversation.objects.filter(org=self.request.user.get_org())
@@ -1325,27 +1344,6 @@ class ConversationCRUDL(SmartCRUDL):
             return context
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
-        class ConversationTemplateForm(forms.ModelForm):
-            name = forms.CharField(
-                widget=InputWidget(),
-            )
-            text = forms.CharField(
-                widget=CompletionTextarea(
-                    attrs={
-                        "label": "Text",
-                        "placeholder": _("Hi @contact.name!"),
-                        "widget_only": True,
-                        "counter": "temba-charcount",
-                        "spellchecker": True,
-                    }
-                )
-            )
-
-            class Meta:
-                model = ConversationTemplate
-                fields = ("name", "text")
-                labels = {"name": _("Name"), "text": _("Text")}
-
         model = ConversationTemplate
         success_url = "@msgs.conversation_list"
         form_class = ConversationTemplateForm
@@ -1371,6 +1369,11 @@ class ConversationCRUDL(SmartCRUDL):
                 return response
 
             return HttpResponseRedirect(self.get_success_url())
+
+    class UpdateTemplate(ModalMixin, OrgObjPermsMixin, SmartUpdateView):
+        model = ConversationTemplate
+        form_class = ConversationTemplateForm
+        permission = "msgs.conversation_create_template"
 
     class DeleteTemplate(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
         fields = ("id",)
