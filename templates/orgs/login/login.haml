@@ -84,6 +84,8 @@
       %a.button-primary#ms-login-button(href="{% url 'social:begin' 'azuread-oauth2' %}")
         %img.mr-1(src="{{STATIC_URL}}images/microsoft-icon.ico")
         Sign in with your Microsoft ID
+      %a.button-primary#ms-login-button(href="{% url 'social:begin' 'okta-openidconnect' %}")
+        Sign in with your Okta account
 
 -block extra-script
   %script
