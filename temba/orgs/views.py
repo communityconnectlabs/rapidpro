@@ -2096,6 +2096,11 @@ class OrgCRUDL(SmartCRUDL):
                 required=False,
                 widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
             )
+            chat_users = forms.ModelMultipleChoiceField(
+                User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
+            )
 
             def __init__(self, org, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -2143,6 +2148,7 @@ class OrgCRUDL(SmartCRUDL):
                     "is_multi_org",
                     "is_suspended",
                     "administrators",
+                    "chat_users",
                     "editors",
                     "viewers",
                     "surveyors",
@@ -4893,7 +4899,7 @@ class OrgCRUDL(SmartCRUDL):
                         initial = message.get(lang_code, default_message)
 
                     field = forms.CharField(
-                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
+                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": False}),
                         required=False,
                         label=lang_name,
                         initial=initial,
@@ -4909,7 +4915,7 @@ class OrgCRUDL(SmartCRUDL):
                 # add our default language, we'll insert it at the front of the list
                 if base_language and base_language not in self.fields:
                     field = forms.CharField(
-                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
+                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": False}),
                         required=False,
                         label=_("Default"),
                         initial=message.get(base_language, default_message),

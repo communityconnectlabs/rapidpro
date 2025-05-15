@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 from urllib.parse import quote_plus
 
@@ -15,6 +16,7 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Q
 from django.db.models.functions.text import Upper
 from django.forms import Form
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
@@ -91,7 +93,7 @@ class SendMessageForm(Form):
                 "placeholder": _("Hi @contact.name!"),
                 "widget_only": True,
                 "counter": "temba-charcount",
-                "spellchecker": True,
+                "spellchecker": False,
             }
         )
     )
@@ -246,7 +248,7 @@ class InboxView(SpaMixin, OrgPermsMixin, BulkActionMixin, SmartListView):
 class BroadcastForm(forms.ModelForm):
     message = forms.CharField(
         required=True,
-        widget=CompletionTextarea(attrs={"placeholder": _("Hi @contact.name!"), "spellchecker": True}),
+        widget=CompletionTextarea(attrs={"placeholder": _("Hi @contact.name!"), "spellchecker": False}),
         max_length=Broadcast.MAX_TEXT_LEN,
     )
 
@@ -1132,7 +1134,7 @@ class ConversationTemplateForm(forms.ModelForm):
                 "placeholder": _("Hi @contact.name!"),
                 "widget_only": True,
                 "counter": "temba-charcount",
-                "spellchecker": True,
+                "spellchecker": False,
             }
         )
     )
@@ -1261,7 +1263,8 @@ class ConversationCRUDL(SmartCRUDL):
                         contact = Contact.create(org, user, "", "", [urn_as_string], {}, [])
                         urn = contact.urns.first()
                     contacts.append(urn.contact)
-                except MailroomException:
+                except MailroomException as e:
+                    logging.info(f"Unable to create contact: {str(e)}")
                     pass
 
             broadcast = Broadcast.create(
@@ -1335,11 +1338,12 @@ class ConversationCRUDL(SmartCRUDL):
             context = super().get_context_data(**kwargs)
             context["chats_count"] = self.derive_queryset().count()
             context["templates"] = ConversationTemplate.objects.filter(org=self.request.user.get_org())
-            context["chats"] = (
-                self.derive_queryset()
-                .order_by(*self.default_order)
-                .filter(**({} if not search else {"contact__name__icontains": search}))
-            )
+            queryset = self.derive_queryset().order_by(*self.default_order)
+            if search:
+                queryset = queryset.filter(
+                    Q(contact__name__icontains=search) | Q(contact__urns__path__icontains=search)
+                )
+            context["chats"] = queryset
 
             return context
 

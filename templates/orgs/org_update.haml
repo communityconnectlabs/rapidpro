@@ -84,3 +84,12 @@
         -for user in org.surveyors.all
           %a{href:'{% url "users.user_update" user.id %}'}
             {{user.email}}
+
+    -if org.chat_users.all
+      .mb-3.org_users_block
+        .cap-label
+          Chat Users
+
+        -for user in org.chat_users.all
+          %a{href:'{% url "users.user_update" user.id %}'}
+            {{user.email}}
