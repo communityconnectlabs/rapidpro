@@ -1,7 +1,6 @@
 import logging
 from datetime import date, timedelta
 from urllib.parse import quote_plus
-from django.db.models import Q
 
 from smartmin.views import (
     SmartCreateView,
@@ -17,6 +16,7 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Q
 from django.db.models.functions.text import Upper
 from django.forms import Form
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
