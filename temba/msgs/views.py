@@ -1341,12 +1341,7 @@ class ConversationCRUDL(SmartCRUDL):
             queryset = self.derive_queryset().order_by(*self.default_order)
             if search:
                 search = (
-                    str(search)
-                    .replace(" ", "")
-                    .replace(",", "")
-                    .replace("(", "")
-                    .replace(")", "")
-                    .replace("-", "")
+                    str(search).replace(" ", "").replace(",", "").replace("(", "").replace(")", "").replace("-", "")
                 )
                 queryset = queryset.filter(
                     Q(contact__name__icontains=search) | Q(contact__urns__path__icontains=search)
