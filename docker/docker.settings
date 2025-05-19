@@ -306,4 +306,5 @@ IVR_TRANSCRIBER_ENDPOINT = os.environ.get("IVR_TRANSCRIBER_ENDPOINT", None)
 
 AUTHENTICATION_BACKENDS = AUTHENTICATION_BACKENDS + (
     "social_core.backends.azuread.AzureADOAuth2",
+    "social_core.backends.okta_openidconnect.OktaOpenIdConnect",
 )
