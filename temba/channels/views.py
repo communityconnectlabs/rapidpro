@@ -967,6 +967,16 @@ class UpdateWebChatForm(UpdateChannelForm):
         )
 
         self.add_config_field(
+            "welcome_msg_expand",
+            forms.BooleanField(
+                required=False,
+                label=_("Extend to full width"),
+                widget=forms.CheckboxInput(),
+            ),
+            default=None,
+        )
+
+        self.add_config_field(
             "inputtext_placeholder_default",
             forms.CharField(
                 label=_("Input Text Placeholder"),
