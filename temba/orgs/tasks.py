@@ -298,8 +298,8 @@ def check_outbound_inbound_per_org_task():
     yesterday = end - timedelta(days=1)
     yesterday_date = yesterday.date().strftime("%m-%d-%Y")
     text = f"*CCL Customer Daily Report - {yesterday_date}* \n\n"
-
-    for org in Org.objects.filter(is_active=True).order_by("name"):
+    query = "SELECT * FROM orgs_org WHERE is_active = true AND config::json->>'enable_report' = 'true' ORDER BY name;"
+    for org in Org.objects.raw(query):
         activity = org.contact_activity.last()
         if activity:
             text += (

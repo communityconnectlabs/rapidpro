@@ -2076,6 +2076,11 @@ class OrgCRUDL(SmartCRUDL):
             parent = forms.IntegerField(required=False)
             plan_end = forms.DateTimeField(required=False)
             non_contact_hours = forms.BooleanField(required=False)
+            enable_report = forms.BooleanField(
+                required=False,
+                label=_("Include in Daily Report"),
+                help_text=_("When enabled the current Org will appear in daily report"),
+            )
             viewers = forms.ModelMultipleChoiceField(
                 User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
                 required=False,
@@ -2102,6 +2107,7 @@ class OrgCRUDL(SmartCRUDL):
 
                 self.limits_rows = []
                 self.add_limits_fields(org)
+                self.fields["enable_report"].initial = org.config.get("enable_report", False)
 
             def clean_parent(self):
                 parent = self.cleaned_data.get("parent")
@@ -2142,6 +2148,7 @@ class OrgCRUDL(SmartCRUDL):
                     "is_multi_user",
                     "is_multi_org",
                     "is_suspended",
+                    "enable_report",
                     "administrators",
                     "editors",
                     "viewers",
@@ -2255,6 +2262,7 @@ class OrgCRUDL(SmartCRUDL):
             obj.limits = cleaned_data["limits"]
             obj.config = obj.config or {}
             obj.config["non_contact_hours"] = cleaned_data["non_contact_hours"]
+            obj.config["enable_report"] = cleaned_data["enable_report"]
             return obj
 
         def derive_initial(self):
