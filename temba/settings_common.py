@@ -1071,7 +1071,7 @@ LOGOUT_URL = "/users/logout/"
 LOGIN_REDIRECT_URL = "/org/choose/"
 LOGOUT_REDIRECT_URL = "/"
 
-AUTHENTICATION_BACKENDS = ("smartmin.backends.CaseInsensitiveBackend", "djangosaml2.backends.Saml2Backend")
+AUTHENTICATION_BACKENDS = ("smartmin.backends.CaseInsensitiveBackend",)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
@@ -1559,10 +1559,6 @@ SOCIAL_AUTH_AZUREAD_OAUTH2_AUTHORIZATION_URL = (
 )
 SOCIAL_AUTH_AZUREAD_OAUTH2_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/token"
 
-SOCIAL_AUTH_OKTA_OPENIDCONNECT_KEY = os.environ.get("SOCIAL_AUTH_OKTA_OPENIDCONNECT_KEY")
-SOCIAL_AUTH_OKTA_OPENIDCONNECT_SECRET = os.environ.get("SOCIAL_AUTH_OKTA_OPENIDCONNECT_SECRET")
-SOCIAL_AUTH_OKTA_OPENIDCONNECT_API_URL = os.environ.get("SOCIAL_AUTH_OKTA_OPENIDCONNECT_API_URL")
-
 CUSTOMER_DAILY_REPORT_WEBHOOK_URL = os.environ.get("CUSTOMER_DAILY_REPORT_WEBHOOK_URL", "")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1597,7 +1593,7 @@ SAML_CONFIG = {
     },
     "debug": True,
     "key_file": os.path.join(BASE_DIR, "../certs", "sp-key.pem"),
-    "cert_file": os.path.join(BASE_DIR, "../certs", "sp-cert-pub.pem"),
+    "cert_file": os.path.join(BASE_DIR, "../certs", "sp-cert.pem"),
 }
 
 SAML_DJANGO_USER_MAIN_ATTRIBUTE = "username"

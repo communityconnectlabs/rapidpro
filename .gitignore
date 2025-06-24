@@ -80,6 +80,8 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+certs/sp-key.pem
+certs/sp-cert.pem
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

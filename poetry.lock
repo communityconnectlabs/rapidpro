@@ -843,6 +843,22 @@ django = ">=3.0"
 pytz = "*"
 
 [[package]]
+name = "djangosaml2"
+version = "1.9.3"
+description = "pysaml2 integration for Django"
+optional = false
+python-versions = "*"
+files = [
+    {file = "djangosaml2-1.9.3-py2.py3-none-any.whl", hash = "sha256:424d618f0f72fa73cb5e6c6a9ea50624c1b8d5448496c0065d0b981c7cae0591"},
+    {file = "djangosaml2-1.9.3.tar.gz", hash = "sha256:68076771be50076993cfec916139f327ec3a429acb92de0fe4b3d35112638e61"},
+]
+
+[package.dependencies]
+defusedxml = ">=0.4.1"
+Django = ">=3.2"
+pysaml2 = ">=6.5.1"
+
+[[package]]
 name = "ecdsa"
 version = "0.19.1"
 description = "ECDSA cryptographic signature library (pure python)"
@@ -899,6 +915,20 @@ six = "*"
 
 [package.extras]
 develop = ["coverage (<5.0.0)", "mock", "pytest (>=3.0.0)", "pytest-cov", "pytest-mock (<3.0.0)", "pytz", "sphinx", "sphinx-rtd-theme"]
+
+[[package]]
+name = "elementpath"
+version = "4.8.0"
+description = "XPath 1.0/2.0/3.0/3.1 parsers and selectors for ElementTree and lxml"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "elementpath-4.8.0-py3-none-any.whl", hash = "sha256:5393191f84969bcf8033b05ec4593ef940e58622ea13cefe60ecefbbf09d58d9"},
+    {file = "elementpath-4.8.0.tar.gz", hash = "sha256:5822a2560d99e2633d95f78694c7ff9646adaa187db520da200a8e9479dc46ae"},
+]
+
+[package.extras]
+dev = ["Sphinx", "coverage", "flake8", "lxml", "lxml-stubs", "memory-profiler", "memray", "mypy", "tox", "xmlschema (>=3.3.2)"]
 
 [[package]]
 name = "et-xmlfile"
@@ -2049,6 +2079,25 @@ docs = ["sphinx (>=4.5.0,<5.0.0)", "sphinx-rtd-theme", "zope.interface"]
 tests = ["coverage[toml] (==5.0.4)", "pytest (>=6.0.0,<7.0.0)"]
 
 [[package]]
+name = "pyopenssl"
+version = "21.0.0"
+description = "Python wrapper module around the OpenSSL library"
+optional = false
+python-versions = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*"
+files = [
+    {file = "pyOpenSSL-21.0.0-py2.py3-none-any.whl", hash = "sha256:8935bd4920ab9abfebb07c41a4f58296407ed77f04bd1a92914044b848ba1ed6"},
+    {file = "pyOpenSSL-21.0.0.tar.gz", hash = "sha256:5e2d8c5e46d0d865ae933bef5230090bdaf5506281e9eec60fa250ee80600cb3"},
+]
+
+[package.dependencies]
+cryptography = ">=3.3"
+six = ">=1.5.2"
+
+[package.extras]
+docs = ["sphinx", "sphinx-rtd-theme"]
+test = ["flaky", "pretend", "pytest (>=3.0.1)"]
+
+[[package]]
 name = "pyotp"
 version = "2.4.1"
 description = "Python One Time Password Library"
@@ -2072,6 +2121,29 @@ files = [
 
 [package.extras]
 diagrams = ["jinja2", "railroad-diagrams"]
+
+[[package]]
+name = "pysaml2"
+version = "7.5.2"
+description = "Python implementation of SAML Version 2 Standard"
+optional = false
+python-versions = "<4.0,>=3.9"
+files = [
+    {file = "pysaml2-7.5.2-py3-none-any.whl", hash = "sha256:6f7dc0cc3a72772821ebc92e7ee8df213945f8f9be766c647fb026eba4ca90fe"},
+    {file = "pysaml2-7.5.2.tar.gz", hash = "sha256:529fd58107c49a9fd0e98fe545094072262d6533c6acf1124102eab170797de2"},
+]
+
+[package.dependencies]
+cryptography = ">=3.1"
+defusedxml = "*"
+pyopenssl = "<24.3.0"
+python-dateutil = "*"
+pytz = "*"
+requests = ">=2,<3"
+xmlschema = ">=2,<3"
+
+[package.extras]
+s2repoze = ["paste", "repoze.who", "zope.interface"]
 
 [[package]]
 name = "pysocks"
@@ -3125,6 +3197,25 @@ files = [
 ]
 
 [[package]]
+name = "xmlschema"
+version = "2.5.1"
+description = "An XML Schema validator and decoder"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "xmlschema-2.5.1-py3-none-any.whl", hash = "sha256:ec2b2a15c8896c1fcd14dcee34ca30032b99456c3c43ce793fdb9dca2fb4b869"},
+    {file = "xmlschema-2.5.1.tar.gz", hash = "sha256:4f7497de6c8b6dc2c28ad7b9ed6e21d186f4afe248a5bea4f54eedab4da44083"},
+]
+
+[package.dependencies]
+elementpath = ">=4.1.5,<5.0.0"
+
+[package.extras]
+codegen = ["elementpath (>=4.1.5,<5.0.0)", "jinja2"]
+dev = ["Sphinx", "coverage", "elementpath (>=4.1.5,<5.0.0)", "flake8", "jinja2", "lxml", "lxml-stubs", "memory-profiler", "mypy", "sphinx-rtd-theme", "tox"]
+docs = ["Sphinx", "elementpath (>=4.1.5,<5.0.0)", "jinja2", "sphinx-rtd-theme"]
+
+[[package]]
 name = "zipp"
 version = "3.15.0"
 description = "Backport of pathlib-compatible object wrapper for zip files"
@@ -3142,4 +3233,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "583c6047f0d0f2354212e185f4f2db978472cbd07e986af18477fe089f1a662e"
+content-hash = "699e6f7204d6e73e897d73b22eeb0d9c901494aa807d9f59c61c371f054dcfa5"
