@@ -1,5 +1,8 @@
 FROM greatnonprofits/ccl-base:v4
 
+RUN apt-get update
+RUN apt-get install -y xmlsec1 libxml2 libxmlsec1 libxmlsec1-openssl
+
 RUN wget https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem \
     -O /usr/local/share/ca-certificates/rds.crt
 RUN update-ca-certificates
@@ -22,6 +25,8 @@ RUN poetry export --without-hashes --output pip-freeze.txt
 RUN pip3 install -r pip-freeze.txt
 
 COPY . /rapidpro
+RUN openssl genrsa -out /rapidpro/certs/sp-key.pem 2048
+RUN openssl req -new -x509 -key /rapidpro/certs/sp-key.pem -out /rapidpro/certs/sp-cert.pem -days 3650 -subj "/CN=communityconnectlabs.saml"
 COPY docker/docker.settings /rapidpro/temba/settings.py
 
 RUN npm install
