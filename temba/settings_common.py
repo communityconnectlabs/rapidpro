@@ -1057,8 +1057,6 @@ GROUP_PERMISSIONS = {
         "msgs.broadcast_api",
         "msgs.conversation_list",
         "msgs.conversation_start",
-        "msgs.conversation_create_template",
-        "msgs.conversation_delete_template",
         "msgs.conversation_preview_template",
     ),
 }
