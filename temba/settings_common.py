@@ -4,6 +4,7 @@ import sys
 from datetime import timedelta
 
 import iptools
+import saml2
 import sentry_sdk
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
@@ -215,6 +216,7 @@ FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 MIDDLEWARE = (
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "djangosaml2.middleware.SamlSessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -304,6 +306,7 @@ INSTALLED_APPS = (
     "temba.links",
     # Social-auth app
     "social_django",
+    "djangosaml2",
 )
 
 # the last installed app that uses smartmin permissions
@@ -1054,8 +1057,6 @@ GROUP_PERMISSIONS = {
         "msgs.broadcast_api",
         "msgs.conversation_list",
         "msgs.conversation_start",
-        "msgs.conversation_create_template",
-        "msgs.conversation_delete_template",
         "msgs.conversation_preview_template",
     ),
 }
@@ -1106,7 +1107,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 INTERNAL_IPS = iptools.IpRangeList("127.0.0.1", "192.168.0.10", "192.168.0.0/24", "0.0.0.0")  # network block
 
-HOSTNAME = "localhost"
+HOSTNAME = os.environ.get("HOSTNAME", "localhost")
 
 # The URL and port of the proxy server to use when needed (if any, in requests format)
 OUTGOING_PROXIES = {}
@@ -1557,3 +1558,48 @@ SOCIAL_AUTH_AZUREAD_OAUTH2_AUTHORIZATION_URL = (
 SOCIAL_AUTH_AZUREAD_OAUTH2_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/token"
 
 CUSTOMER_DAILY_REPORT_WEBHOOK_URL = os.environ.get("CUSTOMER_DAILY_REPORT_WEBHOOK_URL", "")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SAML_REMOTE = str(os.environ.get("SAML_REMOTE", "")).split(",")
+SAML_REMOTE_LIST = [{"url": url} for url in SAML_REMOTE if url.strip()]
+
+SAML_CONFIG = {
+    "xmlsec_binary": "/usr/bin/xmlsec1",
+    "entityid": f"https://{HOSTNAME}/saml2/metadata/",
+    "attribute_map_dir": os.path.join(BASE_DIR, "../attribute_maps"),
+    "service": {
+        "sp": {
+            "name": "CommunityConnect Labs",
+            "endpoints": {
+                "assertion_consumer_service": [
+                    (f"https://{HOSTNAME}/saml2/acs/", saml2.BINDING_HTTP_POST),
+                ],
+                "single_logout_service": [
+                    (f"https://{HOSTNAME}/saml2/ls/", saml2.BINDING_HTTP_REDIRECT),
+                ],
+            },
+            "allow_unsolicited": True,
+            "authn_requests_signed": False,
+            "logout_requests_signed": True,
+            "want_assertions_signed": True,
+            "want_response_signed": False,
+        },
+    },
+    "metadata": {
+        "remote": SAML_REMOTE_LIST,
+    },
+    "debug": True,
+    "key_file": os.path.join(BASE_DIR, "../certs", "sp-key.pem"),
+    "cert_file": os.path.join(BASE_DIR, "../certs", "sp-cert.pem"),
+}
+
+SAML_DJANGO_USER_MAIN_ATTRIBUTE = "username"
+SAML_USE_NAME_ID_AS_USERNAME = True
+
+SAML_ATTRIBUTE_MAPPING = {
+    "email": ("email",),
+    "username": ("UserName",),
+    "first_name": ("FirstName",),
+    "last_name": ("LastName",),
+}

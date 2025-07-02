@@ -91,6 +91,7 @@
           {% endfor %}
 
           {% render_field "welcome_msg_quick_replies" %}
+          {% render_field "welcome_msg_expand" %}
         </div>
       </div>
 
@@ -355,6 +356,7 @@
       var sideOfScreen = sideOfScreenValue;
       var googleFont = googleFontValue;
       var welcomeMessageQuickReplies = quickRepliesForm;
+      var welcomeMessageWidth = $("#id_welcome_msg_expand").val() ? "100%" : undefined;
 
       var quickRepliesValue = $("#id_welcome_msg_quick_replies")[0].values || [];
       if (quickRepliesValue.length > 0) {
@@ -406,7 +408,8 @@
           width: width,
           height: height,
           fabTextColor: chatHeaderTextColor,
-          fabBackgroundColor: chatHeaderBackgroundColor
+          fabBackgroundColor: chatHeaderBackgroundColor,
+          welcomeMessageWidth: welcomeMessageWidth
         },
         meta: {
           icon: {
