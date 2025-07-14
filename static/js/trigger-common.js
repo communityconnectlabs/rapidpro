@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 function getPJAXContent(url, container, options) {
   let type = 'GET';
   let data;
@@ -99,6 +101,9 @@ function handleSubmissionResponse(requiredFields, form, responseData) {
   if (!hasErrors && !hasNonFieldErrors) {
     window.document.location.href = jqXHR.getResponseHeader('REDIRECT') || '/trigger/';
   }
+
+  // activate submit button after response received
+  form.find("input[type='submit']").prop('disabled', false);
 }
 
 function initForm(options) {
@@ -116,12 +121,14 @@ function initForm(options) {
     confirmationBox.classList.remove('hide');
     confirmationBox.open = true;
   });
-  
+
   confirmationBox.addEventListener('temba-button-clicked', function(event) {
     const container = formContainerId + ' > .formax-container';
     const options = { form, container, successFunc, postUrl };
     if (!event.detail.button.secondary) submitFormData(options);
     confirmationBox.classList.add('hide');
     confirmationBox.open = false;
+    // deactivate submit button
+    form.find("input[type='submit']").prop('disabled', true);
   });
 }
