@@ -113,7 +113,8 @@ def attachment_button(attachment: str) -> dict:
 
     # parse the MIME content type
     if "/" in content_type:
-        category, sub_type = content_type.split("/", maxsplit=2)
+        # result of split will be maxsplit + 1
+        category, sub_type = content_type.split("/", maxsplit=1)
     else:
         category, sub_type = content_type, ""
 
