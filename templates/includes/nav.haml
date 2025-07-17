@@ -243,7 +243,7 @@
         -trans "logging"
 
   -if not request.user.is_anonymous
-    - if not user.is_chat_user
+    - if not user.is_chat_user and not user.is_superuser
       %a{href:"{% url 'dashboard.dashboard_home' %}", class:"{% active request 'dashboard(?!/flows)' %}"}
         .circle
           .icon-bars-3.icon-1
