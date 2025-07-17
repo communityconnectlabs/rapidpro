@@ -1,8 +1,10 @@
+/* jshint esversion: 6 */
+
 (function() {
-    var _bindToggle, _initializeForm, _submitFormax, hideSection, showSection;
+    let _bindToggle, _initializeForm, _submitFormax, hideSection, showSection;
   
     showSection = function(section) {
-      var ie;
+      let ie;
       ie = section.parents("html").hasClass("ie");
       if (section.data("readonly")) {
         return;
@@ -25,7 +27,7 @@
      */
   
     hideSection = function(section) {
-      var ie;
+      let ie;
       if (section.data("action") === 'fixed') {
         return;
       }
@@ -46,11 +48,11 @@
      */
   
     window.fetchData = function(section) {
-      var url;
+      let url;
 
       const headers = {
         "X-FORMAX": true
-      }
+      };
       
       if (section.closest(".spa-container")) {
         headers["TEMBA-SPA"] = 1;
@@ -78,7 +80,7 @@
     };
   
     _initializeForm = function(section) {
-      var action, buttonName, form, onLoad;
+      let action, buttonName, form, onLoad;
       action = section.data('action');
       form = section.find("form");
       if (action === 'formax' || action === 'redirect' || action === 'open') {
@@ -113,7 +115,7 @@
     };
   
     _submitFormax = function(e) {
-      var followRedirects, form, section;
+      let followRedirects, form, section;
       e.preventDefault();
       form = $(this);
       section = form.parents(".formax-section");
@@ -124,19 +126,19 @@
 
       const headers = {
         "X-FORMAX": true
-      }
+      };
       
       if (section.closest(".spa-container")) {
         headers["TEMBA-SPA"] = 1;
       }
 
-      var formData = new FormData(this);
+      let formData = new FormData(this);
       return fetchPJAXContent(section.data("href"), "#" + section.attr("id") + " > .formax-container", {
         formData: formData,
         headers: headers,
         followRedirects: followRedirects,
         onSuccess: function() {
-          var dependents, formax_form;
+          let dependents, formax_form;
           _initializeForm(section);
           formax_form = section.find(".formax-form");
           if (formax_form.hasClass("errors")) {
@@ -160,7 +162,7 @@
   
     _bindToggle = function(bindTo) {
 
-      var action, section;
+      let action, section;
       section = bindTo.parents(".formax-section");
       action = section.data('action');
       if (action === 'fixed') {
@@ -168,7 +170,7 @@
       } else if (action === 'formax' || action === 'redirect' || action === 'open') {
         return bindTo.off("click").on("click", function() {
           section = $(this);
-          if (!bindTo.tagName !== "formax") {
+          if (bindTo.tagName !== "formax") {
             section = bindTo.parents(".formax-section");
           }
           $(".formax > .formax-section").each(function() {
@@ -184,24 +186,24 @@
         });
       } else if (action === 'link') {
         return bindTo.off("click").on("click", function() {
-          return document.location.href = section.data('href');
+          document.location.href = section.data('href');
         });
       }
     };
   
     $(function() {
       $('.formax-section .formax-summary').each(function() {
-        var section;
+        let section;
         section = $(this);
         return _bindToggle(section);
       });
       $('.formax .formax-section').each(function() {
-        var section;
+        let section;
         section = $(this);
         return _initializeForm(section);
       });
       return $('.formax-section .formax-icon').each(function() {
-        var section;
+        let section;
         section = $(this);
         return _bindToggle(section);
       });
