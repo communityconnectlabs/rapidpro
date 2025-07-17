@@ -4,7 +4,6 @@ from django import forms
 from django.utils.translation import gettext_lazy as _
 
 from temba.contacts.models import URN
-from temba.utils.fields import ExternalURLField
 
 from ...models import Channel
 from ...views import ALL_COUNTRIES, ClaimViewMixin
@@ -43,10 +42,7 @@ class ClaimView(ClaimViewMixin, SmartFormView):
 
         data = form.cleaned_data
 
-        config = {
-            Channel.CONFIG_BASE_URL: "https://waba.360dialog.io",
-            Channel.CONFIG_AUTH_TOKEN: data["api_key"]
-        }
+        config = {Channel.CONFIG_BASE_URL: "https://waba.360dialog.io", Channel.CONFIG_AUTH_TOKEN: data["api_key"]}
 
         self.object = Channel.create(
             org,

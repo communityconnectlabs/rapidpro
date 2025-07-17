@@ -226,7 +226,13 @@ MIDDLEWARE = (
     "temba.middleware.OrgMiddleware",
     "temba.middleware.LanguageMiddleware",
     "temba.middleware.TimezoneMiddleware",
-    "temba.events.middleware.CustomerEventMiddleware",
+    *(
+        []
+        if TESTING
+        else [
+            "temba.events.middleware.CustomerEventMiddleware",
+        ]
+    ),
 )
 
 # security middleware configuration
