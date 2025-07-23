@@ -11,8 +11,8 @@
       let loadTemplateText = () => {
         let selectedId = Number.parseInt(templateSelect?.value?.value);
         if (!isNaN(selectedId)) {
-          fetch(`/conversation/preview_template/${selectedId}/`).then(response => response.json()).then(data => {
-            templateSelect.shadowRoot.querySelector("temba-field").helpText = data.template_text;
+          fetch(`/conversation/preview_template/${selectedId}/`).then(response => response.text()).then(data => {
+            templateSelect.shadowRoot.querySelector("temba-field").helpText = data;
           }).catch(console.error);
         }
       }

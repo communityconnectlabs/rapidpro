@@ -10,7 +10,8 @@
       completion="/mr/docs/{{ LANGUAGE_CODE }}/editor.json"
       fields="/api/v2/fields.json"
       globals="/api/v2/globals.json"
-      groups="/api/v2/groups.json")
+      groups="/api/v2/groups.json"
+    )
 
 -block extra-style
   {{block.super}}
@@ -86,7 +87,7 @@
       color: unset !important;
     }
 
-    .template-item:hover > temba-modax > .icon-remove-2, .template-item:hover > .name {
+    .template-item:hover > temba-modax > .icon-remove-2, .template-item:hover > .name, .template-item:hover > temba-modax > .modax-body {
       color: rgb(var(--primary-rgb));
     }
 
@@ -161,12 +162,15 @@
                   .inner-scroll
                     -for template in templates
                       .lp-nav-item.template-item{ class:'{% if current_label.id == node.obj.id %}font-normal{% endif %}' }
-                        %temba-modax.name{ header: "{% trans 'Update Template' %}", endpoint: "{% url 'msgs.conversation_update_template' template.id %}"}
-                          {{ template.name }}
-                        -if org_perms.msgs.conversation_delete_template
-                          %temba-modax.ml-auto.delete-template-modal{ header:'{% trans "Delete Template" %}', endpoint:"{% url 'msgs.conversation_delete_template' template.id %}"}
-                            .icon-remove-2
-
+                        -if org_perms.msgs.conversation_update_template
+                          %temba-modax.name{ header: "{% trans 'Update Template' %}", endpoint: "{% url 'msgs.conversation_update_template' template.id %}"}
+                            {{ template.name }}
+                          -if org_perms.msgs.conversation_delete_template
+                            %temba-modax.ml-auto.delete-template-modal{ header:'{% trans "Delete Template" %}', endpoint:"{% url 'msgs.conversation_delete_template' template.id %}"}
+                              .icon-remove-2
+                        -elif org_perms.msgs.conversation_preview_template
+                          %temba-modax.name{ header: "{% trans 'Template Info' %}", endpoint: "{% url 'msgs.conversation_preview_template' template.id %}"}
+                            {{ template.name }}
 
               .flex-grow
                 -if org_perms.msgs.conversation_create_template

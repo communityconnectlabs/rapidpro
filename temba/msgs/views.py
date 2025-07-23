@@ -19,7 +19,7 @@ from django.contrib import messages
 from django.db.models import Q
 from django.db.models.functions.text import Upper
 from django.forms import Form
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -1331,7 +1331,9 @@ class ConversationCRUDL(SmartCRUDL):
         )
 
         def derive_queryset(self, **kwargs):
-            return Conversation.objects.filter(org=self.request.user.get_org())
+            return Conversation.objects.filter(
+                org=self.request.user.get_org(), contact__status=Contact.STATUS_ACTIVE, contact__is_active=True
+            )
 
         def get_context_data(self, **kwargs):
             search = self.request.GET.get("search", "")
@@ -1405,5 +1407,4 @@ class ConversationCRUDL(SmartCRUDL):
             return queryset.filter(org=self.request.user.get_org())
 
         def render_to_response(self, context, **response_kwargs):
-            data = dict(template_text=context["object"].text)
-            return JsonResponse(data)
+            return HttpResponse(context["object"].text)
