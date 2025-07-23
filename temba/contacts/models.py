@@ -1248,7 +1248,6 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             for conversation in self.conversations.all():
                 conversation.delete()
 
-
     @classmethod
     def bulk_urn_cache_initialize(cls, contacts, *, using="default"):
         """

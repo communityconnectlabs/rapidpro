@@ -10,7 +10,8 @@
       completion="/mr/docs/{{ LANGUAGE_CODE }}/editor.json"
       fields="/api/v2/fields.json"
       globals="/api/v2/globals.json"
-      groups="/api/v2/groups.json")
+      groups="/api/v2/groups.json"
+    )
 
 -block extra-style
   {{block.super}}
@@ -86,7 +87,7 @@
       color: unset !important;
     }
 
-    .template-item:hover > temba-modax > .icon-remove-2, .template-item:hover > .name {
+    .template-item:hover > temba-modax > .icon-remove-2, .template-item:hover > .name, .template-item:hover > temba-modax > .modax-body {
       color: rgb(var(--primary-rgb));
     }
 
