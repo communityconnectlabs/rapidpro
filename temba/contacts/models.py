@@ -1245,6 +1245,10 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             for broadcast in self.addressed_broadcasts.all():
                 broadcast.contacts.remove(self)
 
+            for conversation in self.conversations.all():
+                conversation.delete()
+
+
     @classmethod
     def bulk_urn_cache_initialize(cls, contacts, *, using="default"):
         """

@@ -1331,7 +1331,11 @@ class ConversationCRUDL(SmartCRUDL):
         )
 
         def derive_queryset(self, **kwargs):
-            return Conversation.objects.filter(org=self.request.user.get_org())
+            return Conversation.objects.filter(
+                org=self.request.user.get_org(),
+                contact__status=Contact.STATUS_ACTIVE,
+                contact__is_active=True
+            )
 
         def get_context_data(self, **kwargs):
             search = self.request.GET.get("search", "")
