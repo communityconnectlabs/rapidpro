@@ -1430,8 +1430,11 @@ class ConversationTemplate(models.Model):
     """
 
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_templates")
-    name = models.CharField(max_length=128, unique=True)
+    name = models.CharField(max_length=128)
     text = models.TextField()
+
+    class Meta:
+        unique_together = ("org", "name")
 
     def __str__(self):
         return self.name
