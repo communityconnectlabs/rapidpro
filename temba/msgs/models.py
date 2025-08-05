@@ -1413,22 +1413,29 @@ class Conversation(models.Model):
     """
     A conversation is a collection of messages between a contact and manager
     """
-    ACTIVE = 'ACT'
-    ARCHIVED = 'ARC'
+
+    ACTIVE = "ACT"
+    ARCHIVED = "ARC"
     STATUS = (
-        (ACTIVE, 'Active'),
-        (ARCHIVED, 'Archived'),
+        (ACTIVE, "Active"),
+        (ARCHIVED, "Archived"),
     )
 
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversations")
     contact = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="conversations")
     status = models.CharField(max_length=3, choices=STATUS, default=ACTIVE)
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversations_created")
+    owners = models.ManyToManyField(User, related_name="conversations_created", through="ConversationOwner")
     created_on = models.DateTimeField(auto_now_add=True)
     modified_on = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.contact} - {self.created_by}"
+        return f"{self.contact} - {self.owners.first()}"
+
+
+class ConversationOwner(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.PROTECT)
+    owner = models.ForeignKey(User, on_delete=models.PROTECT)
+    last_read = models.DateTimeField(null=True, blank=True)
 
 
 class ConversationTemplate(models.Model):

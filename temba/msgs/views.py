@@ -16,7 +16,7 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Case, Count, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions.text import Upper
 from django.forms import Form
 from django.http import Http404, HttpResponse, HttpResponseRedirect
@@ -1365,7 +1365,27 @@ class ConversationCRUDL(SmartCRUDL):
 
             return_personal = self.request.GET.get("chats", "all") == "my"
             if return_personal:
-                queryset = queryset.filter(created_by=self.request.user)
+                queryset = queryset.filter(owners=self.request.user)
+
+            queryset = queryset.annotate(
+                unread_count=Case(
+                    When(
+                        Q(conversationowner__owner=self.request.user) & Q(conversationowner__last_read__isnull=False),
+                        then=Subquery(
+                            Msg.objects.filter(
+                                direction=Msg.DIRECTION_IN,
+                                contact=OuterRef("contact"),
+                                created_on__gt=OuterRef("conversationowner__last_read"),
+                            )
+                            .order_by("-created_on")
+                            .values("contact")
+                            .annotate(count=Count("id"))
+                            .values("count")[:1],
+                        ),
+                    ),
+                    default=Value(0),
+                ),
+            )
 
             context["chats"] = queryset
             return context
