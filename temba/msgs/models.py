@@ -1413,9 +1413,16 @@ class Conversation(models.Model):
     """
     A conversation is a collection of messages between a contact and manager
     """
+    ACTIVE = 'ACT'
+    ARCHIVED = 'ARC'
+    STATUS = (
+        (ACTIVE, 'Active'),
+        (ARCHIVED, 'Archived'),
+    )
 
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversations")
     contact = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="conversations")
+    status = models.CharField(max_length=3, choices=STATUS, default=ACTIVE)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversations_created")
     created_on = models.DateTimeField(auto_now_add=True)
     modified_on = models.DateTimeField(auto_now=True)

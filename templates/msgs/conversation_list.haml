@@ -141,6 +141,14 @@
     function clearSearch() {
       const url = new URL(window.location);
       url.searchParams.delete('search');
+      url.searchParams.delete('archived');
+      window.location.href = url.toString();
+    }
+
+    function clearSearchArchived() {
+      const url = new URL(window.location);
+      url.searchParams.delete('search');
+      url.searchParams.set('archived', 'true');
       window.location.href = url.toString();
     }
 
@@ -182,6 +190,11 @@
                     Chats
                   .count
                     {{ chats_count | intcomma }}
+                .lp-nav-item{'class': 'font-normal', 'onclick': 'clearSearchArchived()' }
+                  .name
+                    Archived
+                  .count
+                    {{ archived_count | intcomma }}
 
               -if templates
                 .lp-nav.lower

@@ -1348,10 +1348,13 @@ class ConversationCRUDL(SmartCRUDL):
 
         def get_context_data(self, **kwargs):
             search = self.request.GET.get("search", "")
+            archived = str(self.request.GET.get("archived", "false")).lower() == "true"
             context = super().get_context_data(**kwargs)
-            context["chats_count"] = self.derive_queryset().count()
+            context["chats_count"] = self.derive_queryset(status=Conversation.ACTIVE).count()
+            context["archived_count"] = self.derive_queryset().filter(status=Conversation.ARCHIVED).count()
             context["templates"] = ConversationTemplate.objects.filter(org=self.request.user.get_org())
             queryset = self.derive_queryset().order_by(*self.default_order)
+            queryset = queryset.filter(status=Conversation.ARCHIVED if archived else Conversation.ACTIVE)
             if search:
                 search = (
                     str(search).replace(" ", "").replace(",", "").replace("(", "").replace(")", "").replace("-", "")
