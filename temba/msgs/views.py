@@ -16,7 +16,8 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Case, Count, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.db.models.functions.text import Upper
 from django.forms import Form
 from django.http import Http404, HttpResponse, HttpResponseRedirect
@@ -1289,7 +1290,7 @@ class ConversationCRUDL(SmartCRUDL):
                 status=Msg.STATUS_QUEUED,
                 template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
             )
-            first_contact = self.start_connversations(
+            first_contact = self.start_conversations(
                 org,
                 user,
                 groups=groups,
@@ -1312,25 +1313,23 @@ class ConversationCRUDL(SmartCRUDL):
 
             return HttpResponseRedirect(self.get_success_url())
 
-        def start_connversations(self, org, user, groups, contacts) -> Contact:
+        def start_conversations(self, org, user, groups, contacts) -> Contact:
             contact_ids = [contact.id for contact in contacts]
             contact_ids += Contact.objects.filter(org=org, all_groups__in=groups).values_list("id", flat=True)
             contact_ids = list(set(contact_ids))
             contacts = Contact.objects.filter(org=org, id__in=contact_ids, conversations__isnull=True)
             Conversation.objects.bulk_create(
-                [
-                    Conversation(
-                        org=org,
-                        contact=contact,
-                        created_by=user,
-                    )
-                    for contact in contacts
-                ],
-                ignore_conflicts=True,
+                [Conversation(org=org, contact=contact) for contact in contacts], ignore_conflicts=True
             )
+            conversations_without_owner = Conversation.objects.filter(org=org, contact_id__in=contact_ids).exclude(
+                owners=self.request.user
+            )
+            for conversation in conversations_without_owner:
+                conversation.owners.add(user, through_defaults={"last_read": None})
             return Contact.objects.filter(org=org, id__in=contact_ids).first()
 
-        def post_save(self, obj):
+        @staticmethod
+        def post_save(obj):
             on_transaction_commit(lambda: obj.send_async())
             return obj
 
@@ -1350,11 +1349,10 @@ class ConversationCRUDL(SmartCRUDL):
             search = self.request.GET.get("search", "")
             archived = str(self.request.GET.get("archived", "false")).lower() == "true"
             context = super().get_context_data(**kwargs)
-            context["chats_count"] = self.derive_queryset(status=Conversation.ACTIVE).count()
+            context["chats_count"] = self.derive_queryset().filter(status=Conversation.ACTIVE).count()
             context["archived_count"] = self.derive_queryset().filter(status=Conversation.ARCHIVED).count()
             context["templates"] = ConversationTemplate.objects.filter(org=self.request.user.get_org())
-            queryset = self.derive_queryset().order_by(*self.default_order)
-            queryset = queryset.filter(status=Conversation.ARCHIVED if archived else Conversation.ACTIVE)
+            queryset = self.derive_queryset().filter(status=Conversation.ARCHIVED if archived else Conversation.ACTIVE)
             if search:
                 search = (
                     str(search).replace(" ", "").replace(",", "").replace("(", "").replace(")", "").replace("-", "")
@@ -1371,22 +1369,26 @@ class ConversationCRUDL(SmartCRUDL):
                 unread_count=Case(
                     When(
                         Q(conversationowner__owner=self.request.user) & Q(conversationowner__last_read__isnull=False),
-                        then=Subquery(
-                            Msg.objects.filter(
-                                direction=Msg.DIRECTION_IN,
-                                contact=OuterRef("contact"),
-                                created_on__gt=OuterRef("conversationowner__last_read"),
-                            )
-                            .order_by("-created_on")
-                            .values("contact")
-                            .annotate(count=Count("id"))
-                            .values("count")[:1],
+                        then=Coalesce(
+                            Subquery(
+                                Msg.objects.filter(
+                                    direction=Msg.DIRECTION_IN,
+                                    contact=OuterRef("contact"),
+                                    created_on__gt=OuterRef("conversationowner__last_read"),
+                                )
+                                .values("contact")
+                                .annotate(count=Count("id"))
+                                .values("count")[:1]
+                            ),
+                            0,
                         ),
                     ),
                     default=Value(0),
+                    output_field=IntegerField(),
                 ),
             )
 
+            queryset = queryset.order_by("-unread_count", *self.default_order).distinct()
             context["chats"] = queryset
             return context
 

@@ -40,6 +40,7 @@ from temba.channels.models import Channel
 from temba.contacts.templatetags.contacts import MISSING_VALUE
 from temba.flows.models import Flow, FlowStart
 from temba.mailroom.events import Event
+from temba.msgs.models import ConversationOwner
 from temba.notifications.views import NotificationTargetMixin
 from temba.orgs.models import Org
 from temba.orgs.views import (
@@ -1080,6 +1081,13 @@ class ContactCRUDL(SmartCRUDL):
                 context["has_older"] = bool(
                     contact.get_history(contact_creation, after, HISTORY_INCLUDE_EVENTS, ticket=ticket, limit=1)
                 )
+
+            # update conversation last_read time to know when user last time had chat open
+            conversations = ConversationOwner.objects.filter(conversation__contact=contact, owner=self.request.user)
+            conversation = conversations.first()
+            if conversation:
+                conversation.last_read = timezone.now()
+                conversation.save(update_fields=["last_read"])
 
             context["recent_only"] = recent_only
             context["next_before"] = datetime_to_timestamp(after)

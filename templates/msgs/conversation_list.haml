@@ -106,6 +106,10 @@
       text-decoration: none;
     }
 
+    .line16px {
+      line-height: 16px;
+    }
+
 -block extra-script
   {{ block.super }}
 
@@ -239,8 +243,11 @@
                       -trans "No chats found"
                     -else
                       -for chat in chats
-                        %li.w-full.p-1.cursor-pointer.list-item(onclick='selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
+                        %li.w-full.p-1.cursor-pointer.flex.flex-row.justify-between.list-item(onclick='selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
                           =chat.contact
+                          -if chat.unread_count
+                            .badge.line16px
+                              =chat.unread_count
 
-              .flex-grow.flex-col.h-full(style="" class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
+              .flex-grow.flex-col.h-full(class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
                 %temba-contact-chat.h-full(agent="{{request.user.email}}" monitor="true")
