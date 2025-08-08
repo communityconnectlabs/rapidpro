@@ -2399,15 +2399,31 @@ class FlowCRUDL(SmartCRUDL):
             r = get_redis_connection()
             flow_key = f"active-flow-editor-{flow.uuid}"
             active_editor = r.get(flow_key)
+
+            logger.info(f"Flow: {flow.uuid}, User: {self.request.user.username}")
+            logger.info(f"Active editor raw: {active_editor}")
+            logger.info(f"Active editor decoded: {active_editor.decode() if active_editor else None}")
+            logger.info(f"TTL remaining: {r.ttl(flow_key)}")
+
             editing_available = False
             reader_session = False
             if active_editor is not None:
-                if self.request.user.username == active_editor.decode():
+                decoded_editor = active_editor.decode()
+                username_match = self.request.user.username == decoded_editor
+                logger.info(f"Username match: {username_match}")
+
+                if username_match:
                     editing_available = True
+                    ttl_before = r.ttl(flow_key)
                     r.expire(flow_key, 300)
+                    ttl_after = r.ttl(flow_key)
+                    logger.info(f"TTL before: {ttl_before}, TTL after: {ttl_after}")
                 else:
                     reader_session = True
+
             session_expired = False if reader_session else not editing_available
+            logger.info(f"Final state - editing_available: {editing_available}, reader_session: {reader_session}, session_expired: {session_expired}")
+
             return JsonResponse(
                 dict(nodes=active, segments=visited, is_starting=flow.is_starting(), session_expired=session_expired)
             )
