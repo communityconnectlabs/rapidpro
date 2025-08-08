@@ -2398,12 +2398,10 @@ class FlowCRUDL(SmartCRUDL):
             # update expiration time of editing for active editor
             r = get_redis_connection()
             flow_key = f"active-flow-editor-{flow.uuid}"
-            active_editor = r.get(flow_key)
 
-            logger.info(f"Flow: {flow.uuid}, User: {self.request.user.username}")
-            logger.info(f"Active editor raw: {active_editor}")
-            logger.info(f"Active editor decoded: {active_editor.decode() if active_editor else None}")
-            logger.info(f"TTL remaining: {r.ttl(flow_key)}")
+            # Force a fresh connection to ensure we're hitting primary
+            r.connection_pool.reset()  # Clear connection pool
+            active_editor = r.get(flow_key)
 
             editing_available = False
             reader_session = False
@@ -2422,7 +2420,11 @@ class FlowCRUDL(SmartCRUDL):
                     reader_session = True
 
             session_expired = False if reader_session else not editing_available
-            logger.info(f"Final state - editing_available: {editing_available}, reader_session: {reader_session}, session_expired: {session_expired}")
+            logger.info(
+                f"Final state - editing_available: {editing_available},"
+                f"reader_session: {reader_session},"
+                f"session_expired: {session_expired}"
+            )
 
             return JsonResponse(
                 dict(nodes=active, segments=visited, is_starting=flow.is_starting(), session_expired=session_expired)
