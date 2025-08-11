@@ -1159,7 +1159,10 @@ class ConversationTemplateForm(forms.ModelForm):
 
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
-    actions = ("list", "start", "create_template", "update_template", "delete_template", "preview_template")
+    actions = (
+        "list", "start", "create_template", "update_template", "delete_template", "preview_template",
+        "archive",
+    )
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
         class StartConversationForm(Form):
@@ -1318,14 +1321,25 @@ class ConversationCRUDL(SmartCRUDL):
             contact_ids += Contact.objects.filter(org=org, all_groups__in=groups).values_list("id", flat=True)
             contact_ids = list(set(contact_ids))
             contacts = Contact.objects.filter(org=org, id__in=contact_ids, conversations__isnull=True)
+
+            # create conversations for the contacts without it
             Conversation.objects.bulk_create(
                 [Conversation(org=org, contact=contact) for contact in contacts], ignore_conflicts=True
             )
+
+            # update owners for existing ones
             conversations_without_owner = Conversation.objects.filter(org=org, contact_id__in=contact_ids).exclude(
                 owners=self.request.user
             )
             for conversation in conversations_without_owner:
                 conversation.owners.add(user, through_defaults={"last_read": None})
+
+            # update status to ACTIVE
+            Conversation.objects.filter(
+                org=org,
+                contact_id__in=contact_ids,
+                status=Conversation.ARCHIVED
+            ).update(status=Conversation.ACTIVE)
             return Contact.objects.filter(org=org, id__in=contact_ids).first()
 
         @staticmethod
@@ -1391,6 +1405,13 @@ class ConversationCRUDL(SmartCRUDL):
             queryset = queryset.order_by("-unread_count", *self.default_order).distinct()
             context["chats"] = queryset
             return context
+
+    class Archive(OrgPermsMixin, ModalMixin, SmartUpdateView):
+        permission = "msgs.conversation_start"
+
+        def pre_save(self, conversation):
+            conversation.status = Conversation.ARCHIVED
+            return conversation
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
         model = ConversationTemplate
