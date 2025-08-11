@@ -120,12 +120,23 @@
 
       // Modify or add query params
       var chat = document.querySelector("temba-contact-chat");
+      var archiveURL = "{% url 'msgs.conversation_archive' 'uuid' %}";
       if(contactUUID && contactUUID !== "null") {
         chat.contactUUID = contactUUID;
+        chat.customActions = [{
+          label: "Archive",
+          icon: "archive",
+          callback: () => {
+            const archiveModal = document.querySelector("#archive-modal");
+            archiveModal.endpoint = archiveURL.replace("uuid", contactUUID);
+            archiveModal.open = true;
+          }
+        }];
         params.set('contactUUID', contactUUID);
       } else {
         chat.contactUUID = null;
         chat.currentContact = null;
+        chat.customActions = null;
         params.delete('contactUUID');
       }
 
@@ -251,3 +262,4 @@
 
               .flex-grow.flex-col.h-full(class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
                 %temba-contact-chat.h-full(agent="{{request.user.email}}" monitor="true")
+        %temba-modax#archive-modal{ header:'{% trans "Archive Conversation" %}'}

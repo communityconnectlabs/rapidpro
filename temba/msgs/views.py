@@ -1406,12 +1406,27 @@ class ConversationCRUDL(SmartCRUDL):
             context["chats"] = queryset
             return context
 
-    class Archive(OrgPermsMixin, ModalMixin, SmartUpdateView):
+    class Archive(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
         permission = "msgs.conversation_start"
+        slug_field = "contact__uuid"
+        slug_url_kwarg = "uuid"
 
-        def pre_save(self, conversation):
-            conversation.status = Conversation.ARCHIVED
-            return conversation
+        success_url = "@msgs.conversation_list"
+        redirect_url = "@msgs.conversation_list"
+        cancel_url = "@msgs.conversation_list"
+        success_message = _("Your conversation has been archived.")
+        fields = ("contact",)
+        submit_button_name = _("Archive")
+
+        def post(self, request, *args, **kwargs):
+            self.object = self.get_object()
+
+            self.object.status = Conversation.ARCHIVED
+            self.object.save(update_fields=["status"])
+
+            response = HttpResponse()
+            response["Temba-Success"] = self.get_success_url()
+            return response
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
         model = ConversationTemplate
