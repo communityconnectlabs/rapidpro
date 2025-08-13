@@ -1139,6 +1139,17 @@ class ConversationTemplateForm(forms.ModelForm):
         )
     )
 
+    def __init__(self, *args, **kwargs):
+        self.org = kwargs.pop("org")
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.org and self.org.conversation_templates.filter(name=cleaned["name"]).exists():
+            self.add_error("name", _("The template with this name already exists."))
+
+        return cleaned
+
     class Meta:
         model = ConversationTemplate
         fields = ("name", "text")
@@ -1348,8 +1359,12 @@ class ConversationCRUDL(SmartCRUDL):
                 queryset = queryset.filter(
                     Q(contact__name__icontains=search) | Q(contact__urns__path__icontains=search)
                 )
-            context["chats"] = queryset
 
+            return_personal = self.request.GET.get("chats", "all") == "my"
+            if return_personal:
+                queryset = queryset.filter(created_by=self.request.user)
+
+            context["chats"] = queryset
             return context
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
@@ -1379,10 +1394,20 @@ class ConversationCRUDL(SmartCRUDL):
 
             return HttpResponseRedirect(self.get_success_url())
 
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
+
     class UpdateTemplate(ModalMixin, OrgObjPermsMixin, SmartUpdateView):
         model = ConversationTemplate
         form_class = ConversationTemplateForm
         permission = "msgs.conversation_create_template"
+
+        def get_form_kwargs(self):
+            kwargs = super().get_form_kwargs()
+            kwargs["org"] = self.request.user.get_org()
+            return kwargs
 
     class DeleteTemplate(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
         fields = ("id",)

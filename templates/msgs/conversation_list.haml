@@ -91,6 +91,21 @@
       color: rgb(var(--primary-rgb));
     }
 
+    .conversation-filter {
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .is-active, .is-active:hover {
+      color: #999999;
+      cursor: text;
+      text-decoration: none;
+    }
+
 -block extra-script
   {{ block.super }}
 
@@ -100,7 +115,6 @@
       const params = new URLSearchParams(url.search);
 
       // Modify or add query params
-
       var chat = document.querySelector("temba-contact-chat");
       if(contactUUID && contactUUID !== "null") {
         chat.contactUUID = contactUUID;
@@ -130,10 +144,24 @@
       window.location.href = url.toString();
     }
 
+    function filterChats(chatType) {
+      const url = new URL(window.location);
+      const params = new URLSearchParams(url.search);
+      params.set("chats", chatType);
+      window.location.href = `${url.pathname}${Array.from(params).length ? '?': ''}${params}`;
+    }
+
+    function initFilter(params) {
+      let selector = `.conversation-filter .${params.get("chats") === "my" ? "my" : "all"}-chats`;
+      let filter = document.querySelector(selector);
+      filter.classList.add("is-active");
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       const url = new URL(window.location);
       const params = new URLSearchParams(url.search);
       const contactUUID = params.get('contactUUID');
+      initFilter(params);
       selectChat(contactUUID);
     });
 
@@ -183,6 +211,14 @@
               .ticket-list.flex.flex-col(class="{% if is_spa%} {% else %}m-4 pt-4 mr-2{%endif%}")
                 %form#search-form.mb-4(method="get")
                   %temba-textinput.w-full(placeholder='{% trans "Search" %}' name="search" value="{{search}}")
+
+                .flex.justify-end.w-full
+                  .conversation-filter
+                    %a.my-chats(href="#" onclick='event.stopPropagation();filterChats("my");return false;')
+                      -trans "My Chats"
+                    |
+                    %a.all-chats(href="#" onclick='event.stopPropagation();filterChats("all");return false;')
+                      -trans "All Chats"
 
                 .flex.flex-grow.relative(style="max-height: calc(100% - 49px);")
                   %ul.w-full.p-1.chats-list.overflow-y-auto(style="border: 1px solid var(--color-widget-border);border-radius: var(--curvature-widget);background: var(--color-widget-bg);")
