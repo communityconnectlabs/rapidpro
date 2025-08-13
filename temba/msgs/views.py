@@ -16,21 +16,25 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.db.models.functions.text import Upper
 from django.forms import Form
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 
+from temba.api.v2.serializers import MsgReadSerializer
 from temba.archives.models import Archive
 from temba.channels.models import Channel
 from temba.contacts.models import URN, Contact, ContactGroup, ContactURN
 from temba.contacts.search.omnibox import omnibox_deserialize, omnibox_query, omnibox_results_to_dict
 from temba.formax import FormaxMixin
+from temba.mailroom import MailroomException, get_client
 from temba.notifications.views import NotificationTargetMixin
 from temba.orgs.models import Org
 from temba.orgs.views import (
@@ -56,7 +60,6 @@ from temba.utils.fields import (
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
-from ..mailroom import MailroomException
 from .models import (
     Broadcast,
     Conversation,
@@ -1160,8 +1163,14 @@ class ConversationTemplateForm(forms.ModelForm):
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
     actions = (
-        "list", "start", "create_template", "update_template", "delete_template", "preview_template",
+        "list",
+        "start",
+        "create_template",
+        "update_template",
+        "delete_template",
+        "preview_template",
         "archive",
+        "send_attachment",
     )
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
@@ -1335,11 +1344,9 @@ class ConversationCRUDL(SmartCRUDL):
                 conversation.owners.add(user, through_defaults={"last_read": None})
 
             # update status to ACTIVE
-            Conversation.objects.filter(
-                org=org,
-                contact_id__in=contact_ids,
-                status=Conversation.ARCHIVED
-            ).update(status=Conversation.ACTIVE)
+            Conversation.objects.filter(org=org, contact_id__in=contact_ids, status=Conversation.ARCHIVED).update(
+                status=Conversation.ACTIVE
+            )
             return Contact.objects.filter(org=org, id__in=contact_ids).first()
 
         @staticmethod
@@ -1494,3 +1501,39 @@ class ConversationCRUDL(SmartCRUDL):
 
         def render_to_response(self, context, **response_kwargs):
             return HttpResponse(context["object"].text)
+
+    class SendAttachment(OrgObjPermsMixin, SmartUpdateView):
+        permission = "msgs.conversation_start"
+        slug_field = "contact__uuid"
+        slug_url_kwarg = "uuid"
+
+        def post(self, request, *args, **kwargs):
+            user = self.request.user
+            org = user.get_org()
+            contact = self.get_object().contact
+            attachment = request.FILES.get("attachment", None)
+            if not attachment:
+                return JsonResponse({"attachment": ["This field is required."]}, status=400)
+
+            attachment_name = f"attachments/conversations/{contact.uuid}/{attachment.name}"
+            attachment_path = default_storage.save(attachment_name, ContentFile(attachment.read()))
+            attachment_uri = request.build_absolute_uri(settings.MEDIA_URL + attachment_path)
+            mailroom_response = get_client().msg_send(
+                org.id,
+                user.id,
+                contact.id,
+                "",
+                [f"{attachment.content_type}:{attachment_uri}"],
+            )
+            msg = Msg.objects.filter(id=mailroom_response["id"]).first()
+            if not msg:
+                return JsonResponse({"attachment": ["Failed to send the attachment."]}, status=400)
+
+            serializer = MsgReadSerializer(
+                instance=msg,
+                context={
+                    "org": org,
+                    "user": self.request.user,
+                },
+            )
+            return JsonResponse(serializer.data)
