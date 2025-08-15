@@ -16,20 +16,25 @@ from smartmin.views import (
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Q
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.db.models.functions.text import Upper
 from django.forms import Form
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 
+from temba.api.v2.serializers import MsgReadSerializer
 from temba.archives.models import Archive
 from temba.channels.models import Channel
 from temba.contacts.models import URN, Contact, ContactGroup, ContactURN
 from temba.contacts.search.omnibox import omnibox_deserialize, omnibox_query, omnibox_results_to_dict
 from temba.formax import FormaxMixin
+from temba.mailroom import MailroomException, get_client
 from temba.notifications.views import NotificationTargetMixin
 from temba.orgs.models import Org
 from temba.orgs.views import (
@@ -55,7 +60,6 @@ from temba.utils.fields import (
 from temba.utils.models import patch_queryset_count
 from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 
-from ..mailroom import MailroomException
 from .models import (
     Broadcast,
     Conversation,
@@ -1158,7 +1162,16 @@ class ConversationTemplateForm(forms.ModelForm):
 
 class ConversationCRUDL(SmartCRUDL):
     model = Conversation
-    actions = ("list", "start", "create_template", "update_template", "delete_template", "preview_template")
+    actions = (
+        "list",
+        "start",
+        "create_template",
+        "update_template",
+        "delete_template",
+        "preview_template",
+        "archive",
+        "send_attachment",
+    )
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
         class StartConversationForm(Form):
@@ -1289,7 +1302,7 @@ class ConversationCRUDL(SmartCRUDL):
                 status=Msg.STATUS_QUEUED,
                 template_state=Broadcast.TEMPLATE_STATE_UNEVALUATED,
             )
-            first_contact = self.start_connversations(
+            first_contact = self.start_conversations(
                 org,
                 user,
                 groups=groups,
@@ -1312,25 +1325,32 @@ class ConversationCRUDL(SmartCRUDL):
 
             return HttpResponseRedirect(self.get_success_url())
 
-        def start_connversations(self, org, user, groups, contacts) -> Contact:
+        def start_conversations(self, org, user, groups, contacts) -> Contact:
             contact_ids = [contact.id for contact in contacts]
             contact_ids += Contact.objects.filter(org=org, all_groups__in=groups).values_list("id", flat=True)
             contact_ids = list(set(contact_ids))
             contacts = Contact.objects.filter(org=org, id__in=contact_ids, conversations__isnull=True)
+
+            # create conversations for the contacts without it
             Conversation.objects.bulk_create(
-                [
-                    Conversation(
-                        org=org,
-                        contact=contact,
-                        created_by=user,
-                    )
-                    for contact in contacts
-                ],
-                ignore_conflicts=True,
+                [Conversation(org=org, contact=contact) for contact in contacts], ignore_conflicts=True
+            )
+
+            # update owners for existing ones
+            conversations_without_owner = Conversation.objects.filter(org=org, contact_id__in=contact_ids).exclude(
+                owners=self.request.user
+            )
+            for conversation in conversations_without_owner:
+                conversation.owners.add(user, through_defaults={"last_read": None})
+
+            # update status to ACTIVE
+            Conversation.objects.filter(org=org, contact_id__in=contact_ids, status=Conversation.ARCHIVED).update(
+                status=Conversation.ACTIVE
             )
             return Contact.objects.filter(org=org, id__in=contact_ids).first()
 
-        def post_save(self, obj):
+        @staticmethod
+        def post_save(obj):
             on_transaction_commit(lambda: obj.send_async())
             return obj
 
@@ -1348,10 +1368,12 @@ class ConversationCRUDL(SmartCRUDL):
 
         def get_context_data(self, **kwargs):
             search = self.request.GET.get("search", "")
+            archived = str(self.request.GET.get("archived", "false")).lower() == "true"
             context = super().get_context_data(**kwargs)
-            context["chats_count"] = self.derive_queryset().count()
+            context["chats_count"] = self.derive_queryset().filter(status=Conversation.ACTIVE).count()
+            context["archived_count"] = self.derive_queryset().filter(status=Conversation.ARCHIVED).count()
             context["templates"] = ConversationTemplate.objects.filter(org=self.request.user.get_org())
-            queryset = self.derive_queryset().order_by(*self.default_order)
+            queryset = self.derive_queryset().filter(status=Conversation.ARCHIVED if archived else Conversation.ACTIVE)
             if search:
                 search = (
                     str(search).replace(" ", "").replace(",", "").replace("(", "").replace(")", "").replace("-", "")
@@ -1362,10 +1384,66 @@ class ConversationCRUDL(SmartCRUDL):
 
             return_personal = self.request.GET.get("chats", "all") == "my"
             if return_personal:
-                queryset = queryset.filter(created_by=self.request.user)
+                queryset = queryset.filter(owners=self.request.user)
 
+            queryset = queryset.annotate(
+                unread_count=Case(
+                    When(
+                        Q(conversationowner__owner=self.request.user) & Q(conversationowner__last_read__isnull=False),
+                        then=Coalesce(
+                            Subquery(
+                                Msg.objects.filter(
+                                    direction=Msg.DIRECTION_IN,
+                                    contact=OuterRef("contact"),
+                                    created_on__gt=OuterRef("conversationowner__last_read"),
+                                )
+                                .values("contact")
+                                .annotate(count=Count("id"))
+                                .values("count")[:1]
+                            ),
+                            0,
+                        ),
+                    ),
+                    default=Value(0),
+                    output_field=IntegerField(),
+                ),
+            )
+
+            queryset = queryset.order_by("-unread_count", *self.default_order).distinct()
             context["chats"] = queryset
             return context
+
+    class Archive(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+        permission = "msgs.conversation_start"
+        slug_field = "contact__uuid"
+        slug_url_kwarg = "uuid"
+
+        success_url = "@msgs.conversation_list"
+        redirect_url = "@msgs.conversation_list"
+        cancel_url = "@msgs.conversation_list"
+        success_message = _("Your conversation has been archived.")
+        fields = ("contact",)
+
+        def post(self, request, *args, **kwargs):
+            self.object = self.get_object()
+            status_swap = {
+                Conversation.ARCHIVED: Conversation.ACTIVE,
+                Conversation.ACTIVE: Conversation.ARCHIVED,
+            }
+            self.object.status = status_swap.get(self.object.status, Conversation.ARCHIVED)
+            self.object.save(update_fields=["status"])
+
+            response = HttpResponse()
+            response["Temba-Success"] = self.get_success_url()
+            return response
+
+        def get_context_data(self, **kwargs):
+            self.object = self.get_object()
+            context_data = super().get_context_data(**kwargs)
+            context_data["submit_button_name"] = (
+                _("Archive") if self.object.status == Conversation.ACTIVE else _("Activate")
+            )
+            return context_data
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
         model = ConversationTemplate
@@ -1433,3 +1511,39 @@ class ConversationCRUDL(SmartCRUDL):
 
         def render_to_response(self, context, **response_kwargs):
             return HttpResponse(context["object"].text)
+
+    class SendAttachment(OrgObjPermsMixin, SmartUpdateView):
+        permission = "msgs.conversation_start"
+        slug_field = "contact__uuid"
+        slug_url_kwarg = "uuid"
+
+        def post(self, request, *args, **kwargs):
+            user = self.request.user
+            org = user.get_org()
+            contact = self.get_object().contact
+            attachment = request.FILES.get("attachment", None)
+            if not attachment:
+                return JsonResponse({"attachment": ["This field is required."]}, status=400)
+
+            attachment_name = f"attachments/conversations/{contact.uuid}/{attachment.name}"
+            attachment_path = default_storage.save(attachment_name, ContentFile(attachment.read()))
+            attachment_uri = request.build_absolute_uri(settings.MEDIA_URL + attachment_path)
+            mailroom_response = get_client().msg_send(
+                org.id,
+                user.id,
+                contact.id,
+                "",
+                [f"{attachment.content_type}:{attachment_uri}"],
+            )
+            msg = Msg.objects.filter(id=mailroom_response["id"]).first()
+            if not msg:
+                return JsonResponse({"attachment": ["Failed to send the attachment."]}, status=400)
+
+            serializer = MsgReadSerializer(
+                instance=msg,
+                context={
+                    "org": org,
+                    "user": self.request.user,
+                },
+            )
+            return JsonResponse(serializer.data)
