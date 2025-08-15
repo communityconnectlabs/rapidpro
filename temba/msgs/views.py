@@ -1423,17 +1423,27 @@ class ConversationCRUDL(SmartCRUDL):
         cancel_url = "@msgs.conversation_list"
         success_message = _("Your conversation has been archived.")
         fields = ("contact",)
-        submit_button_name = _("Archive")
 
         def post(self, request, *args, **kwargs):
             self.object = self.get_object()
-
-            self.object.status = Conversation.ARCHIVED
+            status_swap = {
+                Conversation.ARCHIVED: Conversation.ACTIVE,
+                Conversation.ACTIVE: Conversation.ARCHIVED,
+            }
+            self.object.status = status_swap.get(self.object.status, Conversation.ARCHIVED)
             self.object.save(update_fields=["status"])
 
             response = HttpResponse()
             response["Temba-Success"] = self.get_success_url()
             return response
+
+        def get_context_data(self, **kwargs):
+            self.object = self.get_object()
+            context_data = super().get_context_data(**kwargs)
+            context_data["submit_button_name"] = (
+                _("Archive") if self.object.status == Conversation.ACTIVE else _("Activate")
+            )
+            return context_data
 
     class CreateTemplate(OrgPermsMixin, ModalMixin, SmartFormView):
         model = ConversationTemplate

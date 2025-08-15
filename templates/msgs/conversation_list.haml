@@ -298,7 +298,7 @@
 
               .flex-grow.flex-col.h-full(class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
                 %temba-contact-chat.h-full(agent="{{request.user.email}}" monitor="true")
-        %temba-modax#archive-modal{ header: '{% trans "Archive Conversation" %}' }
+        %temba-modax#archive-modal{ header: '{% trans "Update Conversation" %}' }
         %temba-dialog#info-dialog{ header: '{% trans "Attachment Error" %}' }
           #info-dialog-body.p-5
             -trans "Failed to send attachment."

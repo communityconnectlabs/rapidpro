@@ -3,11 +3,11 @@
 
 -block modal
   {{block.super}}
-    -blocktrans
-      You are about to archive
-      %span.font-normal
-        {{object}}.
-      Are you sure?
+    -trans "You are about to"
+    {{submit_button_name|lower}}
+    %span.font-normal
+      {{object}}.
+    -trans "Are you sure?"
 
     .hidden
       %form(method="POST")
