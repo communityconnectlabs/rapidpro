@@ -1201,6 +1201,7 @@ CELERY_BEAT_SCHEDULE = {
         "task": "check_outbound_inbound_per_org_task",
         "schedule": crontab(hour=5, minute=0),
     },
+    "release-large-send-groups": {"task": "release_large_send_groups_task", "schedule": crontab(hour=6, minute=0)},
 }
 
 # -----------------------------------------------------------------------------------
