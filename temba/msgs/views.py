@@ -1527,7 +1527,7 @@ class ConversationCRUDL(SmartCRUDL):
 
             attachment_name = f"attachments/conversations/{contact.uuid}/{attachment.name}"
             attachment_path = default_storage.save(attachment_name, ContentFile(attachment.read()))
-            attachment_uri = request.build_absolute_uri(settings.MEDIA_URL + attachment_path)
+            attachment_uri = request.build_absolute_uri(reverse("file_storage", kwargs={"file_path": attachment_path}))
             mailroom_response = get_client().msg_send(
                 org.id,
                 user.id,
