@@ -2527,6 +2527,7 @@ class ContactImport(SmartModel):
         num_updated = 0
         num_blocked = 0
         num_errored = 0
+        blocked_uuids = []
         errors = []
         oldest_finished_on = None
         validated_urn_carriers = dict(mobile=[], landline=[])
@@ -2542,6 +2543,7 @@ class ContactImport(SmartModel):
             "errors",
             "finished_on",
             "carrier_groups",
+            "blocked_uuids",
         )
         num_duplicates = 0
         for batch in batches:
@@ -2552,6 +2554,7 @@ class ContactImport(SmartModel):
             errors.extend(batch["errors"])
             mobile_contacts = batch["carrier_groups"].get("mobile", [])
             landline_contacts = batch["carrier_groups"].get("landline", [])
+            blocked_uuids += batch["blocked_uuids"] or []
 
             if batch["finished_on"] and (oldest_finished_on is None or batch["finished_on"] > oldest_finished_on):
                 oldest_finished_on = batch["finished_on"]
@@ -2592,6 +2595,7 @@ class ContactImport(SmartModel):
             "num_updated": num_updated,
             "num_blocked": num_blocked,
             "num_errored": num_errored,
+            "blocked_uuids": blocked_uuids,
             "errors": errors,
             "time_taken": int(time_taken.total_seconds()),
             "num_duplicates": num_duplicates,
