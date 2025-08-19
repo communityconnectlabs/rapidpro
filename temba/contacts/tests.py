@@ -1069,7 +1069,9 @@ class ContactGroupTest(TembaTest):
         release_large_send_groups_task()
 
         groups_count = ContactGroup.user_groups.filter(
-            name__startswith=large_send_prefix, created_on__lte=month_ago
+            name__startswith=large_send_prefix,
+            created_on__lte=month_ago,
+            is_active=True,
         ).count()
         self.assertEqual(0, groups_count, "The large send groups created a month ago or earlier must be deleted")
 

@@ -227,6 +227,4 @@ def release_large_send_groups_task():
     month_ago = timezone.now() - timedelta(days=30)
     groups = ContactGroup.all_groups.filter(name__startswith=large_send_prefix, created_on__lte=month_ago)
     for group in groups:
-        group._full_release()
-        ContactGroupCount.objects.filter(group=group).delete()
-        group.delete()
+        group.release(user=group.created_by, immediate=True)
