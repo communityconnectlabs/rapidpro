@@ -137,6 +137,13 @@
         chat.onAttachmentSelected = (e) => {
           let file = e.target.files[0];
           if (file) {
+            if (file.type.startsWith("image") && file.size > 5 * 1024 * 1024 || !file.type.startsWith("image") && file.size > 512 * 1024) {
+              document.querySelector("temba-contact-chat").shadowRoot.querySelector("input[type='file']").value = '';
+              document.querySelector("#info-dialog-body").innerText = `File "${file.name}" exceeds the size limit (${file.type.startsWith("image") ? "5 MB" : "500KB"}).`;
+              document.querySelector('#info-dialog').open = true;
+              return;
+            }
+
             let formData = new FormData();
             formData.append("attachment", file);
             fetch(
@@ -154,8 +161,9 @@
               document.querySelector("temba-contact-chat")
               .shadowRoot.querySelector("input[type='file']")
               .value = '';
-            }).catch((e) => {
-              console.error(e);
+            }).catch(() => {
+              document.querySelector("temba-contact-chat").shadowRoot.querySelector("input[type='file']").value = '';
+              document.querySelector("#info-dialog-body").innerText = `Failed to send attachment.`;
               document.querySelector('#info-dialog').open = true;
             });
           }
