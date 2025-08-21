@@ -135,6 +135,10 @@
         }];
         chat.attachmentAccept = ".pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .txt, .odt, image/*, audio/*, video/*";
         chat.onAttachmentSelected = (e) => {
+          let loading = document.createElement("temba-loading");
+          loading.size = 10;
+          loading.units = 6;
+
           let file = e.target.files[0];
           if (file) {
             if (file.type.startsWith("image") && file.size > 5 * 1024 * 1024 || !file.type.startsWith("image") && file.size > 512 * 1024) {
@@ -143,6 +147,14 @@
               document.querySelector('#info-dialog').open = true;
               return;
             }
+
+            let controls = document.querySelector("temba-contact-chat").shadowRoot.querySelector(".chatbox>div");
+            controls.querySelector("temba-tip").style.marginRight = 'auto';
+            controls.querySelector("temba-tip").style.paddingRight = '43px';
+            controls.querySelector("temba-button").style.marginLeft = 'auto';
+            loading.style.marginLeft = 'auto';
+            loading.style.marginRight = 'auto';
+            controls.insertBefore(loading, controls.querySelector("temba-button"));
 
             let formData = new FormData();
             formData.append("attachment", file);
@@ -165,6 +177,10 @@
               document.querySelector("temba-contact-chat").shadowRoot.querySelector("input[type='file']").value = '';
               document.querySelector("#info-dialog-body").innerText = `Failed to send attachment.`;
               document.querySelector('#info-dialog').open = true;
+            }).finally(() => {
+              document.querySelector("temba-contact-chat")
+              .shadowRoot.querySelector(".chatbox>div")
+              .removeChild(loading);
             });
           }
         };
