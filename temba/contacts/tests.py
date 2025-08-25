@@ -62,7 +62,12 @@ from .models import (
     ContactURN,
     ExportContactsTask,
 )
-from .tasks import block_deactivated_contacts_task, check_elasticsearch_lag, squash_contactgroupcounts
+from .tasks import (
+    block_deactivated_contacts_task,
+    check_elasticsearch_lag,
+    release_large_send_groups_task,
+    squash_contactgroupcounts,
+)
 from .templatetags.contacts import contact_field, history_class, history_icon
 
 
@@ -1050,6 +1055,29 @@ class ContactGroupTest(TembaTest):
         response = self.client.post(delete_url, dict())
         self.assertRedirect(response, f"/contact/filter/{block_group.uuid}/")
         self.assertTrue(ContactGroup.user_groups.get(id=block_group.id).is_active)
+
+    def test_cleanup_large_send_groups(self):
+        large_send_prefix = "Large Send"
+        month_ago = timezone.now() - timedelta(days=30)
+        test_contact: Contact = self.create_contact("Joe Blow", phone="+250788000001")
+        test_group: ContactGroup = self.create_group(f"{large_send_prefix} - 2025-11-30 - 1 2")
+
+        test_group.contacts.add(test_contact)
+        test_group.created_on = month_ago
+        test_group.save(update_fields=["created_on"])
+
+        release_large_send_groups_task()
+
+        groups_count = ContactGroup.user_groups.filter(
+            name__startswith=large_send_prefix,
+            created_on__lte=month_ago,
+            is_active=True,
+        ).count()
+        self.assertEqual(0, groups_count, "The large send groups created a month ago or earlier must be deleted")
+
+        contacts_count = Contact.objects.filter(id=test_contact.id).count()
+        self.assertEqual(1, contacts_count, "The contacts should not be removed")
+        test_contact._full_release()
 
 
 class ElasticSearchLagTest(TembaTest):
@@ -5579,6 +5607,7 @@ class ContactImportTest(TembaTest):
                 "num_updated": 0,
                 "num_blocked": 0,
                 "num_errored": 0,
+                "blocked_uuids": [],
                 "errors": [],
                 "time_taken": 0,
                 "num_duplicates": 0,
@@ -5653,6 +5682,7 @@ class ContactImportTest(TembaTest):
                 "num_updated": 0,
                 "num_blocked": 0,
                 "num_errored": 0,
+                "blocked_uuids": [],
                 "errors": [],
                 "time_taken": matchers.Int(),
                 "num_duplicates": 0,
@@ -5675,6 +5705,7 @@ class ContactImportTest(TembaTest):
                 "num_updated": 1,
                 "num_blocked": 0,
                 "num_errored": 0,
+                "blocked_uuids": [],
                 "errors": [{"record": 1, "message": "that's wrong"}],
                 "time_taken": matchers.Int(),
                 "num_duplicates": 0,
@@ -5698,6 +5729,7 @@ class ContactImportTest(TembaTest):
                 "num_updated": 6,
                 "num_blocked": 0,
                 "num_errored": 0,
+                "blocked_uuids": [],
                 "errors": [{"record": 1, "message": "that's wrong"}, {"record": 3, "message": "that's not right"}],
                 "time_taken": matchers.Int(),
                 "num_duplicates": 0,
@@ -5721,6 +5753,7 @@ class ContactImportTest(TembaTest):
                 "num_updated": 6,
                 "num_blocked": 0,
                 "num_errored": 0,
+                "blocked_uuids": [],
                 "errors": [{"record": 1, "message": "that's wrong"}, {"record": 3, "message": "that's not right"}],
                 "time_taken": matchers.Int(),
                 "num_duplicates": 0,

@@ -1208,6 +1208,7 @@ CELERY_BEAT_SCHEDULE = {
         "task": "send_unread_msgs_notification_email",
         "schedule": timedelta(hours=1),
     },
+    "release-large-send-groups": {"task": "release_large_send_groups_task", "schedule": crontab(hour=6, minute=0)},
 }
 
 # -----------------------------------------------------------------------------------
