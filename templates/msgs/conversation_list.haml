@@ -114,6 +114,13 @@
   {{ block.super }}
 
   :javascript
+    function hideBadge(e) {
+      let badge = e.target.querySelector(".badge");
+      if (badge) {
+        e.target.removeChild(badge);
+      }
+    }
+
     function selectChat(contactUUID) {
       const url = new URL(window.location);
       const params = new URLSearchParams(url.search);
@@ -314,7 +321,7 @@
                       -trans "No chats found"
                     -else
                       -for chat in chats
-                        %li.w-full.p-1.cursor-pointer.flex.flex-row.justify-between.list-item(onclick='selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
+                        %li.w-full.p-1.cursor-pointer.flex.flex-row.justify-between.list-item(onclick='hideBadge(event);selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
                           =chat.contact
                           -if chat.unread_count
                             .badge.line16px
