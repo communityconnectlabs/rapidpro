@@ -1414,6 +1414,7 @@ class Conversation(models.Model):
     A conversation is a collection of messages between a contact and manager
     """
 
+    EMAIL_NOTIFICATION_KEY = "unread_messages_email_sent_%d"
     ACTIVE = "ACT"
     ARCHIVED = "ARC"
     STATUS = (

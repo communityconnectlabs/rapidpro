@@ -1,6 +1,17 @@
 import logging
+from datetime import timedelta
+from urllib.parse import urlencode
 
+from django_redis import get_redis_connection
+
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models import Case, Count, IntegerField, Q, When
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django.utils.translation import gettext_lazy as _
 
 from celery import shared_task
 
@@ -8,7 +19,17 @@ from temba.flows.models import FlowRun
 from temba.utils import analytics, chunk_list
 from temba.utils.celery import nonoverlapping_task
 
-from .models import Broadcast, BroadcastMsgCount, ExportMessagesTask, LabelCount, Msg, SystemLabel, SystemLabelCount
+from .models import (
+    Broadcast,
+    BroadcastMsgCount,
+    Conversation,
+    ConversationOwner,
+    ExportMessagesTask,
+    LabelCount,
+    Msg,
+    SystemLabel,
+    SystemLabelCount,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +172,47 @@ def backfill_msg_flow(org_id):
         logger.warning(f"Updated {num_updated}/{len(flow_run_ids)}")
 
     logger.warning(f"Process 'backfill_msg_flow' finished for org ID: {org_id}")
+
+
+@shared_task(track_started=True, name="send_unread_msgs_notification_email")
+def send_unread_msgs_notification_email():
+    r = get_redis_connection()
+    conversations = ConversationOwner.objects.filter(conversation__status=Conversation.ACTIVE)
+    for conversation in conversations:
+        last_read = conversation.last_read
+        count = (
+            Msg.objects.filter(
+                direction=Msg.DIRECTION_IN,
+                contact=conversation.conversation.contact,
+                created_on__gt=last_read,
+            )
+            .values("contact")
+            .annotate(count=Count("id"))
+            .values("count")[:1]
+            or [0]
+        )[0]
+        if count and conversation.owner.email:
+            email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % conversation.owner.pk
+            already_sent_datetime = r.get(email_notification_key)
+            already_sent_datetime = already_sent_datetime.decode("utf-8") if already_sent_datetime else ""
+            yesterday = timezone.now() - timedelta(days=1)
+            if already_sent_datetime and parse_datetime(already_sent_datetime) > yesterday:
+                # skip when email already sent today
+                continue
+
+            query = urlencode({"contactUUID": conversation.conversation.contact.uuid})
+            context = {
+                "username": conversation.owner.username,
+                "missing_count": count,
+                "site_url": f"https://{settings.HOSTNAME}/{reverse('msgs.conversation_list')}?{query}",
+                "now": timezone.now(),
+            }
+            html_content = render_to_string("msgs/email/unread_messages.html", context)
+            send_mail(
+                subject=_("You have unread messages"),
+                message=html_content,
+                html_message=html_content,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[conversation.owner.email],
+            )
+            r.set(email_notification_key, timezone.now().isoformat())
