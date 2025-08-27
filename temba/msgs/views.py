@@ -1149,7 +1149,14 @@ class ConversationTemplateForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        if self.org and self.org.conversation_templates.filter(name=cleaned["name"]).exists():
+        if not self.org:
+            return cleaned
+
+        has_name_conflicts = self.org.conversation_templates.filter(name=cleaned["name"]).exists()
+        if self.instance and cleaned["name"] == self.instance.name:
+            has_name_conflicts = False
+
+        if has_name_conflicts:
             self.add_error("name", _("The template with this name already exists."))
 
         return cleaned
