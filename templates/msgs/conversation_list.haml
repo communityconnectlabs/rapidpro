@@ -106,22 +106,97 @@
       text-decoration: none;
     }
 
+    .line16px {
+      line-height: 16px;
+    }
+
 -block extra-script
   {{ block.super }}
 
   :javascript
+    function hideBadge(e) {
+      let badge = e.target.querySelector(".badge");
+      if (badge) {
+        e.target.removeChild(badge);
+      }
+    }
+
     function selectChat(contactUUID) {
       const url = new URL(window.location);
       const params = new URLSearchParams(url.search);
 
       // Modify or add query params
       var chat = document.querySelector("temba-contact-chat");
+      var archiveURL = "{% url 'msgs.conversation_archive' 'uuid' %}";
+      var sendAttachmentURL = "{% url 'msgs.conversation_send_attachment' 'uuid' %}";
       if(contactUUID && contactUUID !== "null") {
         chat.contactUUID = contactUUID;
+        chat.customActions = [{
+          label: "Archive",
+          icon: "archive",
+          callback: () => {
+            const archiveModal = document.querySelector("#archive-modal");
+            archiveModal.endpoint = archiveURL.replace("uuid", contactUUID);
+            archiveModal.open = true;
+          }
+        }];
+        chat.attachmentAccept = ".pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .txt, .odt, image/*, audio/*, video/*";
+        chat.onAttachmentSelected = (e) => {
+          let loading = document.createElement("temba-loading");
+          loading.size = 10;
+          loading.units = 6;
+
+          let file = e.target.files[0];
+          if (file) {
+            if (file.type.startsWith("image") && file.size > 5 * 1024 * 1024 || !file.type.startsWith("image") && file.size > 512 * 1024) {
+              document.querySelector("temba-contact-chat").shadowRoot.querySelector("input[type='file']").value = '';
+              document.querySelector("#info-dialog-body").innerText = `File "${file.name}" exceeds the size limit (${file.type.startsWith("image") ? "5 MB" : "500KB"}).`;
+              document.querySelector('#info-dialog').open = true;
+              return;
+            }
+
+            let controls = document.querySelector("temba-contact-chat").shadowRoot.querySelector(".chatbox>div");
+            controls.querySelector("temba-tip").style.marginRight = 'auto';
+            controls.querySelector("temba-tip").style.paddingRight = '43px';
+            controls.querySelector("temba-button").style.marginLeft = 'auto';
+            loading.style.marginLeft = 'auto';
+            loading.style.marginRight = 'auto';
+            controls.insertBefore(loading, controls.querySelector("temba-button"));
+
+            let formData = new FormData();
+            formData.append("attachment", file);
+            fetch(
+              sendAttachmentURL.replace("uuid", contactUUID),
+              {
+                method: "POST",
+                body: formData,
+                headers: {
+                  "X-CSRFToken": document.cookie.split("; ").filter((c) => c.startsWith("csrftoken="))[0]?.replace("csrftoken=", "")
+                }
+              }
+            )
+            .then(r => r.json())
+            .then(() => {
+              document.querySelector("temba-contact-chat")
+              .shadowRoot.querySelector("input[type='file']")
+              .value = '';
+            }).catch(() => {
+              document.querySelector("temba-contact-chat").shadowRoot.querySelector("input[type='file']").value = '';
+              document.querySelector("#info-dialog-body").innerText = `Failed to send attachment.`;
+              document.querySelector('#info-dialog').open = true;
+            }).finally(() => {
+              document.querySelector("temba-contact-chat")
+              .shadowRoot.querySelector(".chatbox>div")
+              .removeChild(loading);
+            });
+          }
+        };
         params.set('contactUUID', contactUUID);
       } else {
         chat.contactUUID = null;
         chat.currentContact = null;
+        chat.attachmentAccept = null;
+        chat.customActions = null;
         params.delete('contactUUID');
       }
 
@@ -141,6 +216,14 @@
     function clearSearch() {
       const url = new URL(window.location);
       url.searchParams.delete('search');
+      url.searchParams.delete('archived');
+      window.location.href = url.toString();
+    }
+
+    function clearSearchArchived() {
+      const url = new URL(window.location);
+      url.searchParams.delete('search');
+      url.searchParams.set('archived', 'true');
       window.location.href = url.toString();
     }
 
@@ -157,12 +240,19 @@
       filter.classList.add("is-active");
     }
 
+    function initErrorDialog() {
+      let dialog = document.querySelector('#info-dialog');
+      dialog.primaryButtonName = null;
+      dialog.cancelButtonName = "OK";
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       const url = new URL(window.location);
       const params = new URLSearchParams(url.search);
       const contactUUID = params.get('contactUUID');
       initFilter(params);
       selectChat(contactUUID);
+      initErrorDialog();
     });
 
 -block content
@@ -182,6 +272,11 @@
                     Chats
                   .count
                     {{ chats_count | intcomma }}
+                .lp-nav-item{'class': 'font-normal', 'onclick': 'clearSearchArchived()' }
+                  .name
+                    Archived
+                  .count
+                    {{ archived_count | intcomma }}
 
               -if templates
                 .lp-nav.lower
@@ -226,8 +321,17 @@
                       -trans "No chats found"
                     -else
                       -for chat in chats
-                        %li.w-full.p-1.cursor-pointer.list-item(onclick='selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
+                        %li.w-full.p-1.cursor-pointer.flex.flex-row.justify-between.list-item(onclick='hideBadge(event);selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
                           =chat.contact
+                          -if chat.unread_count
+                            .badge.line16px
+                              =chat.unread_count
 
-              .flex-grow.flex-col.h-full(style="" class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
+              .flex-grow.flex-col.h-full(class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
                 %temba-contact-chat.h-full(agent="{{request.user.email}}" monitor="true")
+        %temba-modax#archive-modal{ header: '{% trans "Update Conversation" %}' }
+        %temba-dialog#info-dialog{ header: '{% trans "Attachment Error" %}' }
+          #info-dialog-body.p-5
+            -trans "Failed to send attachment."
+          %div{ slot: "footer", onclick: "document.querySelector('#info-dialog').open = false" }
+            OK

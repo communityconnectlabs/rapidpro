@@ -112,6 +112,16 @@ class MailroomClient:
 
         return self._request("flow/clone", payload)
 
+    def msg_send(self, org_id: int, user_id: int, contact_id: int, text: str, attachments: list[str]):
+        payload = {
+            "org_id": org_id,
+            "user_id": user_id,
+            "contact_id": contact_id,
+            "text": text,
+            "attachments": attachments,
+        }
+        return self._request("msg/send", payload)
+
     def msg_resend(self, org_id, msg_ids):
         payload = {"org_id": org_id, "msg_ids": msg_ids}
 

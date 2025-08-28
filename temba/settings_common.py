@@ -1067,6 +1067,9 @@ GROUP_PERMISSIONS = {
         "contacts.contact_omnibox",
         "contacts.contactgroup_api",
         "contacts.contactfield_api",
+        "contacts.contact_list",
+        "contacts.contact_filter",
+        "contacts.contact_read",
         "globals.global_api",
         "msgs.broadcast_api",
         "msgs.conversation_list",
@@ -1201,6 +1204,7 @@ CELERY_BEAT_SCHEDULE = {
         "task": "check_outbound_inbound_per_org_task",
         "schedule": crontab(hour=5, minute=0),
     },
+    "release-large-send-groups": {"task": "release_large_send_groups_task", "schedule": crontab(hour=6, minute=0)},
 }
 
 # -----------------------------------------------------------------------------------
@@ -1527,6 +1531,7 @@ GOOGLE_FONT_API_KEY = os.environ.get("GOOGLE_FONT_API_KEY", "")
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_METHODS = ["GET"]
+X_FRAME_OPTIONS = "SAMEORIGIN"
 
 # Contacts import via excel
 # if set to True will not raise error on duplicate, instead will use last row

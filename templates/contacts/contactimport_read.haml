@@ -1,5 +1,5 @@
 -extends "smartmin/read.html"
--load smartmin i18n
+-load smartmin i18n temba contacts
 
 -block title
   -trans "Contact Import"
@@ -99,6 +99,36 @@
                 .import-error
                   -blocktrans trimmed with row=error.record|add:"2" message=error.message
                     Row {{ row }}: {{ message }}
+
+      -if info.num_blocked
+        %table.list.object-list.lined
+          %thead
+            %th{"colspan": "2"}
+              -blocktrans trimmed count info.num_blocked as count
+                Blocked/Unsubscribed Contact - Ignored {{ count }}
+                -plural
+                  Blocked/Unsubscribed Contacts - Ignored {{ count }}
+            %th.px-6.py-3.pt-4.border-b.border-gray-200.bg-gray-100.text-left.font-medium.uppercase.text-xs.tracking-wider
+            %th.px-6.py-3.pt-4.border-b.border-gray-200.bg-gray-100.text-left.font-medium.uppercase.text-xs.tracking-wider
+          %tbody
+            -for contact in blocked_contacts
+              %tr.contact.select-row.object-row
+                %td
+                  .whitespace-nowrap
+                    %a{"href": "{% url 'contacts.contact_read' contact.uuid %}", "target": "_blank"}
+                      =contact
+                %td.w-full
+                  .whitespace-nowrap
+                    =contact|urn:user_org
+                %td.value-received.field_received
+                  .whitespace-nowrap
+                    -if contact.last_seen_on
+                      -format_datetime contact.last_seen_on
+                    -else
+                      ="--"
+                %td.value-received.field_received
+                  .whitespace-nowrap
+                    -format_datetime contact.created_on
 
 -block extra-style
   {{ block.super }}
