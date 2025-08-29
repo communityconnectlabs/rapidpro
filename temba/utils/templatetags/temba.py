@@ -325,7 +325,7 @@ def amplitude_hook(context):
         '{"autocapture":{"elementInteractions":true}});'
         "</script>"
     )
-    url_name = context["request"].resolver_match.url_name
+    url_name = getattr(getattr(context.get("request"), "resolver_match"), "url_name", "")
     enable_analytics = any(
         [
             url_name.startswith("msgs.conversation_list"),
