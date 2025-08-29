@@ -2525,7 +2525,6 @@ class ContactImport(SmartModel):
 
         num_created = 0
         num_updated = 0
-        num_blocked = 0
         num_errored = 0
         blocked_uuids = []
         errors = []
@@ -2538,7 +2537,6 @@ class ContactImport(SmartModel):
         batches = self.batches.values(
             "num_created",
             "num_updated",
-            "num_blocked",
             "num_errored",
             "errors",
             "finished_on",
@@ -2549,7 +2547,6 @@ class ContactImport(SmartModel):
         for batch in batches:
             num_created += batch["num_created"]
             num_updated += batch["num_updated"]
-            num_blocked += batch["num_blocked"]
             num_errored += batch["num_errored"]
             errors.extend(batch["errors"])
             mobile_contacts = batch["carrier_groups"].get("mobile", [])
@@ -2588,6 +2585,8 @@ class ContactImport(SmartModel):
             validated_urn_carriers["landline"] = self._generate_validation_report(
                 landline_list, "landline", MAX_LANDLINE_GROUP_CONTACTS
             )
+
+        num_blocked = Contact.objects.filter(uuid__in=blocked_uuids, status=Contact.STATUS_BLOCKED).count()
 
         return {
             "status": self.status,
