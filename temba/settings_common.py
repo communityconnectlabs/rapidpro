@@ -1622,3 +1622,5 @@ SAML_ATTRIBUTE_MAPPING = {
     "first_name": ("FirstName",),
     "last_name": ("LastName",),
 }
+
+AMPLITUDE_API_KEY = os.environ.get("AMPLITUDE_API_KEY", "")

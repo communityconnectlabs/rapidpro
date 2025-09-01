@@ -321,7 +321,7 @@ def amplitude_hook(context):
         "<script>"
         "window.amplitude.add(window.sessionReplay.plugin({sampleRate: 1}));"
         "window.amplitude.init("
-        "'c969b697edcab745b2f86b39501c7bbc', "
+        f"'{settings.AMPLITUDE_API_KEY}', "
         '{"autocapture":{"elementInteractions":true}});'
         "</script>"
     )
@@ -337,7 +337,7 @@ def amplitude_hook(context):
             url_name.startswith("orgs.org_home"),
         ]
     )
-    if not enable_analytics:
+    if not settings.AMPLITUDE_API_KEY or not enable_analytics:
         return ""
 
     return mark_safe(html)
