@@ -313,6 +313,36 @@ def analytics_hook(context, name: str):
     return mark_safe(analytics.get_hook_html(name, context))
 
 
+@register.simple_tag(takes_context=True)
+def amplitude_hook(context):
+    html = (
+        '<script src="https://cdn.amplitude.com/libs/analytics-browser-2.11.1-min.js.gz"></script>'
+        '<script src="https://cdn.amplitude.com/libs/plugin-session-replay-browser-1.8.0-min.js.gz"></script>'
+        "<script>"
+        "window.amplitude.add(window.sessionReplay.plugin({sampleRate: 1}));"
+        "window.amplitude.init("
+        f"'{settings.AMPLITUDE_API_KEY}', "
+        '{"autocapture":{"elementInteractions":true}});'
+        "</script>"
+    )
+    url_name = getattr(getattr(context.get("request"), "resolver_match"), "url_name", "")
+    enable_analytics = any(
+        [
+            url_name.startswith("msgs.conversation_list"),
+            url_name.startswith("flows.flow_editor"),
+            url_name.startswith("triggers.trigger_"),
+            url_name.startswith("contacts.contact_"),
+            url_name.startswith("campaigns.campaign_"),
+            url_name.startswith("msgs.msg_"),
+            url_name.startswith("orgs.org_home"),
+        ]
+    )
+    if not settings.AMPLITUDE_API_KEY or not enable_analytics:
+        return ""
+
+    return mark_safe(html)
+
+
 def format_tz_datetime(time, tz):
     user_time_zone = pytz.timezone(tz.zone)
 
