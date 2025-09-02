@@ -1058,6 +1058,7 @@ class Flow(TembaModel):
 
         # clear our association with any related sessions
         self.sessions.all().update(current_flow=None)
+        self.contact_set.update(current_flow=None)
 
         # grab the ids of all our runs
         run_ids = self.runs.all().values_list("id", flat=True)
