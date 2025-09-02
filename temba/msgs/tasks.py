@@ -177,14 +177,13 @@ def backfill_msg_flow(org_id):
 @shared_task(track_started=True, name="send_unread_msgs_notification_email")
 def send_unread_msgs_notification_email():
     r = get_redis_connection()
-    conversations = ConversationOwner.objects.filter(conversation__status=Conversation.ACTIVE)
+    conversations = ConversationOwner.objects.filter(conversation__status=Conversation.ACTIVE, last_read__isnull=False)
     for conversation in conversations:
-        last_read = conversation.last_read
         count = (
             Msg.objects.filter(
                 direction=Msg.DIRECTION_IN,
                 contact=conversation.conversation.contact,
-                created_on__gt=last_read,
+                created_on__gt=conversation.last_read,
             )
             .values("contact")
             .annotate(count=Count("id"))

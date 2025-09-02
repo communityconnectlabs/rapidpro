@@ -2999,6 +2999,10 @@ class ConversationTest(TembaTest):
             owner=self.admin,
             last_read=hour_ago,
         )
+        ConversationOwner.objects.create(
+            conversation=self.conversation,
+            owner=self.editor,
+        )
         queryset = Conversation.objects.filter(org=self.org, contact=self.contact, status=Conversation.ACTIVE)
         queryset = self.__annotate_unread_count(queryset).filter(unread_count__gt=0)
         self.assertEqual(queryset.count(), 1)
