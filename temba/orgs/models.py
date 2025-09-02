@@ -1954,7 +1954,8 @@ class Org(SmartModel):
         self.exportflowresultstasks.all().delete()
 
         for label in self.msgs_labels(manager="all_objects").all():
-            label.release(user)
+            label.release(user, release_children=True)
+            label.children.all().delete()
             label.delete()
 
         msg_ids = self.msgs.all().values_list("id", flat=True)
