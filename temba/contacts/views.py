@@ -2512,7 +2512,10 @@ class ContactImportCRUDL(SmartCRUDL):
             context["info"] = self.import_info
             context["is_finished"] = self.is_import_finished()
             context["is_validated"] = self.is_validated()
-            context["blocked_contacts"] = Contact.objects.filter(uuid__in=self.import_info.get("blocked_uuids", []))
+            context["blocked_contacts"] = Contact.objects.filter(
+                uuid__in=self.import_info.get("blocked_uuids", []),
+                status__in=[Contact.STATUS_BLOCKED, Contact.STATUS_STOPPED],
+            )
             return context
 
         @cached_property

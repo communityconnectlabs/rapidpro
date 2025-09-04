@@ -2586,7 +2586,14 @@ class ContactImport(SmartModel):
                 landline_list, "landline", MAX_LANDLINE_GROUP_CONTACTS
             )
 
-        num_blocked = Contact.objects.filter(uuid__in=blocked_uuids, status=Contact.STATUS_BLOCKED).count()
+        blocked_stopped = Contact.objects.filter(uuid__in=blocked_uuids).aggregate(
+            num_blocked=Count("id", filter=Q(status=Contact.STATUS_BLOCKED), distinct=True),
+            num_stopped=Count("id", filter=Q(status=Contact.STATUS_STOPPED), distinct=True),
+        )
+        num_blocked, num_stopped = blocked_stopped.get("num_blocked", 0), blocked_stopped.get("num_stopped", 0)
+        num_stopped_and_blocked = num_blocked + num_stopped
+        num_updated -= num_stopped_and_blocked
+        num_total -= num_stopped_and_blocked
 
         return {
             "status": self.status,
