@@ -187,7 +187,7 @@ def send_unread_msgs_notification_email():
             )
             .values("contact")
             .annotate(count=Count("id"))
-            .values("count")[:1]
+            .values_list("count", flat=True)[:1]
             or [0]
         )[0]
         if count and conversation.owner.email:
