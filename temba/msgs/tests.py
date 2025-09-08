@@ -3007,6 +3007,7 @@ class ConversationTest(TembaTest):
         queryset = self.__annotate_unread_count(queryset).filter(unread_count__gt=0)
         self.assertEqual(queryset.count(), 1)
 
+        # have unread and no email sent yes
         email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % self.admin.pk
         sending_date = r.get(email_notification_key)
         self.assertIsNone(sending_date, "Should not be any emails sent yet")
@@ -3014,9 +3015,27 @@ class ConversationTest(TembaTest):
         with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
             send_unread_msgs_notification_email()
             send_mail_mock.assert_called_once()
+            self.assertEqual(
+                send_mail_mock.call_args[1]["message"][1914:1967],
+                "We noticed you have 1 unread message waiting for you.",
+                "Email does not contain correct message",
+            )
 
+        # have unread but email already sent
         sending_date = r.get(email_notification_key)
         self.assertEqual(sending_date.decode("utf-8")[:18], timezone.now().isoformat()[:18], "Email should be sent")
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+        # history viewed and all messages read
+        self.login(self.admin)
+        with patch("temba.utils.s3.s3.client", return_value=None):
+            self.client.get(reverse("contacts.contact_history", args=[self.contact.uuid]) + "?limit=100")
+
+        sending_date = r.get(email_notification_key)
+        self.assertIsNone(sending_date, "Should not be any emails sent yet")
 
         with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
             send_unread_msgs_notification_email()
