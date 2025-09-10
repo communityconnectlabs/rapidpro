@@ -1204,6 +1204,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "check_outbound_inbound_per_org_task",
         "schedule": crontab(hour=5, minute=0),
     },
+    "send-unread-msgs-notification-email": {
+        "task": "send_unread_msgs_notification_email",
+        "schedule": timedelta(hours=1),
+    },
     "release-large-send-groups": {"task": "release_large_send_groups_task", "schedule": crontab(hour=6, minute=0)},
 }
 
@@ -1622,3 +1626,5 @@ SAML_ATTRIBUTE_MAPPING = {
     "first_name": ("FirstName",),
     "last_name": ("LastName",),
 }
+
+AMPLITUDE_API_KEY = os.environ.get("AMPLITUDE_API_KEY", "")

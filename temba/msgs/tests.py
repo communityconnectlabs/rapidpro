@@ -2,9 +2,12 @@ from datetime import datetime, timedelta
 from unittest.mock import PropertyMock, patch
 
 import pytz
+from django_redis import get_redis_connection
 from openpyxl import load_workbook
 
 from django.conf import settings
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, QuerySet, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +19,8 @@ from temba.contacts.search.omnibox import omnibox_serialize
 from temba.msgs.models import (
     Attachment,
     Broadcast,
+    Conversation,
+    ConversationOwner,
     ExportMessagesTask,
     Label,
     LabelCount,
@@ -28,7 +33,7 @@ from temba.tests import AnonymousOrg, CRUDLTestMixin, TembaTest
 from temba.tests.engine import MockSessionWriter
 from temba.tests.s3 import MockS3Client, jsonlgz_encode
 
-from .tasks import squash_msgcounts
+from .tasks import send_unread_msgs_notification_email, squash_msgcounts
 from .templatetags.sms import as_icon
 
 
@@ -2971,3 +2976,91 @@ class TagsTest(TembaTest):
         # exception if tag not used correctly
         self.assertRaises(ValueError, self.render_template, "{% load sms %}{% render with bob %}{% endrender %}")
         self.assertRaises(ValueError, self.render_template, "{% load sms %}{% render as %}{% endrender %}")
+
+
+class ConversationTest(TembaTest):
+    def setUp(self):
+        super().setUp()
+        self.contact = self.create_contact("Bob", phone="0783835001")
+        self.conversation: Conversation = Conversation.objects.create(
+            org=self.org,
+            contact=self.contact,
+            status=Conversation.ACTIVE,
+            created_on=timezone.now(),
+        )
+
+    def test_unread_messages_email(self):
+        r = get_redis_connection()
+        hour_ago = timezone.now() - timedelta(hours=1)
+        half_hour_ago = timezone.now() - timedelta(minutes=30)
+        self.create_incoming_msg(self.contact, "How is it going?", created_on=half_hour_ago)
+        ConversationOwner.objects.create(
+            conversation=self.conversation,
+            owner=self.admin,
+            last_read=hour_ago,
+        )
+        ConversationOwner.objects.create(
+            conversation=self.conversation,
+            owner=self.editor,
+        )
+        queryset = Conversation.objects.filter(org=self.org, contact=self.contact, status=Conversation.ACTIVE)
+        queryset = self.__annotate_unread_count(queryset).filter(unread_count__gt=0)
+        self.assertEqual(queryset.count(), 1)
+
+        # have unread and no email sent yes
+        email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % self.admin.pk
+        sending_date = r.get(email_notification_key)
+        self.assertIsNone(sending_date, "Should not be any emails sent yet")
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_called_once()
+            self.assertEqual(
+                send_mail_mock.call_args[1]["message"][1914:1967],
+                "We noticed you have 1 unread message waiting for you.",
+                "Email does not contain correct message",
+            )
+
+        # have unread but email already sent
+        sending_date = r.get(email_notification_key)
+        self.assertEqual(sending_date.decode("utf-8")[:18], timezone.now().isoformat()[:18], "Email should be sent")
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+        # history viewed and all messages read
+        self.login(self.admin)
+        with patch("temba.utils.s3.s3.client", return_value=None):
+            self.client.get(reverse("contacts.contact_history", args=[self.contact.uuid]) + "?limit=100")
+
+        sending_date = r.get(email_notification_key)
+        self.assertIsNone(sending_date, "Should not be any emails sent yet")
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+    def __annotate_unread_count(self, queryset: QuerySet) -> QuerySet:
+        return queryset.annotate(
+            unread_count=Case(
+                When(
+                    Q(conversationowner__owner=self.admin) & Q(conversationowner__last_read__isnull=False),
+                    then=Coalesce(
+                        Subquery(
+                            Msg.objects.filter(
+                                direction=Msg.DIRECTION_IN,
+                                contact=OuterRef("contact"),
+                                created_on__gt=OuterRef("conversationowner__last_read"),
+                            )
+                            .values("contact")
+                            .annotate(count=Count("id"))
+                            .values("count")[:1]
+                        ),
+                        0,
+                    ),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+        )

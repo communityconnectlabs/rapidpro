@@ -100,11 +100,11 @@
                   -blocktrans trimmed with row=error.record|add:"2" message=error.message
                     Row {{ row }}: {{ message }}
 
-      -if info.num_blocked
+      -if blocked_contacts
         %table.list.object-list.lined
           %thead
             %th{"colspan": "2"}
-              -blocktrans trimmed count info.num_blocked as count
+              -blocktrans trimmed count blocked_contacts|length as count
                 Blocked/Unsubscribed Contact - Ignored {{ count }}
                 -plural
                   Blocked/Unsubscribed Contacts - Ignored {{ count }}

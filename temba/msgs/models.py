@@ -1077,8 +1077,12 @@ class Label(TembaModel, DependencyMixin):
     def is_folder(self):
         return self.label_type == Label.TYPE_FOLDER
 
-    def release(self, user):
-        assert not self.has_child_labels(), "can't release non-empty label folder"
+    def release(self, user, release_children=False):
+        if release_children:
+            for child in self.children.all():
+                child.release(user)
+        else:
+            assert not self.has_child_labels(), "can't release non-empty label folder"
 
         if not self.is_folder():
             super().release(user)  # releases flow dependencies
@@ -1414,6 +1418,7 @@ class Conversation(models.Model):
     A conversation is a collection of messages between a contact and manager
     """
 
+    EMAIL_NOTIFICATION_KEY = "unread_messages_email_sent_%d"
     ACTIVE = "ACT"
     ARCHIVED = "ARC"
     STATUS = (
