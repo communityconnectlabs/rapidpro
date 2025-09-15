@@ -203,7 +203,7 @@ def send_unread_msgs_notification_email():
             context = {
                 "username": conversation.owner.username,
                 "missing_count": count,
-                "site_url": f"https://{settings.HOSTNAME}/{reverse('msgs.conversation_list')}?{query}",
+                "site_url": f"https://{settings.HOSTNAME}{reverse('msgs.conversation_list')}?{query}",
                 "now": timezone.now(),
             }
             html_content = render_to_string("msgs/email/unread_messages.html", context)
