@@ -174,7 +174,7 @@ def backfill_msg_flow(org_id):
     logger.warning(f"Process 'backfill_msg_flow' finished for org ID: {org_id}")
 
 
-@shared_task(track_started=True, name="send_unread_msgs_notification_email")
+@nonoverlapping_task(track_started=True, name="send_unread_msgs_notification_email")
 def send_unread_msgs_notification_email():
     r = get_redis_connection()
     conversations = ConversationOwner.objects.filter(conversation__status=Conversation.ACTIVE, last_read__isnull=False)
