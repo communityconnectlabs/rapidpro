@@ -1418,6 +1418,7 @@ class ConversationCRUDL(SmartCRUDL):
 
             queryset = queryset.order_by("-unread_count", *self.default_order).distinct()
             context["chats"] = queryset
+            context["ABLY_API_KEY"] = settings.ABLY_API_KEY
             return context
 
     class Archive(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
