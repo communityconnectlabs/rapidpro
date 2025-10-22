@@ -1,5 +1,5 @@
 -extends "smartmin/list.html"
--load smartmin temba i18n contacts compress humanize
+-load smartmin temba i18n contacts compress humanize static
 
 -block page-title
   {{ title }}
@@ -113,7 +113,7 @@
 -block extra-script
   {{ block.super }}
   %script{"src": "https://cdn.ably.com/lib/ably.min-2.js"}
-  %audio#notification{"src": "{{ MEDIA_URL }}/sounds/new-notification.mp3"}
+  %audio#notification{"src": "{% static '/sounds/new-notification.mp3' %}"}
   :javascript
     function hideBadge(e) {
       let badge = e.target.querySelector(".badge");
