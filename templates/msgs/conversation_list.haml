@@ -275,7 +275,7 @@
           conversationItem.appendChild(badge);
         }
         badge.innerText = Number.parseInt(badge.innerText) + 1;
-        showNotification(`The new message from ${conversationItem.innerText}`);
+        showNotification(`The new message from ${conversationItem?.innerText?.split('\n')[0]}`);
       }
     }
 
