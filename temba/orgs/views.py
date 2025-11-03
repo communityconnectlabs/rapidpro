@@ -882,6 +882,12 @@ class UserCRUDL(SmartCRUDL):
             language = forms.ChoiceField(
                 choices=settings.LANGUAGES, required=True, label=_("Website Language"), widget=SelectWidget()
             )
+            verification_type = forms.ChoiceField(
+                choices=settings.VERIFICATION_TYPES.choices,
+                required=True,
+                label=_("Verification Type"),
+                widget=SelectWidget(),
+            )
 
             def clean_new_password(self):
                 password = self.cleaned_data["new_password"]
@@ -911,7 +917,15 @@ class UserCRUDL(SmartCRUDL):
 
             class Meta:
                 model = User
-                fields = ("first_name", "last_name", "email", "current_password", "new_password", "language")
+                fields = (
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "current_password",
+                    "new_password",
+                    "language",
+                    "verification_type",
+                )
 
         form_class = EditForm
         permission = "orgs.org_profile"
@@ -928,6 +942,7 @@ class UserCRUDL(SmartCRUDL):
             initial = super().derive_initial()
             user_settings = self.get_object().get_settings()
             initial["language"] = user_settings.language
+            initial["verification_type"] = user_settings.verification_type
             return initial
 
         def pre_save(self, obj):
@@ -946,6 +961,7 @@ class UserCRUDL(SmartCRUDL):
             obj = super().post_save(obj)
             user_settings = obj.get_settings()
             user_settings.language = self.form.cleaned_data["language"]
+            user_settings.verification_type = self.form.cleaned_data["verification_type"]
             user_settings.save()
             return obj
 

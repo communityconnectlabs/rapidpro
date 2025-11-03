@@ -34,7 +34,7 @@ pyotp = "2.4.1"
 python-telegram-bot = "^11.1.0"
 sentry-sdk = "^1.0.0"
 stripe = "^2.56.0"
-twilio = "6.24.0"
+twilio = "9.8.5"
 twython = "3.5.0"
 geojson = "^2.5.0"
 Markdown = "^3.3.4"
@@ -80,7 +80,7 @@ xlrd = "^2.0.1"
 python-jose = "^3.4.0"
 djangosaml2 = "1.9.3"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 black = "^22.3.0"
 coverage = "^5.5"
 flake8 = "^4.0.1"
