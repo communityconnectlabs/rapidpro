@@ -12,7 +12,7 @@ def get_verification_service():
         settings.TW_VERIFY_ACCOUNT_SID,
         settings.TW_VERIFY_AUTH_TOKEN,
     )
-    service = client.verify.services(settings.TW_VERIFY_APP_ID)
+    service = client.verify.v2.services(settings.TW_VERIFY_APP_ID)
     return service
 
 
