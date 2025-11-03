@@ -1524,11 +1524,6 @@ WIDGET_THEMES = {
     }
 }
 
-# Authy configuration
-TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", False)
-AUTHY_API_KEY = os.environ.get("AUTHY_API_KEY", "")
-AUTHY_MAGIC_PASS = os.environ.get("AUTHY_MAGIC_PASS", "")
-
 # Credits expiration config
 CREDITS_EXPIRATION = False
 
@@ -1632,6 +1627,7 @@ AMPLITUDE_API_KEY = os.environ.get("AMPLITUDE_API_KEY", "")
 ABLY_API_KEY = os.environ.get("ABLY_API_KEY", "")
 
 # ------------ 2fa configuration fields -------------
+TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", False)
 TW_VERIFY_ACCOUNT_SID = os.environ.get("TW_VERIFY_ACCOUNT_SID", "")
 TW_VERIFY_AUTH_TOKEN = os.environ.get("TW_VERIFY_AUTH_TOKEN", "")
 TW_VERIFY_APP_ID = os.environ.get("TW_VERIFY_APP_ID", "")
