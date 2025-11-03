@@ -6,11 +6,11 @@ from datetime import timedelta
 import iptools
 import saml2
 import sentry_sdk
-from django.db.models import IntegerChoices
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 
+from django.db.models import IntegerChoices
 from django.utils.translation import gettext_lazy as _
 
 from celery.schedules import crontab
@@ -1640,4 +1640,6 @@ TW_VERIFY_APP_ID = os.environ.get("TW_VERIFY_APP_ID", "")
 class VERIFICATION_TYPES(IntegerChoices):
     PHONE = 0, _("Phone")
     EMAIL = 1, _("Email")
+
+
 # ---------------------------------------------------

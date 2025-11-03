@@ -53,6 +53,7 @@ from temba.utils.s3 import private_file_storage
 from temba.utils.text import generate_token, random_string
 from temba.utils.timezones import timezone_to_country_code
 from temba.utils.uuid import uuid4
+from temba.utils.verify import complete_user_verification, start_user_verification
 
 logger = logging.getLogger(__name__)
 
@@ -2428,6 +2429,8 @@ User.record_auth = _user_record_auth
 User.enable_2fa = _user_enable_2fa
 User.disable_2fa = _user_disable_2fa
 User.verify_2fa = _user_verify_2fa
+User.start_verification = start_user_verification
+User.complete_verification = complete_user_verification
 User.name = property(_user_name)
 User.as_engine_ref = _user_as_engine_ref
 User.__str__ = _user_str
@@ -2519,7 +2522,9 @@ class UserSettings(models.Model):
     last_auth_on = models.DateTimeField(null=True)
     external_id = models.CharField(max_length=128, null=True)
     verification_token = models.CharField(max_length=64, null=True)
-    authy_id = models.CharField(verbose_name=_("Authy ID"), max_length=255, null=True, blank=True)
+    verification_type = models.SmallIntegerField(
+        choices=settings.VERIFICATION_TYPES.choices, default=settings.VERIFICATION_TYPES.PHONE
+    )
     tel = models.CharField(
         verbose_name=_("Phone Number"),
         max_length=16,
