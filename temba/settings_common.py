@@ -6,6 +6,7 @@ from datetime import timedelta
 import iptools
 import saml2
 import sentry_sdk
+from django.db.models import IntegerChoices
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
@@ -1629,3 +1630,14 @@ SAML_ATTRIBUTE_MAPPING = {
 
 AMPLITUDE_API_KEY = os.environ.get("AMPLITUDE_API_KEY", "")
 ABLY_API_KEY = os.environ.get("ABLY_API_KEY", "")
+
+# ------------ 2fa configuration fields -------------
+TW_VERIFY_ACCOUNT_SID = os.environ.get("TW_VERIFY_ACCOUNT_SID", "")
+TW_VERIFY_AUTH_TOKEN = os.environ.get("TW_VERIFY_AUTH_TOKEN", "")
+TW_VERIFY_APP_ID = os.environ.get("TW_VERIFY_APP_ID", "")
+
+
+class VERIFICATION_TYPES(IntegerChoices):
+    PHONE = 0, _("Phone")
+    EMAIL = 1, _("Email")
+# ---------------------------------------------------
