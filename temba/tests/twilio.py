@@ -15,7 +15,7 @@ class MockTwilioClient(Client):
         self.org = org
         self.base = base
         self.auth = ["", "FakeRequestToken"]
-        self.events = []
+        self._events = []
 
     @property
     def api(self):

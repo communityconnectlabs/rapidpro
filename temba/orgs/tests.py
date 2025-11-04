@@ -1091,6 +1091,7 @@ class OrgTest(TembaTest):
             last_name="User",
             email="administrator@temba.com",
             current_password="Administrator",
+            verification_type=0,
         )
         response = self.client.post(update_url, post_data, HTTP_X_FORMAX=True)
         self.assertEqual(200, response.status_code)
@@ -3696,6 +3697,7 @@ class OrgCRUDLTest(TembaTest, CRUDLTestMixin):
             last_name="Greene",
             language="en-us",
             current_password="HelloWorld1",
+            verification_type=0,
         )
         response = self.client.post(reverse("orgs.user_edit"), post_data, HTTP_X_FORMAX=True)
         self.assertEqual(200, response.status_code)
