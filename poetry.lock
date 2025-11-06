@@ -3541,7 +3541,7 @@ xlwt = "^1.3.0"
 type = "git"
 url = "https://github.com/communityconnectlabs/smartmin.git"
 reference = "ccl-v7.0"
-resolved_reference = "bc0acf55b2927605b410de1cb333a8bc899ad4fb"
+resolved_reference = "60de3fa16b14c9c97547f41efb4a29dbd7a11a3a"
 
 [[package]]
 name = "social-auth-app-django"
