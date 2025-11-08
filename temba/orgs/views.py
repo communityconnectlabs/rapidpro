@@ -540,6 +540,19 @@ class LoginView(Login):
 
     def form_valid(self, form):
         user = form.get_user()
+
+        use_default_2fa_flow = not settings.TWO_FACTOR_ENABLED
+        if use_default_2fa_flow and user.get_settings().two_factor_enabled:
+            self.request.session[TWO_FACTOR_USER_SESSION_KEY] = str(user.id)
+            self.request.session[TWO_FACTOR_STARTED_SESSION_KEY] = timezone.now().isoformat()
+
+            verify_url = reverse("users.two_factor_verify")
+            redirect_url = self.get_redirect_url()
+            if redirect_url:
+                verify_url += f"?{self.redirect_field_name}={quote(redirect_url)}"
+
+            return HttpResponseRedirect(verify_url)
+
         user.record_auth()
         return super().form_valid(form)
 
@@ -596,7 +609,7 @@ class BaseTwoFactorView(AuthLoginView):
         user = self.get_user()
 
         # set the user as actually authenticated now
-        login(self.request, user)
+        login(self.request, user, backend="smartmin.backends.CaseInsensitiveBackend")
         user.record_auth()
 
         # remove our session key so if the user comes back this page they'll get directed to the login view
