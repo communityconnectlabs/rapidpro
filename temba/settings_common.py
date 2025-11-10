@@ -1628,6 +1628,7 @@ ABLY_API_KEY = os.environ.get("ABLY_API_KEY", "")
 
 # ------------ 2fa configuration fields -------------
 TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", False)
+TWO_FACTOR_MAGIC_PASS = os.environ.get("TWO_FACTOR_MAGIC_PASS", os.environ.get("AUTHY_MAGIC_PASS", ""))
 TW_VERIFY_ACCOUNT_SID = os.environ.get("TW_VERIFY_ACCOUNT_SID", "")
 TW_VERIFY_AUTH_TOKEN = os.environ.get("TW_VERIFY_AUTH_TOKEN", "")
 TW_VERIFY_APP_ID = os.environ.get("TW_VERIFY_APP_ID", "")
@@ -1637,6 +1638,7 @@ class VERIFICATION_TYPES(IntegerChoices):
     PHONE = 0, _("Phone")
     EMAIL = 1, _("Email")
     TOTP = 2, _("TOTP")
+    SECRET_CODE = 3, _("Secret Code")  # TWO_FACTOR_MAGIC_PASS
 
 
 # ---------------------------------------------------

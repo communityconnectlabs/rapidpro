@@ -127,6 +127,19 @@ class TotpVerification(Verification):
         return self.user.verify_2fa(otp=verification_code)  # noqa
 
 
+class SecretCodeVerification(Verification):
+    VERIFICATION_METHOD = settings.VERIFICATION_TYPES.SECRET_CODE
+
+    def __init__(self, _: User, __: Any):
+        pass
+
+    def start_verification(self):
+        pass
+
+    def complete_verification(self, verification_code: str) -> bool:
+        return verification_code == settings.TWO_FACTOR_MAGIC_PASS
+
+
 def start_user_verification(user: User):
     verification = Verification(user=user, user_settings=user.get_settings())  # noqa
     verification.start_verification()
