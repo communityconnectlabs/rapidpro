@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from .utils import EmailVerification, PhoneVerification, Verification
+from .utils import EmailVerification, PhoneVerification, SecretCodeVerification, Verification
 
 
 class MockUserSettings:
@@ -234,3 +234,60 @@ class VerificationHelperFunctionsTest(TestCase):
                 result = complete_user_verification(self.user, "999999")
 
         self.assertFalse(result)
+
+
+class SecretCodeVerificationTest(TestCase):
+    """Test SecretCodeVerification implementation"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="testuser", email="test@example.com")
+        self.user_settings = MockUserSettings(verification_type=settings.VERIFICATION_TYPES.SECRET_CODE)
+
+    def test_secret_code_verification_is_registered(self):
+        """Test that SecretCodeVerification class is registered with correct type"""
+        verification = Verification(user=self.user, user_settings=self.user_settings)
+        self.assertIsInstance(verification, SecretCodeVerification)
+
+    def test_secret_code_verification_start_does_nothing(self):
+        """Test that start_verification does nothing for secret code"""
+        verification = SecretCodeVerification(self.user, self.user_settings)
+        # Should not raise any exception
+        verification.start_verification()
+
+    @patch.object(settings, "TWO_FACTOR_MAGIC_PASS", "secret123")
+    def test_secret_code_verification_complete_with_correct_code(self):
+        """Test complete_verification returns True with correct secret code"""
+        verification = SecretCodeVerification(self.user, self.user_settings)
+        result = verification.complete_verification("secret123")
+        self.assertTrue(result)
+
+    @patch.object(settings, "TWO_FACTOR_MAGIC_PASS", "secret123")
+    def test_secret_code_verification_complete_with_incorrect_code(self):
+        """Test complete_verification returns False with incorrect secret code"""
+        verification = SecretCodeVerification(self.user, self.user_settings)
+        result = verification.complete_verification("wrongcode")
+        self.assertFalse(result)
+
+    @patch.object(settings, "TWO_FACTOR_MAGIC_PASS", "secret123")
+    def test_secret_code_verification_complete_with_empty_code(self):
+        """Test complete_verification returns False with empty code"""
+        verification = SecretCodeVerification(self.user, self.user_settings)
+        result = verification.complete_verification("")
+        self.assertFalse(result)
+
+    @patch.object(settings, "TWO_FACTOR_MAGIC_PASS", "secret123")
+    def test_secret_code_verification_case_sensitive(self):
+        """Test that secret code verification is case-sensitive"""
+        verification = SecretCodeVerification(self.user, self.user_settings)
+        result = verification.complete_verification("SECRET123")
+        self.assertFalse(result)
+
+    @patch.object(settings, "TWO_FACTOR_MAGIC_PASS", "")
+    def test_secret_code_verification_with_empty_magic_pass(self):
+        """Test complete_verification with empty TWO_FACTOR_MAGIC_PASS setting"""
+        verification = SecretCodeVerification(self.user, self.user_settings)
+        result = verification.complete_verification("anycode")
+        self.assertFalse(result)
+        # Only empty string matches empty setting
+        result_empty = verification.complete_verification("")
+        self.assertTrue(result_empty)
