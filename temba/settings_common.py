@@ -1636,6 +1636,7 @@ TW_VERIFY_APP_ID = os.environ.get("TW_VERIFY_APP_ID", "")
 class VERIFICATION_TYPES(IntegerChoices):
     PHONE = 0, _("Phone")
     EMAIL = 1, _("Email")
+    TOTP = 2, _("TOTP")
 
 
 # ---------------------------------------------------
