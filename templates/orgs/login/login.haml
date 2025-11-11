@@ -57,7 +57,7 @@
 
     -if no_verification_code
       .mt-4
-        %temba-textinput(name='verification_code' placeholder='{{_("SMS Code")|escapejs}}')
+        %temba-textinput(name='verification_code' placeholder='{{_("Code")|escapejs}}')
         %a{href:"javascript:resendCode();", class:"mt-2"}
           -trans "Resend code"
 
