@@ -892,7 +892,7 @@ class UserCRUDL(SmartCRUDL):
             verification_code = forms.CharField(
                 required=False,
                 label=_("Verification Code"),
-                widget=InputWidget(attrs={"placeholder": _("Optional"), "number": True}),
+                widget=InputWidget(attrs={"number": True}),
             )
 
             def clean_new_password(self):

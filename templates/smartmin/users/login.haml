@@ -36,11 +36,12 @@
           .mt-2.text-left
             Ex. 4154354423
 
-    -if no_authy_code
+    -if no_verification_code
       .mt-4
-        %temba-textinput(name='authy_code' placeholder='{{_("SMS Code")|escapejs}}')
-        %a{href:"javascript:resendCode();", class:"mt-2"}
-          -trans "Resend code"
+        %temba-textinput(name='authy_code' placeholder='{{_("Verification Code")|escapejs}}')
+        -if allow_code_resend
+          %a{href:"javascript:resendCode();", class:"mt-2"}
+            -trans "Resend code"
       %input{type:"hidden", name:"change_phone_number", value:"", id:"change_phone_number"}
 
     -if form.password.errors
@@ -48,7 +49,7 @@
         {{form.password.errors}}
     %div{class:"md\:w-full"}
       %div(class='w-5/12 mt-2 text-right float-right')
-        -if no_authy_code
+        -if allow_phone_update
           %a(href="javascript:changePhoneNumberProcess();")
             Change phone number?
         -else
