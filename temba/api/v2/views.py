@@ -6025,12 +6025,13 @@ class PhoneValidationEndpoint(BaseAPIView):
             response = client.lookups.v1.phone_numbers(serializer.validated_data["phone_number"]).fetch(
                 type=["carrier"]
             )
-            response_data = response._properties
-            for field in ["add_ons", "url"]:
-                try:
-                    response_data.pop(field)
-                except KeyError:
-                    pass
+            response_data = {
+                "caller_name": response.caller_name,
+                "carrier": response.carrier,
+                "country_code": response.country_code,
+                "national_format": response.national_format,
+                "phone_number": response.phone_number,
+            }
             return Response(response_data, status=status.HTTP_200_OK)
         except TwilioRestException as e:
             return Response({"error": e.msg}, status=e.status)
