@@ -1,5 +1,5 @@
 -extends "smartmin/list.html"
--load smartmin temba i18n contacts compress humanize
+-load smartmin temba i18n contacts compress humanize static
 
 -block page-title
   {{ title }}
@@ -112,7 +112,8 @@
 
 -block extra-script
   {{ block.super }}
-
+  %script{"src": "https://cdn.ably.com/lib/ably.min-2.js"}
+  %audio#notification{"src": "{% static '/sounds/new-notification.mp3' %}"}
   :javascript
     function hideBadge(e) {
       let badge = e.target.querySelector(".badge");
@@ -246,6 +247,49 @@
       dialog.cancelButtonName = "OK";
     }
 
+    function showNotification(message) {
+      const show = () => {
+        const notification = new Notification("You have got new message:", {body: message});
+        notification.onclick = () => { window.focus(); notification.close(); };
+        document.querySelector("#notification")?.play();
+        console.info(message);
+      }
+      if (Notification.permission !== "granted") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") show();
+        });
+      } else {
+        show();
+      }
+    }
+
+    function handleNewUnreadMessage(event) {
+      let [conversationID, _] = event.data.split(":");
+      let conversationItem = document.querySelector(`[data_chat_id="${conversationID}"]`);
+      if (conversationItem) {
+        let badge = conversationItem.querySelector("div.badge.line16px");
+        if (!badge) {
+          badge = document.createElement("div");
+          badge.classList.add("badge", "line16px");
+          badge.innerText = "0";
+          conversationItem.appendChild(badge);
+        }
+        badge.innerText = Number.parseInt(badge.innerText) + 1;
+        showNotification(`The new message from ${conversationItem.innerText}`);
+      }
+    }
+
+    function setupPubSupListener() {
+      const realtimeClient = new Ably.Realtime({
+        key: '{{ABLY_API_KEY}}',
+        clientId: 'conversations-listener-{{request.user.id|default:''}}'
+      });
+      realtimeClient.connection.once('connected', () => {
+        let channel = realtimeClient.channels.get("courier");
+        channel.subscribe("new_messages", handleNewUnreadMessage);
+      });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       const url = new URL(window.location);
       const params = new URLSearchParams(url.search);
@@ -253,6 +297,7 @@
       initFilter(params);
       selectChat(contactUUID);
       initErrorDialog();
+      setupPubSupListener();
     });
 
 -block content
@@ -321,7 +366,7 @@
                       -trans "No chats found"
                     -else
                       -for chat in chats
-                        %li.w-full.p-1.cursor-pointer.flex.flex-row.justify-between.list-item(onclick='hideBadge(event);selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}')
+                        %li.w-full.p-1.cursor-pointer.flex.flex-row.justify-between.list-item(onclick='hideBadge(event);selectChat("{{chat.contact.uuid}}")' data_contact_uuid='{{chat.contact.uuid}}' data_chat_id='{{chat.id}}')
                           =chat.contact
                           -if chat.unread_count
                             .badge.line16px
