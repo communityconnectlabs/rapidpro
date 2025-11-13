@@ -200,26 +200,21 @@ class MockTwilioClient(Client):
     class MockLookupPhoneNumbers(MockInstanceResource):
         def __init__(self):
             self.phone_number = ""
-            self._properties = {
-                "caller_name": None,
-                "carrier": {
-                    "error_code": None,
-                    "mobile_country_code": "310",
-                    "mobile_network_code": "456",
-                    "name": "verizon",
-                    "type": "mobile",
-                },
-                "country_code": "US",
-                "national_format": "",
-                "phone_number": "",
-                "add_ons": None,
-                "url": "https://lookups.twilio.com/v1/PhoneNumbers/+15108675310",
+            self.caller_name = None
+            self.carrier = {
+                "error_code": None,
+                "mobile_country_code": "310",
+                "mobile_network_code": "456",
+                "name": "verizon",
+                "type": "mobile",
             }
+            self.country_code = "US"
+            self.national_format = ""
+            self.phone_number = ""
 
         def phone_numbers(self, phone_number):
             self.phone_number = phone_number
-            self._properties["phone_number"] = phone_number
-            self._properties["national_format"] = phone_number
+            self.national_format = phone_number
             return self
 
         def fetch(self, *args, **kwargs):
