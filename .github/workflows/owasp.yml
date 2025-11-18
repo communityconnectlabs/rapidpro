@@ -14,7 +14,7 @@ jobs:
     name: Scan the WEB Application
     runs-on: ubuntu-latest
     env:
-      python_version: '3.9.x'
+      python_version: '3.12.x'
       postgis_version: '3.1'
       pg_version: '12'
       redis_version: '5'

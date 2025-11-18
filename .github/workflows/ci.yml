@@ -4,7 +4,7 @@ jobs:
   test:
     name: Test
     env:
-      python-version: '3.9.x'
+      python-version: '3.12.x'
       postgis-version: '3.1'
       redis-version: '5.0.6'
       node-version: '10'
