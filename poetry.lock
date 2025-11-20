@@ -3315,7 +3315,7 @@ files = [
 
 [[package]]
 name = "redis"
-version = "3.5.3"
+version = "4.6.0"
 description = "Python client for Redis key-value store"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
@@ -3798,7 +3798,7 @@ name = "smartmin"
 version = "4.1.0"
 description = "Scaffolding system for Django object management."
 optional = false
-python-versions = "^3.9"
+python-versions = "^3.12"
 groups = ["main"]
 files = []
 develop = false
