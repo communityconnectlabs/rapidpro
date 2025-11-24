@@ -281,7 +281,7 @@ class TestMergingFlows(TembaTest):
         self.assertEqual(len(graph1.result_names), 6)
 
         not_unique_results_name = graph1.get_not_unique_result_names()
-        self.assertEquals(not_unique_results_name, ["Result"])
+        self.assertEqual(not_unique_results_name, ["Result"])
 
     def test_graph_difference_node(self):
         graph1 = Graph(resource=self.flow1_json)

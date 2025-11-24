@@ -10,8 +10,6 @@ def register_classifier_type(type_class):
     """
     Registers a classifier type
     """
-    global TYPES
-
     if not type_class.slug:
         type_class.slug = type_class.__module__.split(".")[-2]
 
