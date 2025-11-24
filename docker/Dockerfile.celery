@@ -1,4 +1,4 @@
-FROM greatnonprofits/ccl-base:v4
+FROM greatnonprofits/ccl-base:v5
 
 RUN apt-get update
 RUN apt-get install -y xmlsec1 libxml2 libxmlsec1t64 libxmlsec1t64-openssl
