@@ -1,7 +1,7 @@
 FROM greatnonprofits/ccl-base:v4
 
 RUN apt-get update
-RUN apt-get install -y xmlsec1 libxml2 libxmlsec1 libxmlsec1-openssl
+RUN apt-get install -y xmlsec1 libxml2 libxmlsec1t64 libxmlsec1t64-openssl
 
 RUN wget https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem \
     -O /usr/local/share/ca-certificates/rds.crt
@@ -17,21 +17,22 @@ WORKDIR /rapidpro
 COPY ./pyproject.toml /rapidpro/pyproject.toml
 COPY ./poetry.lock /rapidpro/poetry.lock
 
-RUN pip3 install --upgrade pip setuptools
-RUN pip3 install -U poetry==1.6.1
+RUN pip3 install --break-system-packages -U poetry==1.6.1
 
-RUN poetry export --without-hashes --output pip-freeze.txt
-
-RUN pip3 install -r pip-freeze.txt
+RUN poetry config virtualenvs.in-project true
+RUN poetry install --no-dev --no-interaction --no-ansi
+RUN poetry run pip install setuptools
+RUN poetry run pip install --force-reinstall --no-cache-dir gunicorn
 
 COPY . /rapidpro
 RUN openssl genrsa -out /rapidpro/certs/sp-key.pem 2048
 RUN openssl req -new -x509 -key /rapidpro/certs/sp-key.pem -out /rapidpro/certs/sp-cert.pem -days 3650 -subj "/CN=communityconnectlabs.saml"
 COPY docker/docker.settings /rapidpro/temba/settings.py
 
-RUN npm install
+RUN npm install --legacy-peer-deps --ignore-scripts
+RUN npm rebuild node-sass --force || true
 
-RUN python3.9 manage.py collectstatic --noinput
+RUN poetry run python manage.py collectstatic --noinput
 
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
 
@@ -43,7 +44,7 @@ RUN rm -f /rapidpro/temba/settings.pyc
 COPY docker/entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
-RUN ln -s /usr/bin/python3.9 /usr/bin/python
+RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN rm -rf /tmp/* /var/tmp/*[~]$
 
 EXPOSE 8000
