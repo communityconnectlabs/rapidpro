@@ -290,24 +290,18 @@ class ClassifierTrainingTask(SmartModel):
     def run_task(cls, instance_id):
         from .types.dialogflow.train_bot import TrainingClient
 
-        filter_status = [cls.PENDING, cls.RETRY]
-
+        training = cls.objects.filter(id=instance_id, status__in=[cls.PENDING, cls.RETRY]).first()
         reschedule_task = False
-        training = None
-        try:
-            training = cls.objects.get(id=instance_id)
-        except Exception as e:
-            logger.error(e, exc_info=True)
 
-        if training and training.status in filter_status:
+        if training is not None:
             training.status = cls.IN_PROGRESS
             training.save()
 
             client = TrainingClient(
                 credential=training.classifier.config,
-                csv_data=training.training_doc,
                 languages=training.languages,
                 messages=training.messages,
+                training_data=training.training_doc,
             )
 
             if not training.pickled_doc:
