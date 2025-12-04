@@ -31,10 +31,10 @@
           -render_field 'columns'
         - else
           #download-template.mb-4
-            -blocktrans trimmed with sample_url=STATIC_URL|add:"examples/sample_training_data.csv" code=explicit_clear max=max_records|intcomma
-              You can download <a href="{{ sample_url }}">this CSV template</a> as a sample
+            -blocktrans trimmed with sample_url=STATIC_URL|add:"examples/sample_training_data.xlsx" code=explicit_clear max=max_records|intcomma
+              You can download <a href="{{ sample_url }}">this XLSX template</a> as a sample
           #file-upload
-            %input(type="file" name="file" id="import-file" onchange='onFileChange()' accept="text/csv")
+            %input(type="file" name="file" id="import-file" onchange='onFileChange()' accept=".xlsx")
           #real-button.flex.mb-4
             %input(type="text" id="file-field")
             .button-light.ml-4(style="margin-top:-1px")

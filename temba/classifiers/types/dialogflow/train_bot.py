@@ -1,9 +1,9 @@
 import base64
-import csv
 import logging
 import pickle
 from typing import Any, Union
 
+import pandas as pd
 from google.api_core import exceptions
 from google.cloud import dialogflow_v2
 from google.cloud.dialogflow_v2.services.intents import pagers
@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class TrainingClient:
-    def __init__(self, csv_data: list, languages: list, credential: dict, messages: dict = None) -> None:
+    def __init__(self, training_data: list, languages: list, credential: dict, messages: dict = None) -> None:
         self.credential = credential
-        self.csv_data = csv_data
+        self.training_data = training_data
         self.languages = languages
         self.intents_requests = []
 
@@ -34,51 +34,6 @@ class TrainingClient:
                 created=count_per_lang.copy(),
                 updated=count_per_lang.copy(),
             )
-
-    def merge_intents(self, csv_reader: csv.DictReader, language_code: str) -> list:
-        lang_headers = self.get_language_headers(language_code)
-        grouped_by_intents = {}
-        for row in csv_reader:
-            intent_header = lang_headers["intent"]
-            question_header = lang_headers["training_phrase"]
-            answer_header = lang_headers["answer"]
-            intent_name = row.get(intent_header)
-            if not intent_name:
-                intent_name = row.get("intents")
-
-            training_phrases = self.clean_training_phrases(row.get(question_header))
-            answers = row.get(answer_header)
-
-            intent_row = grouped_by_intents.get(intent_name)
-            if intent_row:
-                questions = intent_row.get(question_header)
-                if questions and training_phrases:
-                    intent_row[question_header] = training_phrases + questions
-            else:
-                grouped_by_intents[intent_name] = {
-                    "intent": intent_name,
-                    question_header: training_phrases,
-                    answer_header: answers,
-                }
-
-        return list(grouped_by_intents.values())
-
-    def csv_to_dict(self, language_code: str) -> list:
-        csv_data = self.csv_data.copy()
-        header_list = csv_data.pop(0)
-        header_list = header_list.split(",")
-        header = [str(column).lower() for column in header_list]
-        reader = csv.DictReader(csv_data, fieldnames=header)
-
-        return self.merge_intents(reader, language_code)
-
-    @classmethod
-    def get_intents_from_dict(cls, dict_list: list) -> list:
-        intents = []
-        for intent_dict in dict_list:
-            intent = intent_dict["Intents"]
-            intents.append(intent)
-        return intents
 
     def get_intents(self, language_code: str) -> pagers.ListIntentsPager:
         client = dialogflow_v2.IntentsClient.from_service_account_info(self.credential)
@@ -138,33 +93,33 @@ class TrainingClient:
         logger.info(f"can not use training data provided ({data})")
         return None
 
-    def extract_intents_from_csv(self, csv_data: list, lang_headers: dict, intent_dict: dict, language_code: str):
-        counter = 0
-        for intent in csv_data:
-            counter += 1  # count rows regardless of skipping
-            training_key = lang_headers["training_phrase"]
-            training_phrases = intent.get(training_key)
+    def extract_intents_from_data(self, intent_dict: dict, language_code: str):
+        df = pd.DataFrame(self.training_data)
+        lang_headers = self.get_language_headers(language_code)
+        name_header = lang_headers["intent"]
+        training_header = lang_headers["training_phrase"]
+        answer_header = lang_headers["answer"]
+
+        for index, intent in df.iterrows():
+            training_phrases = self.clean_training_phrases(intent[training_header])
 
             if not training_phrases or len(training_phrases) == 0:
-                error_msg = f"No training phrases found, skipping row {counter}"
+                error_msg = f"No training phrases found, skipping row {index + 1}"
                 logger.warning(error_msg)
                 self.messages["errors"].append(error_msg)
                 continue
 
             training_phrases = self.get_training_phases_from_text_list(training_phrases)
-            answer_header = lang_headers["answer"]
             message = self.intent_message(intent[answer_header])
-
             if not message:
-                error_msg = f"No intent answer found, skipping row {counter}"
+                error_msg = f"No intent answer found, skipping row {index + 1}"
                 logger.warning(error_msg)
                 self.messages["errors"].append(error_msg)
                 continue
 
-            intent_name = intent[lang_headers["intent"]]
-
+            intent_name = intent[name_header]
             if not intent_name or len(intent_name) == 0:
-                error_msg = f"No intent found here, skipping row {counter}"
+                error_msg = f"No intent found here, skipping row {index + 1}"
                 logger.warning(error_msg)
                 self.messages["errors"].append(error_msg)
                 continue
@@ -183,9 +138,6 @@ class TrainingClient:
                 self.intents_requests.append(dict(type="update", intent=intent_details, language=language_code))
 
     def process_sync_intents_for_lang(self, language_code):
-        csv_data = self.csv_to_dict(language_code)
-        lang_headers = self.get_language_headers(language_code)
-
         intents = self.get_intents(language_code)
         intent_dict = dict()
 
@@ -193,7 +145,7 @@ class TrainingClient:
         for row in intents:
             intent_dict[row.display_name] = row
 
-        self.extract_intents_from_csv(csv_data, lang_headers, intent_dict, language_code)
+        self.extract_intents_from_data(intent_dict, language_code)
 
     def push_to_dialogflow(self, intents, start_index=0):
         index = start_index
