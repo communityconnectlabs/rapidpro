@@ -1,56 +1,56 @@
-EDUCOURSE_OID = "urn:oid:1.3.6.1.4.1.5923.1.6.1."
-EDUPERSON_OID = "urn:oid:1.3.6.1.4.1.5923.1.1.1."
-EDUMEMBER1_OID = "urn:oid:1.3.6.1.4.1.5923.1.5.1."
+EDUCOURSE_OID = r"urn:oid:1.3.6.1.4.1.5923.1.6.1."
+EDUPERSON_OID = r"urn:oid:1.3.6.1.4.1.5923.1.1.1."
+EDUMEMBER1_OID = r"urn:oid:1.3.6.1.4.1.5923.1.5.1."
 
 # voPerson class References:
 # - https://github.com/voperson/voperson/blob/2.0.0/voPerson.md#voperson-object-class-definition
-VOPERSON_V2_OID = "urn:oid:1.3.6.1.4.1.25178.4.1."
+VOPERSON_V2_OID = r"urn:oid:1.3.6.1.4.1.25178.4.1."
 
 # ldap.gv.at definitions as specified in:
 # http://www.ref.gv.at/AG-IZ-PVP2-Version-2-1-0-2.2754.0.html
-LDAPGVAT_OID = "urn:oid:1.2.40.0.10.2.1.1."
+LDAPGVAT_OID = r"urn:oid:1.2.40.0.10.2.1.1."
 
-UCL_DIR_PILOT = "urn:oid:0.9.2342.19200300.100.1."
-X500ATTR_OID = "urn:oid:2.5.4."
+UCL_DIR_PILOT = r"urn:oid:0.9.2342.19200300.100.1."
+X500ATTR_OID = r"urn:oid:2.5.4."
 LDAPGVAT_UCL_DIR_PILOT = UCL_DIR_PILOT
 LDAPGVAT_X500ATTR_OID = X500ATTR_OID
-NETSCAPE_LDAP = "urn:oid:2.16.840.1.113730.3.1."
-NOREDUPERSON_OID = "urn:oid:1.3.6.1.4.1.2428.90.1."
-PKCS_9 = "urn:oid:1.2.840.113549.1.9.1."
-SCHAC = "urn:oid:1.3.6.1.4.1.25178.1.2."
-SIS = "urn:oid:1.2.752.194.10.2."
-UMICH = "urn:oid:1.3.6.1.4.1.250.1.57."
+NETSCAPE_LDAP = r"urn:oid:2.16.840.1.113730.3.1."
+NOREDUPERSON_OID = r"urn:oid:1.3.6.1.4.1.2428.90.1."
+PKCS_9 = r"urn:oid:1.2.840.113549.1.9.1."
+SCHAC = r"urn:oid:1.3.6.1.4.1.25178.1.2."
+SIS = r"urn:oid:1.2.752.194.10.2."
+UMICH = r"urn:oid:1.3.6.1.4.1.250.1.57."
 
 # openosi-0.82.schema http://www.openosi.org/osi/display/ldap/Home
-OPENOSI_OID = "urn:oid:1.3.6.1.4.1.27630.2.1.1."
-SWISSEDUPERSON_OID = "urn:oid:2.16.756.1.2.5.1.1."
+OPENOSI_OID = r"urn:oid:1.3.6.1.4.1.27630.2.1.1."
+SWISSEDUPERSON_OID = r"urn:oid:2.16.756.1.2.5.1.1."
 
-EIDAS_NATURALPERSON = "http://eidas.europa.eu/attributes/naturalperson/"
-EIDAS_LEGALPERSON = "http://eidas.europa.eu/attributes/legalperson/"
+EIDAS_NATURALPERSON = r"http://eidas.europa.eu/attributes/naturalperson/"
+EIDAS_LEGALPERSON = r"http://eidas.europa.eu/attributes/legalperson/"
 
 # SAML subject id specification
 # https://docs.oasis-open.org/security/saml-subject-id-attr/v1.0/cs01/saml-subject-id-attr-v1.0-cs01.html
-SAML_SUBJECT_ID = "urn:oasis:names:tc:SAML:attribute:"
+SAML_SUBJECT_ID = r"urn:oasis:names:tc:SAML:attribute:"
 
 # umbrellaID specification - https://www.umbrellaid.org
 # https://github.com/Umbrella-Commiters/UmbrellaIdP3/blob/master/schema/99-user.ldif
-UMBRELLA_EAAUser_ID = "urn:oid:1.3.6.1.4.1.42750.1.1."
+UMBRELLA_EAAUser_ID = r"urn:oid:1.3.6.1.4.1.42750.1.1."
 
 # PKIX specification (SMI Security for PKIX Personal Data Attributes)
 # https://tools.ietf.org/html/rfc7299
-PKIX_OID = "urn:oid:1.3.6.1.5.5.7.9."
+PKIX_OID = r"urn:oid:1.3.6.1.5.5.7.9."
 
 # INERA specification
 # Closet public spec source I could find, sadly in swedish
 # https://www.sambi.se/wordpress/wp-content/uploads/2017/06/Sambi_Attributspecifikation_1.1.pdf
-INERA_OID = "urn:oid:1.2.752.29.4."
+INERA_OID = r"urn:oid:1.2.752.29.4."
 
 # DIGG specification
 # https://docs.swedenconnect.se/technical-framework/latest/ELN-0604_-_Attribute_Specification_for_the_Swedish_eID_Framework.html
-DIGG_OID = "urn:oid:1.2.752.201.3."
+DIGG_OID = r"urn:oid:1.2.752.201.3."
 
 MAP = {
-    "identifier": "urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
+    "identifier": r"urn:oasis:names:tc:SAML:2.0:attrname-format:uri",
     "fro": {
         f"{DIGG_OID}1": "orgAffiliation",
         f"{DIGG_OID}2": "transactionIdentifier",

@@ -1,14 +1,14 @@
-EDUPERSON_OID = "urn:oid:1.3.6.1.4.1.5923.1.1.1."
-NETSCAPE_LDAP = "urn:oid:2.16.840.1.113730.3.1."
-NOREDUPERSON_OID = "urn:oid:1.3.6.1.4.1.2428.90.1."
-PKCS_9 = "urn:oid:1.2.840.113549.1.9."
-UCL_DIR_PILOT = "urn:oid:0.9.2342.19200300.100.1."
-UMICH = "urn:oid:1.3.6.1.4.1.250.1.57."
-X500ATTR = "urn:oid:2.5.4."
+EDUPERSON_OID = r"urn:oid:1.3.6.1.4.1.5923.1.1.1."
+NETSCAPE_LDAP = r"urn:oid:2.16.840.1.113730.3.1."
+NOREDUPERSON_OID = r"urn:oid:1.3.6.1.4.1.2428.90.1."
+PKCS_9 = r"urn:oid:1.2.840.113549.1.9."
+UCL_DIR_PILOT = r"urn:oid:0.9.2342.19200300.100.1."
+UMICH = r"urn:oid:1.3.6.1.4.1.250.1.57."
+X500ATTR = r"urn:oid:2.5.4."
 
 
 MAP = {
-    "identifier": "urn:mace:shibboleth:1.0:attributeNamespace:uri",
+    "identifier": r"urn:mace:shibboleth:1.0:attributeNamespace:uri",
     "fro": {
         f"{EDUPERSON_OID}1": "eduPersonAffiliation",
         f"{EDUPERSON_OID}2": "eduPersonNickname",
