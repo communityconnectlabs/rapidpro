@@ -1,5 +1,6 @@
 from django.urls import reverse
 
+from temba.channels.models import ChannelLog
 from temba.flows.models import FlowSession
 from temba.ivr.models import IVRCall
 from temba.tests import TembaTest
@@ -14,16 +15,16 @@ class IVRCallTest(TembaTest):
         call2 = self.create_incoming_call(flow, contact)
 
         self.assertEqual(FlowSession.objects.count(), 2)
-        self.assertEqual(call1.channel_logs.count(), 1)
-        self.assertEqual(call2.channel_logs.count(), 1)
+        self.assertEqual(ChannelLog.objects.filter(connection_id=call1.id).count(), 1)
+        self.assertEqual(ChannelLog.objects.filter(connection_id=call2.id).count(), 1)
 
         call2.release()
 
         self.assertEqual(FlowSession.objects.count(), 1)
 
         # call #1 unaffected
-        self.assertEqual(call1.channel_logs.count(), 1)
-        self.assertEqual(call2.channel_logs.count(), 0)
+        self.assertEqual(ChannelLog.objects.filter(connection_id=call1.id).count(), 1)
+        self.assertEqual(ChannelLog.objects.filter(connection_id=call2.id).count(), 0)
         self.assertFalse(IVRCall.objects.filter(id=call2.id).exists())
 
     def test_mailroom_urls(self):

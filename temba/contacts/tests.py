@@ -6146,24 +6146,24 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # try creating new group but not providing a name
         response = self.client.post(preview_url, {"add_to_group": True, "group_mode": "N", "new_group_name": "  "})
-        self.assertFormError(response, "form", "new_group_name", "Required.")
+        self.assertFormError(response.context["form"], "new_group_name", "Required.")
 
         # try creating new group but providing an invalid name
         response = self.client.post(preview_url, {"add_to_group": True, "group_mode": "N", "new_group_name": "????"})
-        self.assertFormError(response, "form", "new_group_name", "Invalid group name.")
+        self.assertFormError(response.context["form"], "new_group_name", "Invalid group name.")
 
         # try creating new group but providing a name of an existing group
         response = self.client.post(
             preview_url, {"add_to_group": True, "group_mode": "N", "new_group_name": "testERs"}
         )
-        self.assertFormError(response, "form", "new_group_name", "Already exists.")
+        self.assertFormError(response.context["form"], "new_group_name", "Already exists.")
 
         # try creating new group when we've already reached our group limit
         with override_settings(ORG_LIMIT_DEFAULTS={"groups": 2}):
             response = self.client.post(
                 preview_url, {"add_to_group": True, "group_mode": "N", "new_group_name": "Import"}
             )
-            self.assertFormError(response, "form", "__all__", "This workspace has reached the limit of 2 groups.")
+            self.assertFormError(response.context["form"], None, "This workspace has reached the limit of 2 groups.")
 
         # finally create new group...
         response = self.client.post(preview_url, {"add_to_group": True, "group_mode": "N", "new_group_name": "Import"})
@@ -6188,7 +6188,7 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
 
         # try submitting without group
         response = self.client.post(preview_url, {"add_to_group": True, "group_mode": "E", "existing_group": ""})
-        self.assertFormError(response, "form", "existing_group", "Required.")
+        self.assertFormError(response.context["form"], "existing_group", "Required.")
 
         # finally try with actual group...
         response = self.client.post(
@@ -6235,7 +6235,7 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
             },
         )
         self.assertEqual(1, len(response.context["form"].errors))
-        self.assertFormError(response, "form", "__all__", "Field name for 'Field:Sheep' matches an existing field.")
+        self.assertFormError(response.context["form"], None, "Field name for 'Field:Sheep' matches an existing field.")
 
         # if including a new fields, can't repeat names
         response = self.client.post(
@@ -6251,7 +6251,7 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
             },
         )
         self.assertEqual(1, len(response.context["form"].errors))
-        self.assertFormError(response, "form", "__all__", "Field name 'goats' is repeated.")
+        self.assertFormError(response.context["form"], None, "Field name 'goats' is repeated.")
 
         # if including a new field, name can't be invalid
         response = self.client.post(
@@ -6268,7 +6268,7 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
         )
         self.assertEqual(1, len(response.context["form"].errors))
         self.assertFormError(
-            response, "form", "__all__", "Field name for 'Field:Sheep' is invalid or a reserved word."
+            response.context["form"], None, "Field name for 'Field:Sheep' is invalid or a reserved word."
         )
 
         # or empty
@@ -6285,7 +6285,7 @@ class ContactImportCRUDLTest(TembaTest, CRUDLTestMixin):
             },
         )
         self.assertEqual(1, len(response.context["form"].errors))
-        self.assertFormError(response, "form", "__all__", "Field name for 'Field:Sheep' can't be empty.")
+        self.assertFormError(response.context["form"], None, "Field name for 'Field:Sheep' can't be empty.")
 
         # unless you're ignoring it
         response = self.client.post(

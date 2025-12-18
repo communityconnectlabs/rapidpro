@@ -1,11 +1,11 @@
-CLAIMS = "http://schemas.xmlsoap.org/claims/"
-COM_WS_CLAIMS = "http://schemas.xmlsoap.com/ws/2005/05/identity/claims/"
-MS_CLAIMS = "http://schemas.microsoft.com/ws/2008/06/identity/claims/"
-ORG_WS_CLAIMS = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/"
+CLAIMS = r"http://schemas.xmlsoap.org/claims/"
+COM_WS_CLAIMS = r"http://schemas.xmlsoap.com/ws/2005/05/identity/claims/"
+MS_CLAIMS = r"http://schemas.microsoft.com/ws/2008/06/identity/claims/"
+ORG_WS_CLAIMS = r"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/"
 
 
 MAP = {
-    "identifier": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+    "identifier": r"urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
     "fro": {
         f"{CLAIMS}commonname": "commonName",
         f"{CLAIMS}group": "group",
