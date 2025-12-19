@@ -1,4 +1,7 @@
+import asyncio
+
 import telegram
+from telegram.error import TelegramError
 from smartmin.views import SmartFormView
 
 from django import forms
@@ -26,8 +29,8 @@ class ClaimView(ClaimViewMixin, SmartFormView):
 
             try:
                 bot = telegram.Bot(token=value)
-                bot.get_me()
-            except telegram.TelegramError:
+                asyncio.run(bot.get_me())
+            except TelegramError:
                 raise ValidationError(_("Your authentication token is invalid, please check and try again"))
 
             return value
@@ -39,7 +42,7 @@ class ClaimView(ClaimViewMixin, SmartFormView):
         auth_token = self.form.cleaned_data["auth_token"]
 
         bot = telegram.Bot(auth_token)
-        me = bot.get_me()
+        me = asyncio.run(bot.get_me())
         channel_config = {
             Channel.CONFIG_AUTH_TOKEN: auth_token,
             Channel.CONFIG_CALLBACK_DOMAIN: org.get_brand_domain(),

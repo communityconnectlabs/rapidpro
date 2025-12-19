@@ -1,3 +1,5 @@
+import asyncio
+
 import telegram
 
 from django.urls import reverse
@@ -39,9 +41,9 @@ class TelegramType(ChannelType):
     def activate(self, channel):
         config = channel.config
         bot = telegram.Bot(config["auth_token"])
-        bot.set_webhook("https://" + channel.callback_domain + reverse("courier.tg", args=[channel.uuid]))
+        asyncio.run(bot.set_webhook("https://" + channel.callback_domain + reverse("courier.tg", args=[channel.uuid])))
 
     def deactivate(self, channel):
         config = channel.config
         bot = telegram.Bot(config["auth_token"])
-        bot.delete_webhook()
+        asyncio.run(bot.delete_webhook())

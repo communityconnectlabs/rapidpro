@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import telegram
+from telegram.error import TelegramError
 
 from django.urls import reverse
 
@@ -36,7 +37,7 @@ class TelegramTypeTest(TembaTest):
         self.assertContains(response, "Connect Telegram")
 
         # claim with an invalid token
-        mock_get_me.side_effect = telegram.TelegramError("Boom")
+        mock_get_me.side_effect = TelegramError("Boom")
         response = self.client.post(url, {"auth_token": "invalid"})
         self.assertEqual(200, response.status_code)
         self.assertEqual(
@@ -44,9 +45,7 @@ class TelegramTypeTest(TembaTest):
             response.context["form"].errors["auth_token"][0],
         )
 
-        user = telegram.User(123, "Rapid", True)
-        user.last_name = "Bot"
-        user.username = "rapidbot"
+        user = telegram.User(id=123, first_name="Rapid", is_bot=True, last_name="Bot", username="rapidbot")
 
         mock_get_me.side_effect = None
         mock_get_me.return_value = user
