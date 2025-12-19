@@ -238,10 +238,10 @@ if AWS_S3_ENABLED:
     AWS_BUCKET_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
     MEDIA_URL = f"https://{AWS_BUCKET_DOMAIN}/media/"
     DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    STORAGE_URL = os.environ.get("STORAGE_URL") or f"https://{AWS_BUCKET_DOMAIN}"
 else:
     AWS_BUCKET_DOMAIN = f"{HOSTNAME}/media"
-
-STORAGE_URL = os.environ.get("STORAGE_URL", "/media")
+    STORAGE_URL = os.environ.get("STORAGE_URL") or "/media"
 
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "v2": "1000000/hour",
@@ -262,7 +262,7 @@ ORG_LIMIT_DEFAULTS = {
     "topics": 2000,
 }
 
-MAILROOM_URL = os.environ.get("MAILROOM_URL", "http://localhost:8090")
+MAILROOM_URL = os.environ.get("MAILROOM_URL") or "http://localhost:8090"
 MAILROOM_AUTH_TOKEN = os.environ.get("MAILROOM_AUTH_TOKEN", "")
 
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
