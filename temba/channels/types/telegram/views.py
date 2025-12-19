@@ -1,8 +1,8 @@
 import asyncio
 
 import telegram
-from telegram.error import TelegramError
 from smartmin.views import SmartFormView
+from telegram.error import TelegramError
 
 from django import forms
 from django.core.exceptions import ValidationError
