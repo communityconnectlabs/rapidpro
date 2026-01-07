@@ -27,6 +27,7 @@ COPY docker/docker.settings /rapidpro/temba/settings.py
 RUN npm install
 
 RUN python3.9 manage.py collectstatic --noinput
+RUN python3.9 manage.py compress --extension=.haml --force
 
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
 
