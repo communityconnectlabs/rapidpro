@@ -1,4 +1,4 @@
-import iso639
+import pycountry
 
 # As iso639-1 languages can be broad, not all iso639-2 languages have direct translations to iso639-3. This table
 # maps country and iso639-1 codes to a specific iso639-3 language code. It isn't inclusive but covers the cases
@@ -53,28 +53,30 @@ def iso6391_to_iso6393(iso_code, country_code=None):
             return override
 
         else:
-            # first try looking up by part 2 bibliographic (which is what we use when available)
+            # first try looking up by bibliographic code (ISO 639-2/B)
+            lang = None
             try:
-                lang = iso639.languages.get(part2b=iso_code)
-            except KeyError:
-                lang = None
+                lang = pycountry.languages.get(bibliographic=iso_code)
+            except (KeyError, LookupError):
+                pass
 
-            # if not found, back down to typographical
+            # if not found, try terminological code (ISO 639-2/T) or alpha_3 (ISO 639-3)
             if lang is None:
                 try:
-                    lang = iso639.languages.get(part2t=iso_code)
-                except KeyError:
-                    pass
-            # if not found, maybe it's already a iso639-3 code
-            if lang is None:
-                try:
-                    lang = iso639.languages.get(part3=iso_code)
-                except KeyError:
+                    lang = pycountry.languages.get(alpha_3=iso_code)
+                except (KeyError, LookupError):
                     pass
 
-            if lang and lang.part3:
-                migration_lang_cache[cache_key] = lang.part3
-                return lang.part3
+            # if not found, try alpha_2 (ISO 639-1)
+            if lang is None:
+                try:
+                    lang = pycountry.languages.get(alpha_2=iso_code)
+                except (KeyError, LookupError):
+                    pass
+
+            if lang and lang.alpha_3:
+                migration_lang_cache[cache_key] = lang.alpha_3
+                return lang.alpha_3
     else:
         return migration_lang_cache[cache_key]
 

@@ -216,3 +216,15 @@ def block_deactivated_contacts_task():
                 )
             ],
         )
+
+
+@nonoverlapping_task(track_started=True, name="release_large_send_groups_task")
+def release_large_send_groups_task():
+    """
+    Releases the large send groups
+    """
+    large_send_prefix = "Large Send"
+    month_ago = timezone.now() - timedelta(days=30)
+    groups = ContactGroup.all_groups.filter(name__startswith=large_send_prefix, created_on__lte=month_ago)
+    for group in groups:
+        group.release(user=group.created_by, immediate=True)

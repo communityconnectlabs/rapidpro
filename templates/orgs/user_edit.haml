@@ -20,6 +20,23 @@
     .field.formax-vertical
       {% render_field 'new_password' %}
 
+    .field.formax-vertical
+      {% render_field 'verification_type' %}
+
+    #totp-fields(style="display: none;")
+      .card.-mt-1
+        .flex.pt-6(style="max-width:30em;margin: 0 auto")
+          .pl-2.pr-6
+            -blocktrans trimmed with ga_url="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" authy_url="https://authy.com/"
+              To enable two-factor authentication on your login, use a one-time password (OTP) application such as
+              <a href="{{ ga_url }}">Google Authenticator</a> or <a href="{{ authy_url }}">Authy</a> to scan the QR code
+              then input your code below to verify.
+          .px-2
+            %canvas#qr
+
+      .field.formax-vertical
+        {% render_field 'verification_code' %}
+
     #current-password.field.formax-vertical.p-4.bg-gray-100.rounded-lg.mt-4.hidden
       .mb-2
         -blocktrans trimmed
@@ -32,7 +49,38 @@
     Your email address is <b>{{email}}</b>.
 
 -block extra-script
+  %script(src="{{ STATIC_URL }}js/qrious.js")
   :javascript
+    function renderQROtp() {
+      var secretUrl = "{{ secret_url }}";
+      if (secretUrl) {
+        var element = document.getElementById('qr');
+        if (element) {
+          element.style.display = "initial";
+          new QRious({element: element, value: secretUrl, background: "#fff", size: 150});
+        }
+      }
+    }
+
+    function toggleTOTPFields() {
+      var verificationType = document.getElementById("id_verification_type");
+      var totpFields = document.getElementById("totp-fields");
+      var twoFactorEnabled = {{ two_factor_enabled|lower }};
+      var verificationCodeField = document.querySelector(".field_verification_code");
+
+      if (verificationType && totpFields) {
+        // Show TOTP fields only if TOTP (value 2) is selected AND not already verified
+        // OR if verification_code field has an error (form validation failed)
+        var hasError = verificationCodeField && verificationCodeField.classList.contains("error");
+
+        if ((verificationType.value.value == "2" && !twoFactorEnabled) || hasError) {
+          totpFields.style.display = "block";
+          renderQROtp();
+        } else {
+          totpFields.style.display = "none";
+        }
+      }
+    }
 
     function wireHandlers() {
       // hide our password field by default
@@ -58,6 +106,14 @@
         newPw.addEventListener("change", listener);
       }, 0);
       
+      // Wire verification type change handler
+      var verificationType = document.getElementById("id_verification_type");
+      if (verificationType) {
+        verificationType.addEventListener("change", toggleTOTPFields);
+      }
+
+      // Initialize TOTP fields visibility on load
+      toggleTOTPFields();
     }
     
     window.addEventListener("DOMContentLoaded", function (){

@@ -10,8 +10,6 @@ def register_type(type_class):
     """
     Registers an integration type
     """
-    global TYPES
-
     if not type_class.slug:
         type_class.slug = type_class.__module__.split(".")[-2]
 

@@ -61,7 +61,7 @@ class Command(BaseCommand):  # pragma: no cover
             num_updated = batch.update(status=Msg.STATUS_ERRORED, error_count=1, next_attempt=next_attempt)
 
             self.stdout.write(
-                f"> batch {batch_num+1}/{num_batches}"
+                f"> batch {batch_num + 1}/{num_batches}"
                 f" - dewired {num_updated} msg ids, next_attempt={next_attempt.isoformat()}"
             )
 

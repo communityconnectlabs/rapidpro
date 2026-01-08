@@ -1245,6 +1245,9 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
             for broadcast in self.addressed_broadcasts.all():
                 broadcast.contacts.remove(self)
 
+            for conversation in self.conversations.all():
+                conversation.delete()
+
     @classmethod
     def bulk_urn_cache_initialize(cls, contacts, *, using="default"):
         """
@@ -1277,6 +1280,12 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
         cache_attr = "_urns_cache"
         if hasattr(self, cache_attr):
             return getattr(self, cache_attr)
+
+        # For unsaved instances, there can't be related URNs yet. Avoid hitting the related manager.
+        if not self.pk:
+            urns = []
+            setattr(self, cache_attr, urns)
+            return urns
 
         urns = self.urns.order_by("-priority", "pk").select_related("org")
         setattr(self, cache_attr, urns)
@@ -2522,8 +2531,8 @@ class ContactImport(SmartModel):
 
         num_created = 0
         num_updated = 0
-        num_blocked = 0
         num_errored = 0
+        blocked_uuids = []
         errors = []
         oldest_finished_on = None
         validated_urn_carriers = dict(mobile=[], landline=[])
@@ -2534,21 +2543,21 @@ class ContactImport(SmartModel):
         batches = self.batches.values(
             "num_created",
             "num_updated",
-            "num_blocked",
             "num_errored",
             "errors",
             "finished_on",
             "carrier_groups",
+            "blocked_uuids",
         )
         num_duplicates = 0
         for batch in batches:
             num_created += batch["num_created"]
             num_updated += batch["num_updated"]
-            num_blocked += batch["num_blocked"]
             num_errored += batch["num_errored"]
             errors.extend(batch["errors"])
             mobile_contacts = batch["carrier_groups"].get("mobile", [])
             landline_contacts = batch["carrier_groups"].get("landline", [])
+            blocked_uuids += batch["blocked_uuids"] or []
 
             if batch["finished_on"] and (oldest_finished_on is None or batch["finished_on"] > oldest_finished_on):
                 oldest_finished_on = batch["finished_on"]
@@ -2583,12 +2592,22 @@ class ContactImport(SmartModel):
                 landline_list, "landline", MAX_LANDLINE_GROUP_CONTACTS
             )
 
+        blocked_stopped = Contact.objects.filter(uuid__in=blocked_uuids).aggregate(
+            num_blocked=Count("id", filter=Q(status=Contact.STATUS_BLOCKED), distinct=True),
+            num_stopped=Count("id", filter=Q(status=Contact.STATUS_STOPPED), distinct=True),
+        )
+        num_blocked, num_stopped = blocked_stopped.get("num_blocked", 0), blocked_stopped.get("num_stopped", 0)
+        num_stopped_and_blocked = num_blocked + num_stopped
+        num_updated -= num_stopped_and_blocked
+        num_total -= num_stopped_and_blocked
+
         return {
             "status": self.status,
             "num_created": num_created,
             "num_updated": num_updated,
             "num_blocked": num_blocked,
             "num_errored": num_errored,
+            "blocked_uuids": blocked_uuids,
             "errors": errors,
             "time_taken": int(time_taken.total_seconds()),
             "num_duplicates": num_duplicates,

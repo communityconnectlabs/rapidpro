@@ -4,11 +4,13 @@ import sys
 from datetime import timedelta
 
 import iptools
+import saml2
 import sentry_sdk
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 
+from django.db.models import IntegerChoices
 from django.utils.translation import gettext_lazy as _
 
 from celery.schedules import crontab
@@ -167,6 +169,18 @@ COMPRESS_ROOT = os.path.join(PROJECT_DIR, "../sitestatic")
 MEDIA_ROOT = os.path.join(PROJECT_DIR, "../media")
 MEDIA_URL = "/media/"
 
+# -----------------------------------------------------------------------------------
+# Storage Configuration
+# -----------------------------------------------------------------------------------
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
 HELP_URL = None
 
 
@@ -215,6 +229,7 @@ FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
 MIDDLEWARE = (
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "djangosaml2.middleware.SamlSessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -226,7 +241,13 @@ MIDDLEWARE = (
     "temba.middleware.OrgMiddleware",
     "temba.middleware.LanguageMiddleware",
     "temba.middleware.TimezoneMiddleware",
-    "temba.events.middleware.CustomerEventMiddleware",
+    *(
+        []
+        if TESTING
+        else [
+            "temba.events.middleware.CustomerEventMiddleware",
+        ]
+    ),
 )
 
 # security middleware configuration
@@ -304,6 +325,7 @@ INSTALLED_APPS = (
     "temba.links",
     # Social-auth app
     "social_django",
+    "djangosaml2",
 )
 
 # the last installed app that uses smartmin permissions
@@ -560,7 +582,14 @@ PERMISSIONS = {
         "sent_voice",
     ),
     "msgs.broadcast": ("api", "detail", "schedule", "schedule_list", "schedule_read", "send"),
-    "msgs.conversation": ("list", "start", "create_template", "delete_template", "preview_template"),
+    "msgs.conversation": (
+        "list",
+        "start",
+        "create_template",
+        "update_template",
+        "delete_template",
+        "preview_template",
+    ),
     "msgs.label": ("api", "create_folder", "delete_folder"),
     "orgs.topup": ("manage",),
     "policies.policy": ("admin", "history", "give_consent"),
@@ -773,6 +802,7 @@ GROUP_PERMISSIONS = {
         "msgs.conversation_list",
         "msgs.conversation_start",
         "msgs.conversation_create_template",
+        "msgs.conversation_update_template",
         "msgs.conversation_delete_template",
         "msgs.conversation_preview_template",
         "policies.policy_read",
@@ -899,11 +929,6 @@ GROUP_PERMISSIONS = {
         "msgs.msg_sent",
         "msgs.msg_sent_voice",
         "msgs.msg_update",
-        "msgs.conversation_list",
-        "msgs.conversation_start",
-        "msgs.conversation_create_template",
-        "msgs.conversation_delete_template",
-        "msgs.conversation_preview_template",
         "policies.policy_read",
         "policies.policy_list",
         "policies.policy_give_consent",
@@ -1055,6 +1080,9 @@ GROUP_PERMISSIONS = {
         "contacts.contact_omnibox",
         "contacts.contactgroup_api",
         "contacts.contactfield_api",
+        "contacts.contact_list",
+        "contacts.contact_filter",
+        "contacts.contact_read",
         "globals.global_api",
         "msgs.broadcast_api",
         "msgs.conversation_list",
@@ -1109,7 +1137,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 INTERNAL_IPS = iptools.IpRangeList("127.0.0.1", "192.168.0.10", "192.168.0.0/24", "0.0.0.0")  # network block
 
-HOSTNAME = "localhost"
+HOSTNAME = os.environ.get("HOSTNAME", "localhost")
 
 # The URL and port of the proxy server to use when needed (if any, in requests format)
 OUTGOING_PROXIES = {}
@@ -1189,6 +1217,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "check_outbound_inbound_per_org_task",
         "schedule": crontab(hour=5, minute=0),
     },
+    "send-unread-msgs-notification-email": {
+        "task": "send_unread_msgs_notification_email",
+        "schedule": timedelta(minutes=15),
+    },
+    "release-large-send-groups": {"task": "release_large_send_groups_task", "schedule": crontab(hour=6, minute=0)},
 }
 
 # -----------------------------------------------------------------------------------
@@ -1503,11 +1536,6 @@ WIDGET_THEMES = {
     }
 }
 
-# Authy configuration
-TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", False)
-AUTHY_API_KEY = os.environ.get("AUTHY_API_KEY", "")
-AUTHY_MAGIC_PASS = os.environ.get("AUTHY_MAGIC_PASS", "")
-
 # Credits expiration config
 CREDITS_EXPIRATION = False
 
@@ -1515,6 +1543,7 @@ GOOGLE_FONT_API_KEY = os.environ.get("GOOGLE_FONT_API_KEY", "")
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_METHODS = ["GET"]
+X_FRAME_OPTIONS = "SAMEORIGIN"
 
 # Contacts import via excel
 # if set to True will not raise error on duplicate, instead will use last row
@@ -1560,3 +1589,68 @@ SOCIAL_AUTH_AZUREAD_OAUTH2_AUTHORIZATION_URL = (
 SOCIAL_AUTH_AZUREAD_OAUTH2_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/token"
 
 CUSTOMER_DAILY_REPORT_WEBHOOK_URL = os.environ.get("CUSTOMER_DAILY_REPORT_WEBHOOK_URL", "")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SAML_REMOTE = str(os.environ.get("SAML_REMOTE", "")).split(",")
+SAML_REMOTE_LIST = [{"url": url} for url in SAML_REMOTE if url.strip()]
+
+SAML_CONFIG = {
+    "xmlsec_binary": "/usr/bin/xmlsec1",
+    "entityid": f"https://{HOSTNAME}/saml2/metadata/",
+    "attribute_map_dir": os.path.join(BASE_DIR, "../attribute_maps"),
+    "service": {
+        "sp": {
+            "name": "CommunityConnect Labs",
+            "endpoints": {
+                "assertion_consumer_service": [
+                    (f"https://{HOSTNAME}/saml2/acs/", saml2.BINDING_HTTP_POST),
+                ],
+                "single_logout_service": [
+                    (f"https://{HOSTNAME}/saml2/ls/", saml2.BINDING_HTTP_REDIRECT),
+                ],
+            },
+            "allow_unsolicited": True,
+            "authn_requests_signed": False,
+            "logout_requests_signed": True,
+            "want_assertions_signed": True,
+            "want_response_signed": False,
+        },
+    },
+    "metadata": {
+        "remote": SAML_REMOTE_LIST,
+    },
+    "debug": True,
+    "key_file": os.path.join(BASE_DIR, "../certs", "sp-key.pem"),
+    "cert_file": os.path.join(BASE_DIR, "../certs", "sp-cert.pem"),
+}
+
+SAML_DJANGO_USER_MAIN_ATTRIBUTE = "username"
+SAML_USE_NAME_ID_AS_USERNAME = True
+
+SAML_ATTRIBUTE_MAPPING = {
+    "email": ("email",),
+    "username": ("UserName",),
+    "first_name": ("FirstName",),
+    "last_name": ("LastName",),
+}
+
+AMPLITUDE_API_KEY = os.environ.get("AMPLITUDE_API_KEY", "")
+ABLY_API_KEY = os.environ.get("ABLY_API_KEY", "")
+
+# ------------ 2fa configuration fields -------------
+TWO_FACTOR_ENABLED = os.environ.get("TWO_FACTOR_ENABLED", False)
+TWO_FACTOR_MAGIC_PASS = os.environ.get("TWO_FACTOR_MAGIC_PASS", os.environ.get("AUTHY_MAGIC_PASS", ""))
+TW_VERIFY_ACCOUNT_SID = os.environ.get("TW_VERIFY_ACCOUNT_SID", "")
+TW_VERIFY_AUTH_TOKEN = os.environ.get("TW_VERIFY_AUTH_TOKEN", "")
+TW_VERIFY_APP_ID = os.environ.get("TW_VERIFY_APP_ID", "")
+
+
+class VERIFICATION_TYPES(IntegerChoices):
+    PHONE = 0, _("Phone")
+    EMAIL = 1, _("Email")
+    TOTP = 2, _("TOTP")
+    SECRET_CODE = 3, _("Secret Code")  # TWO_FACTOR_MAGIC_PASS
+
+
+# ---------------------------------------------------

@@ -541,7 +541,8 @@ class LoginView(Login):
     def form_valid(self, form):
         user = form.get_user()
 
-        if user.get_settings().two_factor_enabled:
+        use_default_2fa_flow = not settings.TWO_FACTOR_ENABLED
+        if use_default_2fa_flow and user.get_settings().two_factor_enabled:
             self.request.session[TWO_FACTOR_USER_SESSION_KEY] = str(user.id)
             self.request.session[TWO_FACTOR_STARTED_SESSION_KEY] = timezone.now().isoformat()
 
@@ -608,7 +609,7 @@ class BaseTwoFactorView(AuthLoginView):
         user = self.get_user()
 
         # set the user as actually authenticated now
-        login(self.request, user)
+        login(self.request, user, backend="smartmin.backends.CaseInsensitiveBackend")
         user.record_auth()
 
         # remove our session key so if the user comes back this page they'll get directed to the login view
@@ -882,6 +883,17 @@ class UserCRUDL(SmartCRUDL):
             language = forms.ChoiceField(
                 choices=settings.LANGUAGES, required=True, label=_("Website Language"), widget=SelectWidget()
             )
+            verification_type = forms.ChoiceField(
+                choices=settings.VERIFICATION_TYPES.choices,
+                required=True,
+                label=_("Verification Type"),
+                widget=SelectWidget(),
+            )
+            verification_code = forms.CharField(
+                required=False,
+                label=_("Verification Code"),
+                widget=InputWidget(attrs={"number": True}),
+            )
 
             def clean_new_password(self):
                 password = self.cleaned_data["new_password"]
@@ -909,9 +921,31 @@ class UserCRUDL(SmartCRUDL):
 
                 return email
 
+            def clean_verification_type(self):
+                verification_type = self.cleaned_data.get("verification_type", None)
+                return int(verification_type or 0)
+
+            def clean_verification_code(self):
+                user = self.instance
+                user_settings = user.get_settings()
+                verification_type = self.cleaned_data.get("verification_type", 0)
+                verification_code = self.cleaned_data.get("verification_code", None)
+                if settings.VERIFICATION_TYPES.TOTP == verification_type and not user_settings.two_factor_enabled:
+                    if not user.verify_2fa(otp=verification_code):
+                        raise forms.ValidationError(_("OTP incorrect. Please try again."))
+                return verification_code
+
             class Meta:
                 model = User
-                fields = ("first_name", "last_name", "email", "current_password", "new_password", "language")
+                fields = (
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "current_password",
+                    "new_password",
+                    "language",
+                    "verification_type",
+                )
 
         form_class = EditForm
         permission = "orgs.org_profile"
@@ -924,10 +958,21 @@ class UserCRUDL(SmartCRUDL):
         def get_object(self, *args, **kwargs):
             return self.request.user
 
+        def get_context_data(self, **kwargs):
+            context = super().get_context_data(**kwargs)
+            brand = self.request.branding["name"]
+            user = self.request.user
+            user_settings = user.get_settings()
+            secret_url = pyotp.TOTP(user_settings.otp_secret).provisioning_uri(user.username, issuer_name=brand)
+            context["secret_url"] = secret_url
+            context["two_factor_enabled"] = user_settings.two_factor_enabled
+            return context
+
         def derive_initial(self):
             initial = super().derive_initial()
             user_settings = self.get_object().get_settings()
             initial["language"] = user_settings.language
+            initial["verification_type"] = user_settings.verification_type
             return initial
 
         def pre_save(self, obj):
@@ -946,6 +991,8 @@ class UserCRUDL(SmartCRUDL):
             obj = super().post_save(obj)
             user_settings = obj.get_settings()
             user_settings.language = self.form.cleaned_data["language"]
+            user_settings.verification_type = self.form.cleaned_data["verification_type"]
+            user_settings.two_factor_enabled = user_settings.verification_type == settings.VERIFICATION_TYPES.TOTP
             user_settings.save()
             return obj
 
@@ -2076,6 +2123,11 @@ class OrgCRUDL(SmartCRUDL):
             parent = forms.IntegerField(required=False)
             plan_end = forms.DateTimeField(required=False)
             non_contact_hours = forms.BooleanField(required=False)
+            enable_report = forms.BooleanField(
+                required=False,
+                label=_("Include in Daily Report"),
+                help_text=_("When enabled the current Org will appear in daily report"),
+            )
             viewers = forms.ModelMultipleChoiceField(
                 User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
                 required=False,
@@ -2096,12 +2148,18 @@ class OrgCRUDL(SmartCRUDL):
                 required=False,
                 widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
             )
+            chat_users = forms.ModelMultipleChoiceField(
+                User.objects.exclude(Q(email__isnull=True) | Q(email__exact="") | Q(is_active=False)),
+                required=False,
+                widget=SelectMultipleWidget(attrs={"searchable": True, "placeholder": "Select Users"}),
+            )
 
             def __init__(self, org, *args, **kwargs):
                 super().__init__(*args, **kwargs)
 
                 self.limits_rows = []
                 self.add_limits_fields(org)
+                self.fields["enable_report"].initial = org.config.get("enable_report", False)
 
             def clean_parent(self):
                 parent = self.cleaned_data.get("parent")
@@ -2142,7 +2200,9 @@ class OrgCRUDL(SmartCRUDL):
                     "is_multi_user",
                     "is_multi_org",
                     "is_suspended",
+                    "enable_report",
                     "administrators",
+                    "chat_users",
                     "editors",
                     "viewers",
                     "surveyors",
@@ -2255,6 +2315,7 @@ class OrgCRUDL(SmartCRUDL):
             obj.limits = cleaned_data["limits"]
             obj.config = obj.config or {}
             obj.config["non_contact_hours"] = cleaned_data["non_contact_hours"]
+            obj.config["enable_report"] = cleaned_data["enable_report"]
             return obj
 
         def derive_initial(self):
@@ -4893,7 +4954,7 @@ class OrgCRUDL(SmartCRUDL):
                         initial = message.get(lang_code, default_message)
 
                     field = forms.CharField(
-                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
+                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": False}),
                         required=False,
                         label=lang_name,
                         initial=initial,
@@ -4909,7 +4970,7 @@ class OrgCRUDL(SmartCRUDL):
                 # add our default language, we'll insert it at the front of the list
                 if base_language and base_language not in self.fields:
                     field = forms.CharField(
-                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": True}),
+                        widget=CompletionTextarea(attrs={"widget_only": True, "spellchecker": False}),
                         required=False,
                         label=_("Default"),
                         initial=message.get(base_language, default_message),

@@ -397,7 +397,9 @@ class CampaignTest(TembaTest):
         )
 
         self.assertFormError(
-            response, "form", "__all__", f"Translation for 'Default' exceeds the {Msg.MAX_TEXT_LEN} character limit."
+            response.context["form"],
+            None,
+            f"Translation for 'Default' exceeds the {Msg.MAX_TEXT_LEN} character limit.",
         )
 
         post_data = dict(
@@ -414,7 +416,7 @@ class CampaignTest(TembaTest):
             reverse("campaigns.campaignevent_create") + "?campaign=%d" % campaign.pk, post_data
         )
 
-        self.assertFormError(response, "form", "flow_to_start", "This field is required.")
+        self.assertFormError(response.context["form"], "flow_to_start", "This field is required.")
 
         post_data = dict(
             relative_to=self.planting_date.pk,

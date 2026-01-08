@@ -5,6 +5,7 @@ from itertools import chain
 from urllib.parse import quote_plus
 
 import iso8601
+from django_redis import get_redis_connection
 from smartmin.views import (
     SmartCreateView,
     SmartCRUDL,
@@ -40,6 +41,7 @@ from temba.channels.models import Channel
 from temba.contacts.templatetags.contacts import MISSING_VALUE
 from temba.flows.models import Flow, FlowStart
 from temba.mailroom.events import Event
+from temba.msgs.models import Conversation, ConversationOwner
 from temba.notifications.views import NotificationTargetMixin
 from temba.orgs.models import Org
 from temba.orgs.views import (
@@ -1080,6 +1082,18 @@ class ContactCRUDL(SmartCRUDL):
                 context["has_older"] = bool(
                     contact.get_history(contact_creation, after, HISTORY_INCLUDE_EVENTS, ticket=ticket, limit=1)
                 )
+
+            # update conversation last_read time to know when user last time had chat open
+            conversations = ConversationOwner.objects.filter(conversation__contact=contact, owner=self.request.user)
+            conversation = conversations.first()
+            if conversation:
+                conversation.last_read = timezone.now()
+                conversation.save(update_fields=["last_read"])
+
+                # clear email sending data to send email again when user goes offline and have unread messages
+                email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % self.request.user.pk
+                r = get_redis_connection()
+                r.delete(email_notification_key)
 
             context["recent_only"] = recent_only
             context["next_before"] = datetime_to_timestamp(after)
@@ -2498,6 +2512,10 @@ class ContactImportCRUDL(SmartCRUDL):
             context["info"] = self.import_info
             context["is_finished"] = self.is_import_finished()
             context["is_validated"] = self.is_validated()
+            context["blocked_contacts"] = Contact.objects.filter(
+                uuid__in=self.import_info.get("blocked_uuids", []),
+                status__in=[Contact.STATUS_BLOCKED, Contact.STATUS_STOPPED],
+            )
             return context
 
         @cached_property

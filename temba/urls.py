@@ -49,6 +49,7 @@ urlpatterns = [
     re_path(r"^storage/(?P<file_path>.+)$", PrivateFileCallbackView.as_view(), name="file_storage"),
     re_path("^robots.txt", TemplateView.as_view(template_name="robots.txt", content_type="text/plain")),
     re_path(r"^auth/", include("social_django.urls", namespace="social")),
+    re_path(r"^saml2/", include("djangosaml2.urls")),
 ]
 
 if settings.DEBUG:

@@ -1,5 +1,3 @@
-import csv
-import io
 from functools import reduce
 
 import pandas as pd
@@ -226,23 +224,6 @@ class ClassifierCRUDL(SmartCRUDL):
 
             return converted
 
-        @classmethod
-        def check_file(cls, file, langs):
-            csvreader = csv.DictReader(file)
-            error_lines = []
-            lang_fields = []
-
-            for lang in langs:
-                lang_fields.append(f"Question{str(lang).upper()}")
-                lang_fields.append(f"Answer{str(lang).upper()}")
-
-            for idx, row in enumerate(csvreader, start=1):
-                invalid_dict = {k: v for k, v in row.items() if k in lang_fields and (v == "" or v == "#N/A")}
-                if invalid_dict:
-                    error_lines.append(str(idx + 1))  # excluding the file header
-
-            return error_lines
-
         def post(self, *args, **kwargs):
             message = {}
             status = 200
@@ -262,14 +243,15 @@ class ClassifierCRUDL(SmartCRUDL):
                 return not is_gsm7(x) and calculate_num_segments(x) > 1
 
             form_errors = []
+            lang_headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)))
 
+            df = pd.DataFrame()
             try:
+                df = pd.read_excel(file)
+                df.columns = df.columns.str.lower()
                 if submit_type != "S":
-                    df = pd.read_csv(file)
-                    df.columns = df.columns.str.lower()
-                    headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)))
                     replaced, removed = set(), set()
-                    for (column, items) in df[headers].items():
+                    for (column, items) in df[lang_headers].items():
                         for index, item in enumerate(items):
                             if is_replacement_required(item):
                                 if submit_type == "C":
@@ -283,24 +265,14 @@ class ClassifierCRUDL(SmartCRUDL):
                             "classifiers/replacements_message.haml", {"accent_chars": ", ".join(replaced | removed)}
                         )
                         return JsonResponse(message, status=202)
-                    file = io.StringIO()
-                    df.to_csv(file, index=False)
-                    file.seek(0)
-                elif file:
-                    file_buf = io.StringIO()
-                    file_buf.write(file.read().decode("utf-8"))
-                    file = file_buf
-                    file.seek(0)
             except KeyError:
                 form_errors.append(
                     "Please check whether the language list of the form is matching with the file header"
                 )
 
-            if file and langs and not form_errors:
-                raw_data = file.read().splitlines()
-
+            if not df.empty and langs and not form_errors:
                 if not ignore_errors:
-                    errors = self.check_file(raw_data, langs)
+                    errors = (df.index[df[lang_headers].isin(["", "#N/A"]).any(axis=1)] + 2).astype(str).tolist()
                     if errors:
                         status = 400
                         message["file"] = (
@@ -308,10 +280,11 @@ class ClassifierCRUDL(SmartCRUDL):
                             f"they seems to be empty or invalid."
                         )
                         return JsonResponse(message, status=status)
-
-                obj = self.get_object()
                 ClassifierTrainingTask.create(
-                    training_doc=raw_data, classifier=obj, languages=self.convert_langs(langs), user=self.request.user
+                    training_doc=df.to_dict(orient="list"),
+                    classifier=self.get_object(),
+                    languages=self.convert_langs(langs),
+                    user=self.request.user,
                 )
                 messages.success(
                     self.request,

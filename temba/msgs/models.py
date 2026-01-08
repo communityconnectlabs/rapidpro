@@ -1077,8 +1077,12 @@ class Label(TembaModel, DependencyMixin):
     def is_folder(self):
         return self.label_type == Label.TYPE_FOLDER
 
-    def release(self, user):
-        assert not self.has_child_labels(), "can't release non-empty label folder"
+    def release(self, user, release_children=False):
+        if release_children:
+            for child in self.children.all():
+                child.release(user)
+        else:
+            assert not self.has_child_labels(), "can't release non-empty label folder"
 
         if not self.is_folder():
             super().release(user)  # releases flow dependencies
@@ -1414,14 +1418,29 @@ class Conversation(models.Model):
     A conversation is a collection of messages between a contact and manager
     """
 
+    EMAIL_NOTIFICATION_KEY = "unread_messages_email_sent_%d"
+    ACTIVE = "ACT"
+    ARCHIVED = "ARC"
+    STATUS = (
+        (ACTIVE, "Active"),
+        (ARCHIVED, "Archived"),
+    )
+
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversations")
     contact = models.ForeignKey(Contact, on_delete=models.PROTECT, related_name="conversations")
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="conversations_created")
+    status = models.CharField(max_length=3, choices=STATUS, default=ACTIVE)
+    owners = models.ManyToManyField(User, related_name="conversations_created", through="ConversationOwner")
     created_on = models.DateTimeField(auto_now_add=True)
     modified_on = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.contact} - {self.created_by}"
+        return f"{self.contact} - {self.owners.first()}"
+
+
+class ConversationOwner(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.PROTECT)
+    owner = models.ForeignKey(User, on_delete=models.PROTECT)
+    last_read = models.DateTimeField(null=True, blank=True)
 
 
 class ConversationTemplate(models.Model):
@@ -1430,8 +1449,11 @@ class ConversationTemplate(models.Model):
     """
 
     org = models.ForeignKey(Org, on_delete=models.PROTECT, related_name="conversation_templates")
-    name = models.CharField(max_length=128, unique=True)
+    name = models.CharField(max_length=128)
     text = models.TextField()
+
+    class Meta:
+        unique_together = ("org", "name")
 
     def __str__(self):
         return self.name
