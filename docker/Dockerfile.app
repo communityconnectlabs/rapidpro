@@ -33,6 +33,7 @@ RUN npm install --legacy-peer-deps --ignore-scripts
 RUN npm rebuild node-sass --force || true
 
 RUN poetry run python manage.py collectstatic --noinput
+RUN poetry run python manage.py compress --extension=.haml --force
 
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
 
