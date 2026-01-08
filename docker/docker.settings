@@ -224,6 +224,9 @@ LOGGING["root"]["level"] = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
 AWS_S3_ENABLED = os.environ.get("AWS_S3_ENABLED", "true") == "true"
 
 if AWS_S3_ENABLED:
+    STORAGES["default"]["BACKEND"] = "storages.backends.s3boto3.S3Boto3Storage"
+
+    # boto3 config fields
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
     AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "")
@@ -236,9 +239,8 @@ if AWS_S3_ENABLED:
     ARCHIVE_BUCKET = os.environ.get("ARCHIVE_BUCKET", "")
 
     AWS_BUCKET_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
-    MEDIA_URL = f"https://{AWS_BUCKET_DOMAIN}/media/"
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
     STORAGE_URL = os.environ.get("STORAGE_URL") or f"https://{AWS_BUCKET_DOMAIN}"
+    MEDIA_URL = f"https://{AWS_BUCKET_DOMAIN}/media/"
 else:
     AWS_BUCKET_DOMAIN = f"{HOSTNAME}/media"
     STORAGE_URL = os.environ.get("STORAGE_URL") or "/media"
