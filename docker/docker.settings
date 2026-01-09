@@ -219,6 +219,12 @@ BRANDING["app.communitycx.co"] = app_communitycx
 COMPRESS_ENABLED = os.environ.get("COMPRESS_ENABLED", "true") == "true"
 COMPRESS_OFFLINE = True
 
+# fill context for branding offline compression
+for brand in BRANDING.values():
+    context = dict(STATIC_URL=STATIC_URL, base_template="frame.html", debug=False, testing=False)
+    context["brand"] = dict(slug=brand["slug"], styles=brand["styles"])
+    COMPRESS_OFFLINE_CONTEXT.append(context)
+
 LOGGING["root"]["level"] = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
 
 AWS_S3_ENABLED = os.environ.get("AWS_S3_ENABLED", "true") == "true"
