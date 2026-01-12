@@ -15,6 +15,12 @@ from django.utils.translation import gettext_lazy as _
 
 from celery.schedules import crontab
 
+try:
+    # Apply Python 3.12 SMTP compatibility patch for Django 4.2
+    from .utils import smtp_fix
+except ImportError:
+    pass
+
 SENTRY_DSN = os.environ.get("SENTRY_DSN", os.environ.get("RAVEN_DSN", ""))
 
 
