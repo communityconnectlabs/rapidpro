@@ -17,7 +17,7 @@ from celery.schedules import crontab
 
 try:
     # Apply Python 3.12 SMTP compatibility patch for Django 4.2
-    from .utils import smtp_fix
+    from .utils import smtp_fix  # noqa
 except ImportError:
     pass
 
