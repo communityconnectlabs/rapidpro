@@ -87,23 +87,15 @@ if REDIS_PW:
 else:
     REDIS_LOCATION = "redis://%s:%s/%s" % (REDIS_HOST, REDIS_PORT, REDIS_DB)
 
-# Use dummy cache for build-time operations (collectstatic, compress)
-if os.environ.get("USE_DUMMY_CACHE", "false") == "true":
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.dummy.DummyCache",
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_LOCATION,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient"
         }
     }
-else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": REDIS_LOCATION,
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient"
-            }
-        }
-    }
+}
 
 BROKER_URL = REDIS_LOCATION
 CELERY_BROKER_URL = REDIS_LOCATION
@@ -225,7 +217,7 @@ app_communitycx["domain"] = "app.communitycx.co"
 BRANDING["app.communitycx.co"] = app_communitycx
 
 COMPRESS_ENABLED = os.environ.get("COMPRESS_ENABLED", "true") == "true"
-COMPRESS_OFFLINE = True
+COMPRESS_OFFLINE = False
 
 # fill context for branding offline compression
 for brand in BRANDING.values():

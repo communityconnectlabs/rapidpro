@@ -32,7 +32,6 @@ COPY docker/docker.settings /rapidpro/temba/settings.py
 RUN npm install
 
 RUN poetry run python manage.py collectstatic --noinput
-RUN USE_DUMMY_CACHE=true poetry run python manage.py compress --extension=.haml --force
 
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
 
