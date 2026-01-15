@@ -29,11 +29,10 @@ RUN openssl genrsa -out /rapidpro/certs/sp-key.pem 2048
 RUN openssl req -new -x509 -key /rapidpro/certs/sp-key.pem -out /rapidpro/certs/sp-cert.pem -days 3650 -subj "/CN=communityconnectlabs.saml"
 COPY docker/docker.settings /rapidpro/temba/settings.py
 
-RUN npm install --legacy-peer-deps --ignore-scripts
-RUN npm rebuild node-sass --force || true
+RUN npm install
 
 RUN poetry run python manage.py collectstatic --noinput
-RUN poetry run python manage.py compress --extension=.haml --force
+RUN USE_DUMMY_CACHE=true poetry run python manage.py compress --extension=.haml --force
 
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
 
