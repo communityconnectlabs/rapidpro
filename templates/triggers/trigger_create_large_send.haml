@@ -150,10 +150,12 @@
           formData.append('limit_time', limitTimeValue);
           formData.append('batch_interval', intervalValue);
           formData.append('chunk_size', chunkSizeValue)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
           const formOption = {
             method: 'POST',
             body: formData,
-            signal: AbortSignal.timeout(30000),
+            signal: controller.signal,
             headers: {
               'X-Requested-With': 'XMLHttpRequest',
               'X-CSRFToken': getCookie('csrftoken')
@@ -164,9 +166,11 @@
           fetch('{% url "triggers.trigger_large_send_schedule_summary" %}', formOption)
             .then((response) => response.json())
             .then((response) => {
+              clearTimeout(timeoutId);
               toggleScheduleList(response);
               recreatePrimaryButton(false);
             }).catch((error) => {
+              clearTimeout(timeoutId);
               console.log("[trigger_large_send_schedule_summary]", error)
               showAlertMessage("Unable to process the summary, please try again.", "red")
             });
