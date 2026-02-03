@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.urls import reverse
 
 from temba.tests import TembaTest
@@ -33,9 +35,10 @@ class ExternalTypeTest(TembaTest):
         post_data["mt_response_check"] = "SENT"
 
         # fail due to missing number and invalid URL
-        response = self.client.post(url, post_data)
-        self.assertFormError(response, "form", "url", "Cannot be a local or private host.")
-        self.assertFormError(response, "form", "number", "This field is required.")
+        with patch("socket.gethostbyname", return_value="127.0.0.1"):
+            response = self.client.post(url, post_data)
+            self.assertFormError(response, "form", "url", "Cannot be a local or private host.")
+            self.assertFormError(response, "form", "number", "This field is required.")
 
         # change scheme to Ext and add valid URL
         ext_url = "http://test.com/send.php?from={{from}}&text={{text}}&to={{to}}"
@@ -43,13 +46,15 @@ class ExternalTypeTest(TembaTest):
         post_data["scheme"] = "ext"
 
         # fail due to missing address
-        response = self.client.post(url, post_data)
-        self.assertFormError(response, "form", "address", "This field is required.")
+        with patch("socket.gethostbyname", return_value="123.123.123.123"):
+            response = self.client.post(url, post_data)
+            self.assertFormError(response, "form", "address", "This field is required.")
 
         # update to valid number
         post_data["scheme"] = "tel"
         post_data["number"] = "12345"
-        response = self.client.post(url, post_data)
+        with patch("socket.gethostbyname", return_value="123.123.123.123"):
+            response = self.client.post(url, post_data)
         channel = Channel.objects.get()
 
         self.assertEqual(channel.country, "RW")
@@ -132,12 +137,14 @@ class ExternalTypeTest(TembaTest):
         post_data["max_length"] = 180
         post_data["encoding"] = Channel.ENCODING_SMART
 
-        self.client.post(url, post_data)
+        with patch("socket.gethostbyname", return_value="123.123.123.123"):
+            self.client.post(url, post_data)
         channel = Channel.objects.get(schemes=["ext"])
         self.assertEqual("123456789", channel.address)
         self.assertIsNone(channel.country.code)
 
-    def test_claim_bulk_sender(self):
+    @patch("socket.gethostbyname", return_value="123.123.123.123")
+    def test_claim_bulk_sender(self, mock_socket):
         url = reverse("channels.types.external.claim") + "?role=S&channel=%s" % self.channel.pk
 
         self.login(self.admin)

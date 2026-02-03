@@ -63,4 +63,4 @@ class Formax:
                 )
             )
 
-        logger.debug(f"{url} {response.status_code} {int((time.time() - start)*1000)}ms")
+        logger.debug(f"{url} {response.status_code} {int((time.time() - start) * 1000)}ms")

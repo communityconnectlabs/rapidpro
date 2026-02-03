@@ -1,3 +1,3 @@
 MAP = {
-    "urn:oid:2.5.4.42": "givenName",
+    r"urn:oid:2.5.4.42": "givenName",
 }

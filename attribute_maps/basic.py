@@ -1,8 +1,8 @@
-DEF = "urn:mace:dir:attribute-def:"
+DEF = r"urn:mace:dir:attribute-def:"
 
 
 MAP = {
-    "identifier": "urn:oasis:names:tc:SAML:2.0:attrname-format:basic",
+    "identifier": r"urn:oasis:names:tc:SAML:2.0:attrname-format:basic",
     "fro": {
         f"{DEF}aRecord": "aRecord",
         f"{DEF}aliasedEntryName": "aliasedEntryName",

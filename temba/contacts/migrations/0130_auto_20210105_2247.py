@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="contacturn",
             constraint=models.CheckConstraint(
-                check=models.Q(models.Q(("scheme", ""), ("path", ""), _connector="OR"), _negated=True),
+                check=models.Q(("scheme", ""), ("path", ""), _connector="OR", _negated=True),
                 name="non_empty_scheme_and_path",
             ),
         ),

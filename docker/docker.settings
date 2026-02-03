@@ -87,18 +87,26 @@ if REDIS_PW:
 else:
     REDIS_LOCATION = "redis://%s:%s/%s" % (REDIS_HOST, REDIS_PORT, REDIS_DB)
 
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_LOCATION,
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient"
+# Use dummy cache for build-time operations (collectstatic, compress)
+if os.environ.get("USE_DUMMY_CACHE", "false") == "true":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.dummy.DummyCache",
         }
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_LOCATION,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient"
+            }
+        }
+    }
 
-BROKER_URL = CACHES["default"]["LOCATION"]
-CELERY_BROKER_URL = CACHES["default"]["LOCATION"]
+BROKER_URL = REDIS_LOCATION
+CELERY_BROKER_URL = REDIS_LOCATION
 
 _default_database_config = {
     "ENGINE": "django.contrib.gis.db.backends.postgis",
@@ -217,13 +225,22 @@ app_communitycx["domain"] = "app.communitycx.co"
 BRANDING["app.communitycx.co"] = app_communitycx
 
 COMPRESS_ENABLED = os.environ.get("COMPRESS_ENABLED", "true") == "true"
-COMPRESS_OFFLINE = False
+COMPRESS_OFFLINE = True
+
+# fill context for branding offline compression
+for brand in BRANDING.values():
+    context = dict(STATIC_URL=STATIC_URL, base_template="frame.html", debug=False, testing=False)
+    context["brand"] = dict(slug=brand["slug"], styles=brand["styles"])
+    COMPRESS_OFFLINE_CONTEXT.append(context)
 
 LOGGING["root"]["level"] = os.environ.get("DJANGO_LOG_LEVEL", "INFO")
 
 AWS_S3_ENABLED = os.environ.get("AWS_S3_ENABLED", "true") == "true"
 
 if AWS_S3_ENABLED:
+    STORAGES["default"]["BACKEND"] = "storages.backends.s3boto3.S3Boto3Storage"
+
+    # boto3 config fields
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
     AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME", "")
@@ -236,12 +253,11 @@ if AWS_S3_ENABLED:
     ARCHIVE_BUCKET = os.environ.get("ARCHIVE_BUCKET", "")
 
     AWS_BUCKET_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com"
+    STORAGE_URL = os.environ.get("STORAGE_URL") or f"https://{AWS_BUCKET_DOMAIN}"
     MEDIA_URL = f"https://{AWS_BUCKET_DOMAIN}/media/"
-    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     AWS_BUCKET_DOMAIN = f"{HOSTNAME}/media"
-
-STORAGE_URL = os.environ.get("STORAGE_URL", "/media")
+    STORAGE_URL = os.environ.get("STORAGE_URL") or "/media"
 
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "v2": "1000000/hour",
@@ -262,7 +278,7 @@ ORG_LIMIT_DEFAULTS = {
     "topics": 2000,
 }
 
-MAILROOM_URL = os.environ.get("MAILROOM_URL", "http://localhost:8090")
+MAILROOM_URL = os.environ.get("MAILROOM_URL") or "http://localhost:8090"
 MAILROOM_AUTH_TOKEN = os.environ.get("MAILROOM_AUTH_TOKEN", "")
 
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")

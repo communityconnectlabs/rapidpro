@@ -8,6 +8,7 @@ from django.views.generic.base import TemplateView
 from django.views.i18n import JavaScriptCatalog
 
 from temba.channels.views import register, sync
+from temba.middleware import BrandingMiddleware
 from temba.utils.s3.views import PrivateFileCallbackView
 
 # javascript translation packages
@@ -61,17 +62,25 @@ for app in settings.APP_URLS:  # pragma: needs cover
     urlpatterns.append(re_path(r"^", include(app)))
 
 
+def _get_brand(request):
+    try:
+        user = request.user
+        brand = user.get_org().get_branding() if not user.is_anonymous else getattr(request, "branding", None)
+        if brand:
+            return brand
+    except Exception:
+        pass
+
+    return BrandingMiddleware.get_branding_for_host(request.get_host())
+
+
 def handler404(request, exception):
     """
     404 error handler which includes ``request`` in the context.
 
     Templates: `404.html`
     """
-    user = request.user
-    try:
-        brand = user.get_org().get_branding() if not user.is_anonymous else getattr(settings, "BRANDING")
-    except AttributeError:
-        brand = getattr(settings, "BRANDING")
+    brand = _get_brand(request)
     context = dict(request=request, brand=brand)
 
     return render(request, "404.html", context=context, status=404)  # pragma: needs cover
@@ -88,5 +97,8 @@ def handler500(request):
     from django.http import HttpResponseServerError
     from django.template import loader
 
+    brand = _get_brand(request)
     t = loader.get_template("500.html")
-    return HttpResponseServerError(t.render({"request": request, "sentry_id": last_event_id()}))  # pragma: needs cover
+    return HttpResponseServerError(
+        t.render({"request": request, "brand": brand, "sentry_id": last_event_id()})
+    )  # pragma: needs cover

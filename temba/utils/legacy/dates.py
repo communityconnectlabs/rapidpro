@@ -32,7 +32,7 @@ def datetime_to_str(date_obj, format, tz):
     if not date_obj:
         return None
 
-    if type(date_obj) == datetime.date:
+    if type(date_obj) is datetime.date:
         date_obj = tz.localize(datetime.datetime.combine(date_obj, datetime.time(0, 0, 0)))
 
     if isinstance(date_obj, datetime.datetime):

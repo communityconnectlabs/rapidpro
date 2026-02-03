@@ -679,7 +679,7 @@ class TembaTestMixin:
             if isinstance(expected, UUID):
                 expected = str(expected)
 
-            self.assertEqual(expected, actual, f"mismatch in cell {chr(index+65)}{row_num+1}")
+            self.assertEqual(expected, actual, f"mismatch in cell {chr(index + 65)}{row_num + 1}")
 
     def assertExcelSheet(self, sheet, rows, tz=None):
         """

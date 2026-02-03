@@ -10,8 +10,6 @@ def register_ticketer_type(type_class):
     """
     Registers a ticketer type
     """
-    global TYPES
-
     if not type_class.slug:
         type_class.slug = type_class.__module__.split(".")[-2]
 

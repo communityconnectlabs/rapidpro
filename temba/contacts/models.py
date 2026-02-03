@@ -1281,6 +1281,12 @@ class Contact(RequireUpdateFieldsMixin, TembaModel):
         if hasattr(self, cache_attr):
             return getattr(self, cache_attr)
 
+        # For unsaved instances, there can't be related URNs yet. Avoid hitting the related manager.
+        if not self.pk:
+            urns = []
+            setattr(self, cache_attr, urns)
+            return urns
+
         urns = self.urns.order_by("-priority", "pk").select_related("org")
         setattr(self, cache_attr, urns)
         return urns
