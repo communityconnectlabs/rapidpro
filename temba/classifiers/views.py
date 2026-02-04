@@ -243,7 +243,7 @@ class ClassifierCRUDL(SmartCRUDL):
                 return not is_gsm7(x) and calculate_num_segments(x) > 1
 
             form_errors = []
-            lang_headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)))
+            lang_headers = reduce(lambda v, i: v + i, map(get_lang_headers, self.convert_langs(langs)), [])
 
             df = pd.DataFrame()
             try:
