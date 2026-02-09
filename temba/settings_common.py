@@ -1389,8 +1389,6 @@ CHANNEL_TYPES = [
     "temba.channels.types.telesom.TelesomType",
     "temba.channels.types.thinq.ThinQType",
     "temba.channels.types.twiml_api.TwimlAPIType",
-    "temba.channels.types.twitter.TwitterType",
-    "temba.channels.types.twitter_legacy.TwitterLegacyType",
     "temba.channels.types.verboice.VerboiceType",
     "temba.channels.types.viber_public.ViberPublicType",
     "temba.channels.types.vk.VKType",
