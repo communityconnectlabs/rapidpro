@@ -166,8 +166,6 @@ STATICFILES_DIRS = (
     os.path.join(PROJECT_DIR, "../node_modules/@greatnonprofits-nfp/flow-editor/build"),
     os.path.join(PROJECT_DIR, "../node_modules/@greatnonprofits-nfp/temba-components/dist/static"),
     os.path.join(PROJECT_DIR, "../node_modules"),
-    os.path.join(PROJECT_DIR, "../node_modules/react/umd"),
-    os.path.join(PROJECT_DIR, "../node_modules/react-dom/umd"),
 )
 STATIC_ROOT = os.path.join(PROJECT_DIR, "../sitestatic")
 STATIC_URL = "/sitestatic/"
