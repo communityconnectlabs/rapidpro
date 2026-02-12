@@ -77,8 +77,8 @@ class DashboardTest(TembaTest):
         self.login(self.admin)
         self.create_activity()
 
-        types = ["T", "TT", "FB", "NX", "AT", "KN", "CK"]
-        michael = self.create_contact("Michael", urns=["twitter:mjackson"])
+        types = ["T", "TG", "FB", "NX", "AT", "KN", "CK"]
+        michael = self.create_contact("Michael", urns=["telegram:12345"])
         for t in types:
             channel = self.create_channel(t, f"Test Channel {t}", f"{t}:1234")
             self.create_outgoing_msg(michael, f"Message on {t}", channel=channel)

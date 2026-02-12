@@ -55,9 +55,9 @@ class APITest(TembaTest):
         super().setUp()
 
         self.joe = self.create_contact("Joe Blow", phone="0788123123")
-        self.frank = self.create_contact("Frank", urns=["twitter:franky"])
+        self.frank = self.create_contact("Frank", urns=["telegram:12345"])
 
-        self.twitter = self.create_channel("TT", "Twitter Channel", "billy_bob")
+        self.telegram = self.create_channel("TG", "My Telegram", "75474745", config={})
 
         self.hans = self.create_contact("Hans Gruber", phone="+4921551511", org=self.org2)
 
@@ -755,14 +755,14 @@ class APITest(TembaTest):
         ticketer = Ticketer.create(self.org, self.admin, "mailgun", "Support Tickets", {})
         ticket = self.create_ticket(ticketer, self.joe, "Help!")
 
-        bcast1 = Broadcast.create(self.org, self.admin, "Hello 1", urns=["twitter:franky"])
+        bcast1 = Broadcast.create(self.org, self.admin, "Hello 1", urns=["telegram:12345"])
         bcast2 = Broadcast.create(self.org, self.admin, "Hello 2", contacts=[self.joe])
         bcast3 = Broadcast.create(self.org, self.admin, "Hello 3", contacts=[self.frank], status="S")
         bcast4 = Broadcast.create(
             self.org,
             self.admin,
             "Hello 4",
-            urns=["twitter:franky"],
+            urns=["telegram:12345"],
             contacts=[self.joe],
             groups=[reporters],
             status="F",
@@ -793,7 +793,7 @@ class APITest(TembaTest):
         self.assertEqual(
             {
                 "id": bcast4.id,
-                "urns": ["twitter:franky"],
+                "urns": ["telegram:12345"],
                 "contacts": [{"uuid": self.joe.uuid, "name": self.joe.name}],
                 "groups": [{"uuid": reporters.uuid, "name": reporters.name}],
                 "text": {"base": "Hello 4"},
@@ -834,7 +834,7 @@ class APITest(TembaTest):
             None,
             {
                 "text": "Hi @(format_urn(urns.tel))",
-                "urns": ["twitter:franky"],
+                "urns": ["telegram:12345"],
                 "contacts": [self.joe.uuid, self.frank.uuid],
                 "groups": [reporters.uuid],
                 "ticket": str(ticket.uuid),
@@ -843,7 +843,7 @@ class APITest(TembaTest):
 
         broadcast = Broadcast.objects.get(id=response.json()["id"])
         self.assertEqual({"base": "Hi @(format_urn(urns.tel))"}, broadcast.text)
-        self.assertEqual(["twitter:franky"], broadcast.raw_urns)
+        self.assertEqual(["telegram:12345"], broadcast.raw_urns)
         self.assertEqual({self.joe, self.frank}, set(broadcast.contacts.all()))
         self.assertEqual({reporters}, set(broadcast.groups.all()))
         self.assertEqual(ticket, broadcast.ticket)
@@ -866,7 +866,7 @@ class APITest(TembaTest):
 
         # try sending as a flagged org
         self.org.flag()
-        response = self.postJSON(url, None, {"text": "Hello", "urns": ["twitter:franky"]})
+        response = self.postJSON(url, None, {"text": "Hello", "urns": ["telegram:12345"]})
         self.assertResponseError(response, "non_field_errors", Org.BLOCKER_FLAGGED)
 
     def test_archives(self):
@@ -1573,7 +1573,7 @@ class APITest(TembaTest):
         deleted.release(self.admin)
 
         # create channel for other org
-        self.create_channel("TT", "Twitter Channel", "nyaruka", org=self.org2)
+        self.create_channel("TG", "Telegram Channel", "nyaruka", config={}, org=self.org2)
 
         # no filtering
         with self.assertNumQueries(NUM_BASE_REQUEST_QUERIES + 2):
@@ -1582,7 +1582,7 @@ class APITest(TembaTest):
         resp_json = response.json()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(resp_json["next"], None)
-        self.assertResultsByUUID(response, [self.twitter, self.channel])
+        self.assertResultsByUUID(response, [self.telegram, self.channel])
         self.assertEqual(
             resp_json["results"][1],
             {
@@ -1603,12 +1603,12 @@ class APITest(TembaTest):
         )
 
         # filter by UUID
-        response = self.fetchJSON(url, "uuid=%s" % self.twitter.uuid)
-        self.assertResultsByUUID(response, [self.twitter])
+        response = self.fetchJSON(url, "uuid=%s" % self.telegram.uuid)
+        self.assertResultsByUUID(response, [self.telegram])
 
         # filter by address
         response = self.fetchJSON(url, "address=billy_bob")
-        self.assertResultsByUUID(response, [self.twitter])
+        self.assertResultsByUUID(response, [self.telegram])
 
     def test_channel_events(self):
         url = reverse("api.v2.channel_events")
@@ -3280,13 +3280,13 @@ class APITest(TembaTest):
 
         # create some messages
         joe_msg1 = self.create_incoming_msg(self.joe, "Howdy", msg_type="F")
-        frank_msg1 = self.create_incoming_msg(self.frank, "Bonjour", msg_type="I", channel=self.twitter)
+        frank_msg1 = self.create_incoming_msg(self.frank, "Bonjour", msg_type="I", channel=self.telegram)
         joe_msg2 = self.create_outgoing_msg(self.joe, "How are you?", status="Q")
         frank_msg2 = self.create_outgoing_msg(self.frank, "Ça va?", status="D")
         joe_msg3 = self.create_incoming_msg(
             self.joe, "Good", msg_type="F", attachments=["image/jpeg:https://example.com/test.jpg"]
         )
-        frank_msg3 = self.create_incoming_msg(self.frank, "Bien", channel=self.twitter, visibility="A")
+        frank_msg3 = self.create_incoming_msg(self.frank, "Bien", channel=self.telegram, visibility="A")
         frank_msg4 = self.create_outgoing_msg(self.frank, "Ça va?", status="F")
 
         # add a surveyor message (no URN etc)
@@ -3565,7 +3565,7 @@ class APITest(TembaTest):
                 "id": frank_run2.pk,
                 "uuid": str(frank_run2.uuid),
                 "flow": {"uuid": flow1.uuid, "name": "Colors"},
-                "contact": {"uuid": self.frank.uuid, "urn": "twitter:franky", "name": self.frank.name},
+                "contact": {"uuid": self.frank.uuid, "urn": "telegram:12345", "name": self.frank.name},
                 "start": None,
                 "responded": False,
                 "path": [

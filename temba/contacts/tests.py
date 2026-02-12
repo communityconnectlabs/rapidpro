@@ -1870,7 +1870,6 @@ class ContactTest(TembaTest):
         unready.save(update_fields=("status",))
 
         joe_tel = self.joe.get_urn(URN.TEL_SCHEME)
-        joe_twitter = self.joe.get_urn(URN.TWITTER_SCHEME)
         frank_tel = self.frank.get_urn(URN.TEL_SCHEME)
         voldemort_tel = self.voldemort.get_urn(URN.TEL_SCHEME)
 
@@ -2021,9 +2020,6 @@ class ContactTest(TembaTest):
             omnibox_request("search=222"),
         )
 
-        # create twitter channel
-        self.create_channel("TT", "Twitter", "nyaruka")
-
         # add add an external channel so numbers get normalized
         Channel.create(self.org, self.user, "RW", "EX", schemes=[URN.TEL_SCHEME])
 
@@ -2036,7 +2032,6 @@ class ContactTest(TembaTest):
             [
                 dict(id="c-%s" % self.joe.uuid, text="Joe Blow", extra="blow80"),
                 dict(id="u-%d" % joe_tel.pk, text="0781 111 111", extra="Joe Blow", scheme="tel"),
-                dict(id="u-%d" % joe_twitter.pk, text="blow80", extra="Joe Blow", scheme="twitter"),
             ],
             omnibox_request("search=BLOW"),
         )
@@ -2048,11 +2043,10 @@ class ContactTest(TembaTest):
         )
 
         # lookup by URN ids
-        urn_query = "u=%d,%d" % (self.joe.get_urn(URN.TWITTER_SCHEME).id, self.frank.get_urn(URN.TEL_SCHEME).id)
+        urn_query = "u=%d" % self.frank.get_urn(URN.TEL_SCHEME).id
         self.assertEqual(
             [
                 dict(id="u-%d" % frank_tel.pk, text="0782 222 222", extra="Frank Smith", scheme="tel"),
-                dict(id="u-%d" % joe_twitter.pk, text="blow80", extra="Joe Blow", scheme="twitter"),
             ],
             omnibox_request(urn_query),
         )
@@ -2109,11 +2103,10 @@ class ContactTest(TembaTest):
         self.assertEqual(omnibox_request("c=%s,%s" % (self.joe.uuid, self.frank.uuid)), [])
 
         # but still lookup by URN ids
-        urn_query = "u=%d,%d" % (self.joe.get_urn(URN.TWITTER_SCHEME).pk, self.frank.get_urn(URN.TEL_SCHEME).pk)
+        urn_query = "u=%d" % self.frank.get_urn(URN.TEL_SCHEME).pk
         self.assertEqual(
             [
                 {"id": f"u-{frank_tel.id}", "text": "0782 222 222", "extra": "Frank Smith", "scheme": "tel"},
-                {"id": f"u-{joe_twitter.id}", "text": "blow80", "extra": "Joe Blow", "scheme": "twitter"},
             ],
             omnibox_request(urn_query),
         )

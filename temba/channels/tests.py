@@ -49,7 +49,6 @@ class ChannelTest(TembaTest):
         self.tel_channel = self.create_channel(
             "A", "Test Channel", "+250785551212", country="RW", secret="12345", config={"FCM_ID": "123"}
         )
-        self.twitter_channel = self.create_channel("TWT", "Twitter Channel", "billy_bob")
 
         self.unclaimed_channel = self.create_channel("NX", "Unclaimed Channel", "", config={"FCM_ID": "000"})
         self.unclaimed_channel.org = None
@@ -213,14 +212,11 @@ class ChannelTest(TembaTest):
 
     def test_get_channel_type_name(self):
         self.assertEqual(self.tel_channel.get_channel_type_name(), "Android Phone")
-        self.assertEqual(self.twitter_channel.get_channel_type_name(), "Twitter Channel")
         self.assertEqual(self.unclaimed_channel.get_channel_type_name(), "Vonage Channel")
 
     def test_get_address_display(self):
         self.assertEqual("+250 785 551 212", self.tel_channel.get_address_display())
         self.assertEqual("+250785551212", self.tel_channel.get_address_display(e164=True))
-
-        self.assertEqual("@billy_bob", self.twitter_channel.get_address_display())
 
         # make sure it works with alphanumeric numbers
         self.tel_channel.address = "EATRIGHT"
@@ -423,15 +419,11 @@ class ChannelTest(TembaTest):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context["object_list"]), [self.tel_channel])
 
-        # re-activate other channel so org now has two channels
-        self.twitter_channel.is_active = True
-        self.twitter_channel.save()
-
         # no-more redirection for anyone
         self.login(self.user)
         response = self.client.get(reverse("channels.channel_list"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.context["object_list"]), {self.tel_channel, self.twitter_channel})
+        self.assertEqual(set(response.context["object_list"]), {self.tel_channel})
 
         # clear out the phone and name for the Android channel
         self.tel_channel.name = None
@@ -2278,125 +2270,6 @@ class ChannelLogTest(TembaTest):
         response = self.client.get(read_url)
 
         self.assertContains(response, "3527065", count=1)
-
-        with AnonymousOrg(self.org):
-            response = self.client.get(read_url)
-            self.assertContains(response, "There is no contact identifying information", count=3)
-
-            self.assertContains(response, ContactURN.ANON_MASK, count=1)
-
-    def test_redaction_for_twitter(self):
-        urn = "twitterid:767659860"
-        contact = self.create_contact("Fred Jones", urns=[urn])
-        channel = self.create_channel("TWT", "Test TWT Channel", "nyaruka")
-        msg = self.create_incoming_msg(contact, "incoming msg", channel=channel)
-
-        success_log = ChannelLog.objects.create(
-            channel=channel,
-            msg=msg,
-            description="Successfully Sent",
-            is_error=False,
-            url=r"https://textit.in/c/twt/5c70a767-f3dc-4a99-9323-4774f6432af5/receive",
-            method="POST",
-            request='POST /c/twt/5c70a767-f3dc-4a99-9323-4774f6432af5/receive HTTP/1.1\r\nHost: textit.in\r\nContent-Length: 1596\r\nContent-Type: application/json\r\nFinagle-Ctx-Com.twitter.finagle.deadline: 1560853608671000000 1560853611615000000\r\nFinagle-Ctx-Com.twitter.finagle.retries: 0\r\nFinagle-Http-Retryable-Request: \r\nX-Amzn-Trace-Id: Root=1-5d08bc68-de52174e83904d614a32a5c6\r\nX-B3-Flags: 2\r\nX-B3-Parentspanid: fe22fff79af84311\r\nX-B3-Sampled: false\r\nX-B3-Spanid: 86f3c3871ae31c2d\r\nX-B3-Traceid: fe22fff79af84311\r\nX-Forwarded-For: 199.16.157.173\r\nX-Forwarded-Port: 443\r\nX-Forwarded-Proto: https\r\nX-Twitter-Webhooks-Signature: sha256=CYVI5q7e7bzKufCD3GnZoJheSmjVRmNQo9uzO/gi4tA=\r\n\r\n{"for_user_id":"3753944237","direct_message_events":[{"type":"message_create","id":"1140928844112814089","created_timestamp":"1560853608526","message_create":{"target":{"recipient_id":"3753944237"},"sender_id":"767659860","message_data":{"text":"Briefly what will you be talking about and do you have any feature stories","entities":{"hashtags":[],"symbols":[],"user_mentions":[],"urls":[]}}}}],"users":{"767659860":{"id":"767659860","created_timestamp":"1345386861000","name":"Aaron Tumukunde","screen_name":"tumaaron","description":"Mathematics \u25a1 Media \u25a1 Real Estate \u25a1 And Jesus above all.","protected":false,"verified":false,"followers_count":167,"friends_count":485,"statuses_count":237,"profile_image_url":"http://pbs.twimg.com/profile_images/860380640029573120/HKuXgxR__normal.jpg","profile_image_url_https":"https://pbs.twimg.com/profile_images/860380640029573120/HKuXgxR__normal.jpg"},"3753944237":{"id":"3753944237","created_timestamp":"1443048916258","name":"Teheca","screen_name":"tehecaug","location":"Uganda","description":"We connect new mothers & parents to nurses for postnatal care. #Google LaunchPad Africa 2018, #UNFPA UpAccelerate 2017 #MasterCard Innovation exp 2017 #YCSUS18","url":"https://t.co/i0hcLRwEj7","protected":false,"verified":false,"followers_count":3369,"friends_count":4872,"statuses_count":1128,"profile_image_url":"http://pbs.twimg.com/profile_images/694638274204143616/Q4Mbg1tO_normal.png","profile_image_url_https":"https://pbs.twimg.com/profile_images/694638274204143616/Q4Mbg1tO_normal.png"}}}',
-            response='HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\n{"message":"Message Accepted","data":[{"type":"msg","channel_uuid":"5c70a767-f3dc-4a99-9323-4774f6432af5","msg_uuid":"6c26277d-7002-4489-9b7f-998d4be5d0db","text":"Briefly what will you be talking about and do you have any feature stories","urn":"twitterid:767659860#tumaaron","external_id":"1140928844112814089","received_on":"2019-06-18T10:26:48.526Z"}]}',
-            response_status=200,
-        )
-
-        self.login(self.admin)
-
-        list_url = reverse("channels.channellog_list", args=[channel.uuid])
-        read_url = reverse("channels.channellog_read", args=[success_log.channel.uuid, success_log.id])
-
-        response = self.client.get(list_url)
-
-        self.assertContains(response, "767659860", count=1)
-
-        with AnonymousOrg(self.org):
-            response = self.client.get(list_url)
-
-            self.assertContains(response, "767659860", count=0)
-            self.assertContains(response, ContactURN.ANON_MASK, count=1)
-
-        response = self.client.get(read_url)
-
-        self.assertContains(response, "767659860", count=5)
-        self.assertContains(response, "Aaron Tumukunde", count=1)
-        self.assertContains(response, "tumaaron", count=2)
-
-        with AnonymousOrg(self.org):
-            response = self.client.get(read_url)
-
-            self.assertContains(response, "767659860", count=0)
-            self.assertContains(response, "Aaron Tumukunde", count=0)
-            self.assertContains(response, "tumaaron", count=0)
-            self.assertContains(response, ContactURN.ANON_MASK, count=14)
-
-        # login as customer support, must see URNs
-        self.customer_support.is_staff = True
-        self.customer_support.save()
-
-        self.login(self.customer_support)
-
-        read_url = reverse("channels.channellog_read", args=[success_log.channel.uuid, success_log.id])
-        response = self.client.get(read_url)
-
-        self.assertContains(response, "767659860", count=5)
-
-        with AnonymousOrg(self.org):
-            response = self.client.get(read_url)
-            # contact_urn is still masked on the read page, it uses contacts.models.Contact.get_display
-            # Contact.get_display does not check if user has `contacts.contact_break_anon` permission
-            self.assertContains(response, "767659860", count=4)
-            self.assertContains(response, "Aaron Tumukunde", count=1)
-            self.assertContains(response, "tumaaron", count=2)
-
-            self.assertContains(response, ContactURN.ANON_MASK, count=1)
-
-    def test_redaction_for_twitter_when_no_match(self):
-        urn = "twitterid:767659860"
-        contact = self.create_contact("Fred Jones", urns=[urn])
-        channel = self.create_channel("TWT", "Test TWT Channel", "nyaruka")
-        msg = self.create_incoming_msg(contact, "incoming msg", channel=channel)
-
-        success_log = ChannelLog.objects.create(
-            channel=channel,
-            msg=msg,
-            description="Successfully Sent",
-            is_error=False,
-            url="There is no contact identifying information",
-            method="POST",
-            request=r"""There is no contact identifying information\r\n\r\n{"json": "ok"}""",
-            response=r"""There is no contact identifying information\r\n\r\n{"json": "ok"}""",
-            response_status=200,
-        )
-
-        self.login(self.admin)
-
-        read_url = reverse("channels.channellog_read", args=[success_log.channel.uuid, success_log.id])
-        response = self.client.get(read_url)
-
-        self.assertContains(response, "767659860", count=1)
-        self.assertContains(response, "There is no contact identifying information", count=3)
-
-        with AnonymousOrg(self.org):
-            response = self.client.get(read_url)
-
-            # url/request/reponse are masked
-            self.assertContains(response, "There is no contact identifying information", count=0)
-
-            self.assertContains(response, "767659860", count=0)
-            self.assertContains(response, ContactURN.ANON_MASK, count=4)
-
-        # login as customer support, must see URNs
-        self.customer_support.is_staff = True
-        self.customer_support.save()
-
-        self.login(self.customer_support)
-
-        response = self.client.get(read_url)
-
-        self.assertContains(response, "767659860", count=1)
 
         with AnonymousOrg(self.org):
             response = self.client.get(read_url)

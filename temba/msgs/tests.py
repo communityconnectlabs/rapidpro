@@ -264,9 +264,9 @@ class MsgTest(TembaTest):
         self.assertReleaseCount("I", Msg.STATUS_HANDLED, Msg.VISIBILITY_VISIBLE, Msg.TYPE_FLOW, SystemLabel.TYPE_FLOWS)
 
     def test_broadcast_metadata(self):
-        self.create_channel("TT", "Twitter", "nyaruka")
+        self.create_channel("TG", "My Telegram", "75474745", config={})
         contact1 = self.create_contact("Stephen", phone="+12078778899", language="fra")
-        contact2 = self.create_contact("Maaaarcos", urns=["tel:+12078778888", "twitter:marky65"])
+        contact2 = self.create_contact("Maaaarcos", urns=["tel:+12078778888", "telegram:12345"])
 
         # can't create quick replies if you don't include base translation
         with self.assertRaises(ValueError):
@@ -1981,10 +1981,6 @@ class BroadcastTest(TembaTest):
         self.joe_and_frank = self.create_group("Joe and Frank", [self.joe, self.frank])
 
         self.kevin = self.create_contact(name="Kevin Durant", phone="987")
-        self.lucy = self.create_contact(name="Lucy M", urns=["twitter:lucy"])
-
-        # a Twitter channel
-        self.twitter = self.create_channel("TT", "Twitter", "nyaruka")
 
     def test_delete(self):
         label = Label.get_or_create(self.org, self.user, "Labeled")
@@ -1998,7 +1994,7 @@ class BroadcastTest(TembaTest):
 
         # create a broadcast which is to several contacts
         broadcast2 = self.create_broadcast(
-            self.user, "Very old broadcast", groups=[self.joe_and_frank], contacts=[self.kevin, self.lucy]
+            self.user, "Very old broadcast", groups=[self.joe_and_frank], contacts=[self.kevin]
         )
 
         # give joe some flow messages
@@ -2063,7 +2059,7 @@ class BroadcastTest(TembaTest):
             {"eng": "Hello everyone", "spa": "Hola a todos", "fra": "Salut à tous"},
             base_language="eng",
             groups=[self.joe_and_frank],
-            contacts=[self.kevin, self.lucy],
+            contacts=[self.kevin],
             schedule=Schedule.create_schedule(self.org, self.admin, timezone.now(), Schedule.REPEAT_MONTHLY),
         )
         self.assertEqual("I", broadcast1.status)
@@ -2074,7 +2070,7 @@ class BroadcastTest(TembaTest):
             mock_queue_broadcast.assert_called_once_with(broadcast1)
 
         # create a broadcast that looks like it has been sent
-        broadcast2 = self.create_broadcast(self.admin, "Hi everyone", contacts=[self.kevin, self.lucy])
+        broadcast2 = self.create_broadcast(self.admin, "Hi everyone", contacts=[self.kevin])
 
         self.assertEqual(2, broadcast2.msgs.count())
 
@@ -2095,7 +2091,7 @@ class BroadcastTest(TembaTest):
             {"eng": "Hello everyone", "spa": "Hola a todos", "fra": "Salut à tous"},
             base_language="eng",
             groups=[self.joe_and_frank],
-            contacts=[self.kevin, self.lucy],
+            contacts=[self.kevin],
             schedule=Schedule.create_schedule(self.org, self.admin, timezone.now(), Schedule.REPEAT_MONTHLY),
         )
 

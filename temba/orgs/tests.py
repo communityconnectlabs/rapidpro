@@ -4047,16 +4047,6 @@ class OrgCRUDLTest(TembaTest, CRUDLTestMixin):
         self.assertEqual({URN.TEL_SCHEME}, self.org.get_schemes(Channel.ROLE_SEND))
         self.assertEqual({URN.TEL_SCHEME}, self.org.get_schemes(Channel.ROLE_RECEIVE))
 
-        # add a twitter channel
-        self.create_channel("TT", "Twitter", "nyaruka")
-        self.org = Org.objects.get(pk=self.org.id)
-        self.assertEqual(
-            {URN.TEL_SCHEME, URN.TWITTER_SCHEME, URN.TWITTERID_SCHEME}, self.org.get_schemes(Channel.ROLE_SEND)
-        )
-        self.assertEqual(
-            {URN.TEL_SCHEME, URN.TWITTER_SCHEME, URN.TWITTERID_SCHEME}, self.org.get_schemes(Channel.ROLE_RECEIVE)
-        )
-
     def test_login_case_not_sensitive(self):
         login_url = reverse("users.user_login")
 
