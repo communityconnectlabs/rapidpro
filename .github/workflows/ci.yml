@@ -3,6 +3,7 @@ on: [push, pull_request]
 jobs:
   test:
     name: Test
+    runs-on: ubuntu-latest
     env:
       python-version: '3.12.x'
       postgis-version: '3.1'
@@ -14,21 +15,50 @@ jobs:
       DJANGO_SETTINGS_MODULE: temba.settings_ci
     strategy:
       matrix:
-        pg-version: ['12', '13']
-    runs-on: ubuntu-latest
+        include:
+          - pg-version: '12'
+            pg-image: postgis/postgis:12-3.1
+          - pg-version: '13'
+            pg-image: postgis/postgis:13-3.1
+    services:
+      postgres:
+        image: ${{ matrix.pg-image }}
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: temba
+          POSTGRES_USER: temba
+          POSTGRES_PASSWORD: temba
+        options: >-
+          --health-cmd "pg_isready -U temba -d temba"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+      redis:
+        image: redis:5.0.6
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.10.1
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+        options: >-
+          --health-cmd "curl -fsS http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
     steps:
     - name: Checkout code
       uses: actions/checkout@v1
-
-    - name: Install PostgreSQL and PostGIS
-      uses: nyaruka/postgis-action@v2.1.0
-      with:
-        postgresql version: ${{ matrix.pg-version }}
-        postgis version: ${{ env.postgis-version }}
-        postgresql db: temba
-        postgresql user: temba
-        postgresql password: temba
-        postgresql arguments: '--jit=off'
 
     - name: Install Linux packages
       run: |
@@ -44,16 +74,6 @@ jobs:
       uses: snok/install-poetry@v1
       with:
         virtualenvs-in-project: true
-
-    - name: Install Redis
-      uses: zhulik/redis-action@v1.0.0
-      with:
-        redis version: ${{ env.redis-version }}
-
-    - name: Install ElasticSearch
-      uses: nyaruka/elasticsearch-action@master
-      with:
-        elastic version: ${{ env.elastic-version }}
 
     - name: Install Node
       uses: actions/setup-node@v1
