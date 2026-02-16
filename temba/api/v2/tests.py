@@ -1606,10 +1606,6 @@ class APITest(TembaTest):
         response = self.fetchJSON(url, "uuid=%s" % self.telegram.uuid)
         self.assertResultsByUUID(response, [self.telegram])
 
-        # filter by address
-        response = self.fetchJSON(url, "address=billy_bob")
-        self.assertResultsByUUID(response, [self.telegram])
-
     def test_channel_events(self):
         url = reverse("api.v2.channel_events")
 

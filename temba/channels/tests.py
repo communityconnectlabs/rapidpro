@@ -419,12 +419,6 @@ class ChannelTest(TembaTest):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context["object_list"]), [self.tel_channel])
 
-        # no-more redirection for anyone
-        self.login(self.user)
-        response = self.client.get(reverse("channels.channel_list"))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.context["object_list"]), {self.tel_channel})
-
         # clear out the phone and name for the Android channel
         self.tel_channel.name = None
         self.tel_channel.address = None

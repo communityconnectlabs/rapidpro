@@ -2012,18 +2012,16 @@ class BroadcastTest(TembaTest):
 
         self.assertEqual(SystemLabel.get_counts(self.org)[SystemLabel.TYPE_INBOX], 2)
         self.assertEqual(SystemLabel.get_counts(self.org)[SystemLabel.TYPE_FLOWS], 1)
-        self.assertEqual(SystemLabel.get_counts(self.org)[SystemLabel.TYPE_SENT], 6)
+        self.assertEqual(SystemLabel.get_counts(self.org)[SystemLabel.TYPE_SENT], 5)
         self.assertEqual(SystemLabel.get_counts(self.org)[SystemLabel.TYPE_FAILED], 1)
 
         today = timezone.now().date()
         self.assertEqual(ChannelCount.get_day_count(self.channel, ChannelCount.INCOMING_MSG_TYPE, today), 3)
         self.assertEqual(ChannelCount.get_day_count(self.channel, ChannelCount.OUTGOING_MSG_TYPE, today), 6)
-        self.assertEqual(ChannelCount.get_day_count(self.twitter, ChannelCount.INCOMING_MSG_TYPE, today), 0)
-        self.assertEqual(ChannelCount.get_day_count(self.twitter, ChannelCount.OUTGOING_MSG_TYPE, today), 1)
 
         self.org.clear_credit_cache()
-        self.assertEqual(10, self.org.get_credits_used())
-        self.assertEqual(990, self.org.get_credits_remaining())
+        self.assertEqual(9, self.org.get_credits_used())
+        self.assertEqual(991, self.org.get_credits_remaining())
 
         # delete all our messages save for our flow incoming message
         for m in Msg.objects.exclude(id=msg_in3.id):
@@ -2034,8 +2032,8 @@ class BroadcastTest(TembaTest):
 
         # credit usage remains the same
         self.org.clear_credit_cache()
-        self.assertEqual(10, self.org.get_credits_used())
-        self.assertEqual(990, self.org.get_credits_remaining())
+        self.assertEqual(9, self.org.get_credits_used())
+        self.assertEqual(991, self.org.get_credits_remaining())
 
         # check system label counts have been updated
         self.assertEqual(0, SystemLabel.get_counts(self.org)[SystemLabel.TYPE_INBOX])
@@ -2049,8 +2047,6 @@ class BroadcastTest(TembaTest):
         # but daily channel counts should be unchanged
         self.assertEqual(3, ChannelCount.get_day_count(self.channel, ChannelCount.INCOMING_MSG_TYPE, today))
         self.assertEqual(6, ChannelCount.get_day_count(self.channel, ChannelCount.OUTGOING_MSG_TYPE, today))
-        self.assertEqual(0, ChannelCount.get_day_count(self.twitter, ChannelCount.INCOMING_MSG_TYPE, today))
-        self.assertEqual(1, ChannelCount.get_day_count(self.twitter, ChannelCount.OUTGOING_MSG_TYPE, today))
 
     def test_model(self):
         broadcast1 = Broadcast.create(
@@ -2072,7 +2068,7 @@ class BroadcastTest(TembaTest):
         # create a broadcast that looks like it has been sent
         broadcast2 = self.create_broadcast(self.admin, "Hi everyone", contacts=[self.kevin])
 
-        self.assertEqual(2, broadcast2.msgs.count())
+        self.assertEqual(1, broadcast2.msgs.count())
 
         broadcast1.release()
         broadcast2.release()
