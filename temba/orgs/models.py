@@ -2023,6 +2023,7 @@ class Org(SmartModel):
             channel.template_translations.all().delete()
             channel.channelevent_set.all().delete()
             channel.connections.all().delete()
+            channel.sync_events.all().delete()
 
             channel.delete()
 
