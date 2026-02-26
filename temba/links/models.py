@@ -2,7 +2,7 @@ import re
 import time
 from itertools import chain
 
-from jellyfish import jaro_distance
+from jellyfish import jaro_similarity
 from smartmin.models import SmartModel
 
 from django.conf import settings
@@ -172,7 +172,7 @@ class Link(TembaModel):
 
             for link in links:
                 if (
-                    jaro_distance(action["url"], link.destination) >= 0.9
+                    jaro_similarity(action["url"], link.destination) >= 0.9
                     and action["url"] != link.destination
                     and not (str(action["url"]).split("?")[0] == link.destination and "?" in action["url"])
                 ):
