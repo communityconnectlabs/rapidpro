@@ -675,8 +675,10 @@ class Msg(models.Model):
         Deletes this message. This can be soft if messages are being deleted from the UI, or hard in the case of
         contact or org removal.
         """
+
         def delete_related_smpp_logs():
             from temba.channels.models import SMPPLog
+
             SMPPLog.objects.filter(msg=self).delete()
 
         if soft:
