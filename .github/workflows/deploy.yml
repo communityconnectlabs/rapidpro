@@ -1,7 +1,7 @@
 name: Deploy
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["ci"]
     types:
       - completed
 jobs:
@@ -22,4 +22,4 @@ jobs:
           
           # Trigger build
           curl -fsS -X POST \
-            "$JENKINS_URL/job/development/buildWithParameters?token=$JENKINS_API_TOKEN&GIT_SHA=$GIT_SHA&GIT_REF=$GIT_REF"
+            "$JENKINS_URL/job/development/job/rapidpro/buildWithParameters?token=$JENKINS_API_TOKEN&GIT_SHA=$GIT_SHA&GIT_REF=$GIT_REF"
