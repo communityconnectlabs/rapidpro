@@ -14,13 +14,14 @@ jobs:
     steps:
       - name: Trigger Jenkins job
         env:
-          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_DOMAIN: ${{ secrets.JENKINS_DOMAIN }}
           JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+          JENKINS_USERNAME: ${{ secrets.JENKINS_USERNAME }}
+          JENKINS_PASSWORD: ${{ secrets.JENKINS_PASSWORD }}
           GIT_SHA: ${{ github.event.workflow_run.head_sha }}
           GIT_REF: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
           
           # Trigger build
-          curl -fsS -X POST \
-            "$JENKINS_URL/job/development/job/rapidpro/buildWithParameters?token=$JENKINS_API_TOKEN&GIT_SHA=$GIT_SHA&GIT_REF=$GIT_REF"
+          curl --location --head 'https://$JENKINS_USERNAME:$JENKINS_PASSWORD@$JENKINS_URL/job/development/job/rapidpro/build?token=$JENKINS_API_TOKEN'
