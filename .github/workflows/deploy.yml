@@ -24,4 +24,4 @@ jobs:
           set -euo pipefail
           
           # Trigger build
-          curl --location --head 'https://$JENKINS_USERNAME:$JENKINS_PASSWORD@$JENKINS_URL/job/development/job/rapidpro/build?token=$JENKINS_API_TOKEN'
+          curl --location --head "https://$JENKINS_USERNAME:$JENKINS_PASSWORD@$JENKINS_DOMAIN/job/development/job/rapidpro/build?token=$JENKINS_API_TOKEN"
