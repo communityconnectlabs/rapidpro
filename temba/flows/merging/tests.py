@@ -1,17 +1,10 @@
 import copy
 import pickle
 
-from temba.flows.merging import Graph, GraphDifferenceMap, Node, serialized_test_data
+from temba.flows.merging import Graph, GraphDifferenceMap, Node
 from temba.flows.merging.helpers import actions_names, get_flow_step_name, get_flow_step_type
-from temba.flows.merging.merging import (
-    GraphDifferenceNode,
-    NodeConflictTypes,
-    all_equal,
-    group_by,
-    has_result,
-)
+from temba.flows.merging.merging import GraphDifferenceNode, NodeConflictTypes, all_equal, group_by, has_result
 from temba.flows.merging.serializers import (
-    DiffGraphSerializer,
     DiffNodeSerializer,
     GraphSerializer,
     NodeSerializer,
@@ -463,16 +456,28 @@ class TestNodeEquality(TembaTest):
         self.assertFalse(node1 == node2)
 
     def test_node_eq_call_dialogflow(self):
-        data1 = {"actions": [{"type": "call_dialogflow", "result_name": "df_result"}], "router": {"type": "switch", "result_name": "df_result"}}
-        data2 = {"actions": [{"type": "call_dialogflow", "result_name": "df_result"}], "router": {"type": "switch", "result_name": "df_result"}}
+        data1 = {
+            "actions": [{"type": "call_dialogflow", "result_name": "df_result"}],
+            "router": {"type": "switch", "result_name": "df_result"},
+        }
+        data2 = {
+            "actions": [{"type": "call_dialogflow", "result_name": "df_result"}],
+            "router": {"type": "switch", "result_name": "df_result"},
+        }
 
         node1 = self._make_node("n1", data1, {"call_dialogflow", "switch"}, has_router=True)
         node2 = self._make_node("n2", data2, {"call_dialogflow", "switch"}, has_router=True)
         self.assertTrue(node1 == node2)
 
     def test_node_eq_call_lookup(self):
-        data1 = {"actions": [{"type": "call_lookup", "result_name": "lookup_r"}], "router": {"type": "switch", "result_name": "lookup_r"}}
-        data2 = {"actions": [{"type": "call_lookup", "result_name": "lookup_r"}], "router": {"type": "switch", "result_name": "lookup_r"}}
+        data1 = {
+            "actions": [{"type": "call_lookup", "result_name": "lookup_r"}],
+            "router": {"type": "switch", "result_name": "lookup_r"},
+        }
+        data2 = {
+            "actions": [{"type": "call_lookup", "result_name": "lookup_r"}],
+            "router": {"type": "switch", "result_name": "lookup_r"},
+        }
 
         node1 = self._make_node("n1", data1, {"call_lookup", "switch"}, has_router=True)
         node2 = self._make_node("n2", data2, {"call_lookup", "switch"}, has_router=True)
@@ -856,7 +861,10 @@ class TestNodeEqReturnFalse(TembaTest):
         n1.has_router = True
 
         n2 = Node("n2")
-        n2.data = {"actions": [{"type": "enter_flow", "flow": {"uuid": "f1", "name": "F"}}], "router": {"type": "switch", "result_name": "r"}}
+        n2.data = {
+            "actions": [{"type": "enter_flow", "flow": {"uuid": "f1", "name": "F"}}],
+            "router": {"type": "switch", "result_name": "r"},
+        }
         n2.node_types = {"send_msg", "switch"}
         n2.has_router = True
 
@@ -911,7 +919,14 @@ class TestGraphDifferenceMapAdvanced(TembaTest):
                 "uuid": "n1",
                 "actions": [],
                 "exits": [{"uuid": "e1", "destination_uuid": None}],
-                "router": {"type": "switch", "operand": "@input.text", "result_name": "r", "categories": [], "cases": [], "default_category_uuid": "c1"},
+                "router": {
+                    "type": "switch",
+                    "operand": "@input.text",
+                    "result_name": "r",
+                    "categories": [],
+                    "cases": [],
+                    "default_category_uuid": "c1",
+                },
             }
         ]
         left = Graph(resource=self._make_flow(nodes))

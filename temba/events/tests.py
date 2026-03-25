@@ -7,14 +7,8 @@ from django.urls import reverse
 from temba.tests import CRUDLTestMixin, TembaTest
 
 from .middleware import CustomerEventMiddleware
-from .models import (
-    CustomerEvent,
-    CustomerEventConfig,
-    CustomerEventHandler,
-    HTTPMethod,
-)
+from .models import CustomerEvent, CustomerEventConfig, CustomerEventHandler, HTTPMethod
 from .views import CustomerEventConfigForm
-
 
 # =============================================================================
 # CustomerEvent dataclass
@@ -881,8 +875,16 @@ class CustomerEventsCRUDLTest(TembaTest, CRUDLTestMixin):
         response = self.client.get(create_url)
         self.assertEqual(200, response.status_code)
         form = response.context["form"]
-        for field in ("method", "action", "action_description", "handlers", "system_wide", "org",
-                      "notification_template", "handlers_configs"):
+        for field in (
+            "method",
+            "action",
+            "action_description",
+            "handlers",
+            "system_wide",
+            "org",
+            "notification_template",
+            "handlers_configs",
+        ):
             self.assertIn(field, form.fields)
 
     def test_create_submit_valid(self):

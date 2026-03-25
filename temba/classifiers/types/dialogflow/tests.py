@@ -1,8 +1,4 @@
-import base64
-import io
 import json
-import pickle
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from google.api_core import exceptions as google_exceptions
@@ -214,9 +210,7 @@ class TrainingClientTest(TembaTest):
 
     def test_init_default_messages(self):
         languages = ["en", "es"]
-        tc = TrainingClient(
-            training_data={}, languages=languages, credential=CREDENTIALS
-        )
+        tc = TrainingClient(training_data={}, languages=languages, credential=CREDENTIALS)
         self.assertIn("errors", tc.messages)
         self.assertEqual(tc.messages["errors"], [])
         self.assertEqual(tc.messages["created"], {"en": 0, "es": 0})
@@ -224,9 +218,7 @@ class TrainingClientTest(TembaTest):
 
     def test_init_custom_messages(self):
         custom_messages = {"errors": ["some error"], "created": {}, "updated": {}}
-        tc = TrainingClient(
-            training_data={}, languages=["en"], credential=CREDENTIALS, messages=custom_messages
-        )
+        tc = TrainingClient(training_data={}, languages=["en"], credential=CREDENTIALS, messages=custom_messages)
         self.assertEqual(tc.messages, custom_messages)
 
     def test_get_language_headers(self):
@@ -283,14 +275,14 @@ class TrainingClientTest(TembaTest):
         for p in phrases:
             self.assertIsInstance(p, dialogflow_v2.types.Intent.TrainingPhrase)
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_extract_intents_creates_new(self, mock_from_info):
-        training_data = self._make_training_data([
-            {"intent": "greet", "questioneng": "['hello', 'hi']", "answereng": "Hello!"},
-            {"intent": "bye", "questioneng": "['goodbye']", "answereng": "See you!"},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"intent": "greet", "questioneng": "['hello', 'hi']", "answereng": "Hello!"},
+                {"intent": "bye", "questioneng": "['goodbye']", "answereng": "See you!"},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
 
         # no existing intents
@@ -301,13 +293,13 @@ class TrainingClientTest(TembaTest):
         self.assertEqual("create", tc.intents_requests[1]["type"])
         self.assertEqual("bye", tc.intents_requests[1]["intent"].display_name)
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_extract_intents_updates_existing(self, mock_from_info):
-        training_data = self._make_training_data([
-            {"intent": "greet", "questioneng": "['hello']", "answereng": "Hello!"},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"intent": "greet", "questioneng": "['hello']", "answereng": "Hello!"},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
 
         existing_intent = MagicMock()
@@ -318,9 +310,11 @@ class TrainingClientTest(TembaTest):
         self.assertEqual("update", tc.intents_requests[0]["type"])
 
     def test_extract_intents_missing_columns(self):
-        training_data = self._make_training_data([
-            {"wrong_col": "greet"},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"wrong_col": "greet"},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
         tc.extract_intents_from_data({}, "en")
 
@@ -328,11 +322,13 @@ class TrainingClientTest(TembaTest):
         self.assertTrue(any("Missing required columns" in e for e in tc.messages["errors"]))
 
     def test_extract_intents_skips_invalid_rows(self):
-        training_data = self._make_training_data([
-            {"intent": "", "questioneng": "['hello']", "answereng": "Hello!"},
-            {"intent": "greet", "questioneng": "", "answereng": "Hello!"},
-            {"intent": "greet2", "questioneng": "['hi']", "answereng": ""},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"intent": "", "questioneng": "['hello']", "answereng": "Hello!"},
+                {"intent": "greet", "questioneng": "", "answereng": "Hello!"},
+                {"intent": "greet2", "questioneng": "['hi']", "answereng": ""},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
         tc.extract_intents_from_data({}, "en")
 
@@ -340,10 +336,12 @@ class TrainingClientTest(TembaTest):
         self.assertEqual(3, len(tc.messages["errors"]))
 
     def test_extract_intents_groups_same_name(self):
-        training_data = self._make_training_data([
-            {"intent": "greet", "questioneng": "['hello']", "answereng": "Hi!"},
-            {"intent": "greet", "questioneng": "['hey', 'yo']", "answereng": "Hello!"},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"intent": "greet", "questioneng": "['hello']", "answereng": "Hi!"},
+                {"intent": "greet", "questioneng": "['hey', 'yo']", "answereng": "Hello!"},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
         tc.extract_intents_from_data({}, "en")
 
@@ -353,9 +351,7 @@ class TrainingClientTest(TembaTest):
         # should have 3 training phrases total
         self.assertEqual(3, len(intent.training_phrases))
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_push_to_dialogflow_success(self, mock_from_info):
         mock_client = MagicMock()
         mock_from_info.return_value = mock_client
@@ -372,9 +368,7 @@ class TrainingClientTest(TembaTest):
         self.assertTrue(completed)
         self.assertEqual(1, tc.messages["created"]["en"])
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_push_to_dialogflow_empty(self, mock_from_info):
         tc = TrainingClient(training_data={}, languages=["en"], credential=CREDENTIALS)
 
@@ -383,9 +377,7 @@ class TrainingClientTest(TembaTest):
         self.assertFalse(retry)
         self.assertTrue(completed)
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_push_to_dialogflow_resource_exhausted_retries(self, mock_from_info):
         mock_client = MagicMock()
         mock_from_info.return_value = mock_client
@@ -403,9 +395,7 @@ class TrainingClientTest(TembaTest):
         self.assertTrue(retry)
         self.assertFalse(completed)
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_push_to_dialogflow_generic_error(self, mock_from_info):
         mock_client = MagicMock()
         mock_from_info.return_value = mock_client
@@ -422,9 +412,7 @@ class TrainingClientTest(TembaTest):
         self.assertFalse(completed)
         self.assertTrue(any("unexpected error" in e for e in tc.messages["errors"]))
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_push_to_dialogflow_already_exists_skipped(self, mock_from_info):
         mock_client = MagicMock()
         mock_from_info.return_value = mock_client
@@ -451,9 +439,7 @@ class TrainingClientTest(TembaTest):
         deserialized = TrainingClient.intent_str_to_list(serialized)
         self.assertEqual(tc.intents_requests, deserialized)
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_process_sync_intents_for_lang(self, mock_from_info):
         mock_client = MagicMock()
         mock_from_info.return_value = mock_client
@@ -462,34 +448,34 @@ class TrainingClientTest(TembaTest):
         existing_intent.display_name = "existing_greet"
         mock_client.list_intents.return_value = [existing_intent]
 
-        training_data = self._make_training_data([
-            {"intent": "existing_greet", "questioneng": "['hello']", "answereng": "Hi!"},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"intent": "existing_greet", "questioneng": "['hello']", "answereng": "Hi!"},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
         tc.process_sync_intents_for_lang("en")
 
         self.assertEqual(1, len(tc.intents_requests))
         self.assertEqual("update", tc.intents_requests[0]["type"])
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_build_intent_list(self, mock_from_info):
         mock_client = MagicMock()
         mock_from_info.return_value = mock_client
         mock_client.list_intents.return_value = []
 
-        training_data = self._make_training_data([
-            {"intent": "greet", "questioneng": "['hello']", "answereng": "Hi!"},
-        ])
+        training_data = self._make_training_data(
+            [
+                {"intent": "greet", "questioneng": "['hello']", "answereng": "Hi!"},
+            ]
+        )
         tc = TrainingClient(training_data=training_data, languages=["en"], credential=CREDENTIALS)
         tc.build_intent_list()
 
         self.assertEqual(1, len(tc.intents_requests))
 
-    @patch(
-        "temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info"
-    )
+    @patch("temba.classifiers.types.dialogflow.train_bot.dialogflow_v2.IntentsClient.from_service_account_info")
     def test_build_intent_list_handles_errors(self, mock_from_info):
         mock_from_info.side_effect = Exception("connection failed")
 

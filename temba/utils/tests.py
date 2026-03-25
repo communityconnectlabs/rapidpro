@@ -41,12 +41,11 @@ from .email import (
     send_email_with_attachments,
     send_simple_email,
     send_temba_email,
-    send_template_email,
 )
 from .export import TableExporter
 from .fields import validate_external_url
 from .gsm7 import calculate_num_segments, is_gsm7, replace_accented_chars, replace_non_gsm7_accents
-from .http import http_headers, HttpEvent
+from .http import HttpEvent, http_headers
 from .locks import LockNotAcquiredException, NonBlockingLock
 from .models import IDSliceQuerySet, JSONAsTextField, patch_queryset_count
 from .pipeline import associate_by_email, require_pre_registered_user
@@ -1620,7 +1619,7 @@ class LocksTest(TembaTest):
         mock_acquire.return_value = True
         r = get_redis_connection()
         with self.assertRaises(ValueError):
-            with NonBlockingLock(redis=r, name="test-lock", timeout=10) as lock:
+            with NonBlockingLock(redis=r, name="test-lock", timeout=10):
                 raise ValueError("test error")
 
 
@@ -1688,8 +1687,9 @@ class AdditionalJsonTest(TestCase):
 
     def test_temba_decoder(self):
         import json as stdlib_json
-        from temba.utils.json import TembaDecoder
         from decimal import Decimal
+
+        from temba.utils.json import TembaDecoder
 
         result = stdlib_json.loads('{"price": 10.5}', cls=TembaDecoder)
         self.assertEqual(result["price"], Decimal("10.5"))
@@ -1757,16 +1757,21 @@ class AdditionalEmailTest(TembaTest):
         with patch("temba.utils.email.get_smtp_connection") as mock_conn:
             mock_conn.return_value = mail.get_connection(backend="django.core.mail.backends.locmem.EmailBackend")
             send_custom_smtp_email(
-                "to@test.com", "Subject", "Body", "from@test.com",
-                "smtp.test.com", 587, "user", "pass", True,
+                "to@test.com",
+                "Subject",
+                "Body",
+                "from@test.com",
+                "smtp.test.com",
+                587,
+                "user",
+                "pass",
+                True,
             )
             mock_conn.assert_called_once()
             self.assertEqual(len(mail.outbox), 1)
 
     @override_settings(SEND_EMAILS=False)
     def test_send_email_with_attachments_no_send(self):
-        from django.template import loader
-
         template = "contacts/email/deactivated_contacts_email"
         send_email_with_attachments("Test Subject", template, ["to@test.com"])
         self.assertEqual(len(mail.outbox), 0)
