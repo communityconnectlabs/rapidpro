@@ -4,7 +4,7 @@ import io
 import os
 from collections import OrderedDict
 from decimal import Decimal
-from unittest.mock import PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytz
 from django_redis import get_redis_connection
@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.core import checks, mail
 from django.db import connection, models
 from django.forms import ValidationError
+from django.http import HttpResponseRedirect
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone, translation
@@ -31,16 +32,24 @@ from temba.utils.json import JsonResponse
 from temba.utils.templatetags.temba import format_datetime, icon
 
 from . import chunk_list, countries, format_number, languages, percentage, redact, sizeof_fmt, str_to_bool
-from .cache import get_cacheable_attr, get_cacheable_result, incrby_existing
+from .cache import get_cacheable, get_cacheable_attr, get_cacheable_result, incrby_existing
 from .celery import nonoverlapping_task
 from .dates import datetime_to_str, datetime_to_timestamp, timestamp_to_datetime
-from .email import is_valid_address, send_email_with_attachments, send_simple_email
+from .email import (
+    is_valid_address,
+    send_custom_smtp_email,
+    send_email_with_attachments,
+    send_simple_email,
+    send_temba_email,
+    send_template_email,
+)
 from .export import TableExporter
 from .fields import validate_external_url
 from .gsm7 import calculate_num_segments, is_gsm7, replace_accented_chars, replace_non_gsm7_accents
-from .http import http_headers
+from .http import http_headers, HttpEvent
 from .locks import LockNotAcquiredException, NonBlockingLock
 from .models import IDSliceQuerySet, JSONAsTextField, patch_queryset_count
+from .pipeline import associate_by_email, require_pre_registered_user
 from .templatetags.temba import oxford, short_datetime
 from .text import (
     clean_string,
@@ -53,6 +62,7 @@ from .text import (
     unsnakify,
 )
 from .timezones import TimeZoneFormField, timezone_to_country_code
+from .uuid import is_valid_uuid
 
 
 class InitTest(TembaTest):
@@ -1573,3 +1583,315 @@ class TestUUIDs(TembaTest):
         g = uuid.seeded_generator(456)
         self.assertEqual(uuid.UUID("8c338abf-94e2-4c73-9944-72f7a6ff5877", version=4), g())
         self.assertEqual(uuid.UUID("c8e0696f-b3f6-4e63-a03a-57cb95bdb6e3", version=4), g())
+
+    def test_is_valid_uuid(self):
+        self.assertTrue(is_valid_uuid("66b3670d-b37d-4644-aedd-51167c53dac4"))
+        self.assertTrue(is_valid_uuid(uuid.uuid4()))
+        self.assertFalse(is_valid_uuid("not-a-uuid"))
+        self.assertFalse(is_valid_uuid(""))
+        self.assertFalse(is_valid_uuid("12345"))
+
+
+class LocksTest(TembaTest):
+    def test_lock_not_acquired_exception(self):
+        e = LockNotAcquiredException()
+        self.assertIsInstance(e, Exception)
+
+    @patch("redis.lock.Lock.acquire")
+    @patch("redis.lock.Lock.release")
+    def test_nonblocking_lock_acquired(self, mock_release, mock_acquire):
+        mock_acquire.return_value = True
+        r = get_redis_connection()
+        with NonBlockingLock(redis=r, name="test-lock", timeout=10) as lock:
+            lock.exit_if_not_locked()
+            self.assertTrue(lock.acquired)
+
+    @patch("redis.lock.Lock.release")
+    @patch("redis.lock.Lock.acquire")
+    def test_nonblocking_lock_not_acquired(self, mock_acquire, mock_release):
+        mock_acquire.return_value = False
+        r = get_redis_connection()
+        with NonBlockingLock(redis=r, name="test-lock", timeout=10) as lock:
+            with self.assertRaises(LockNotAcquiredException):
+                lock.exit_if_not_locked()
+
+    @patch("redis.lock.Lock.acquire")
+    def test_nonblocking_lock_other_exception_propagates(self, mock_acquire):
+        mock_acquire.return_value = True
+        r = get_redis_connection()
+        with self.assertRaises(ValueError):
+            with NonBlockingLock(redis=r, name="test-lock", timeout=10) as lock:
+                raise ValueError("test error")
+
+
+class HttpEventTest(TestCase):
+    def test_http_event_init(self):
+        event = HttpEvent("GET", "http://example.com")
+        self.assertEqual(event.method, "GET")
+        self.assertEqual(event.url, "http://example.com")
+        self.assertIsNone(event.request_body)
+        self.assertIsNone(event.status_code)
+        self.assertIsNone(event.response_body)
+
+    def test_http_event_full(self):
+        event = HttpEvent("POST", "http://example.com", request_body='{"a":1}', status_code=200, response_body="OK")
+        self.assertEqual(event.method, "POST")
+        self.assertEqual(event.status_code, 200)
+        self.assertEqual(event.request_body, '{"a":1}')
+        self.assertEqual(event.response_body, "OK")
+
+    def test_http_event_repr(self):
+        event = HttpEvent("GET", "http://example.com", status_code=200)
+        self.assertEqual(repr(event), str(event))
+
+
+class AdditionalJsonTest(TestCase):
+    def test_load(self):
+        import io
+        from decimal import Decimal
+
+        f = io.StringIO('{"price": 10.5, "name": "test"}')
+        result = json.load(f)
+        self.assertEqual(result["price"], Decimal("10.5"))
+        self.assertEqual(result["name"], "test")
+
+    def test_encode_datetime_with_micros(self):
+        dt = datetime.datetime(2021, 6, 15, 12, 30, 45, 123456, tzinfo=pytz.utc)
+        result = json.encode_datetime(dt, micros=True)
+        self.assertEqual(result, "2021-06-15T12:30:45.123456Z")
+
+        # without micros (truncated to millis)
+        result = json.encode_datetime(dt, micros=False)
+        self.assertEqual(result, "2021-06-15T12:30:45.123Z")
+
+    def test_decode_datetime(self):
+        # dict with datetime string
+        data = {"created": "2021-06-15T12:30:45.123456"}
+        result = json.decode_datetime(data)
+        self.assertIsInstance(result["created"], datetime.datetime)
+
+        # nested dict
+        data = {"outer": {"inner": "2021-06-15T12:30:45.000000"}}
+        result = json.decode_datetime(data)
+        self.assertIsInstance(result["outer"]["inner"], datetime.datetime)
+
+        # list with datetime
+        data = ["2021-06-15T12:30:45.123456", "not a date"]
+        result = json.decode_datetime(data)
+        self.assertIsInstance(result[0], datetime.datetime)
+        self.assertEqual(result[1], "not a date")
+
+        # non-matching string stays as-is
+        data = {"name": "hello"}
+        result = json.decode_datetime(data)
+        self.assertEqual(result["name"], "hello")
+
+    def test_temba_decoder(self):
+        import json as stdlib_json
+        from temba.utils.json import TembaDecoder
+        from decimal import Decimal
+
+        result = stdlib_json.loads('{"price": 10.5}', cls=TembaDecoder)
+        self.assertEqual(result["price"], Decimal("10.5"))
+
+    def test_default_json_encoder_aware_time_raises(self):
+        from temba.utils.json import default_json_encoder
+
+        aware_time = datetime.time(12, 30, tzinfo=pytz.utc)
+        with self.assertRaises(ValueError):
+            default_json_encoder(aware_time)
+
+    def test_default_json_encoder_unknown_type_raises(self):
+        from temba.utils.json import default_json_encoder
+
+        with self.assertRaises(TypeError):
+            default_json_encoder(set())
+
+    def test_default_json_encoder_datetime_with_microseconds(self):
+        from temba.utils.json import default_json_encoder
+
+        dt = datetime.datetime(2021, 6, 15, 12, 30, 45, 123456, tzinfo=pytz.utc)
+        result = default_json_encoder(dt)
+        self.assertEqual(result, "2021-06-15T12:30:45.123Z")
+
+    def test_default_json_encoder_time_with_microseconds(self):
+        from temba.utils.json import default_json_encoder
+
+        t = datetime.time(12, 30, 45, 123456)
+        result = default_json_encoder(t)
+        self.assertEqual(result, "12:30:45.123")
+
+    def test_json_response_non_dict_safe(self):
+        with self.assertRaises(TypeError):
+            JsonResponse([1, 2, 3])
+
+        # safe=False allows non-dict
+        resp = JsonResponse([1, 2, 3], safe=False)
+        self.assertEqual(resp["Content-Type"], "application/json")
+
+
+class AdditionalDatesTest(TestCase):
+    def test_datetime_to_str_with_date_object(self):
+        tz = pytz.timezone("Africa/Kigali")
+        d = datetime.date(2014, 1, 2)
+        result = datetime_to_str(d, "%Y-%m-%d %H:%M", tz=tz)
+        self.assertEqual(result, "2014-01-02 00:00")
+
+
+class AdditionalEmailTest(TembaTest):
+    @override_settings(SEND_EMAILS=False)
+    def test_send_temba_email_no_send(self):
+        # when SEND_EMAILS is False, email is printed but not sent
+        send_temba_email("Test Subject", "Test Body", None, "from@test.com", ["to@test.com"])
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(SEND_EMAILS=True)
+    def test_send_temba_email_with_html(self):
+        send_temba_email("Test Subject", "Text Body", "<h1>HTML</h1>", "from@test.com", ["to@test.com"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Test Subject")
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+
+    @override_settings(SEND_EMAILS=True)
+    def test_send_custom_smtp_email(self):
+        with patch("temba.utils.email.get_smtp_connection") as mock_conn:
+            mock_conn.return_value = mail.get_connection(backend="django.core.mail.backends.locmem.EmailBackend")
+            send_custom_smtp_email(
+                "to@test.com", "Subject", "Body", "from@test.com",
+                "smtp.test.com", 587, "user", "pass", True,
+            )
+            mock_conn.assert_called_once()
+            self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(SEND_EMAILS=False)
+    def test_send_email_with_attachments_no_send(self):
+        from django.template import loader
+
+        template = "contacts/email/deactivated_contacts_email"
+        send_email_with_attachments("Test Subject", template, ["to@test.com"])
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class AdditionalRedactTest(TestCase):
+    def test_replace_headers(self):
+        raw = "GET / HTTP/1.1\r\nHost: example.com\r\nAuthorization: Bearer secret\r\n\r\nbody"
+        result = redact.replace_headers(raw, {"Authorization": "********"})
+        self.assertIn("Authorization: ********", result)
+        self.assertNotIn("Bearer secret", result)
+
+    def test_replace_headers_invalid_data(self):
+        # returns raw data unchanged if parsing fails
+        self.assertEqual(redact.replace_headers("not an http message", {}), "not an http message")
+
+    def test_recursive_replace(self):
+        from temba.utils.redact import _recursive_replace
+
+        # dict replacement
+        self.assertEqual(_recursive_replace({"name": "Bob", "age": 30}, {"name"}, "***"), {"name": "***", "age": 30})
+
+        # nested dict
+        self.assertEqual(
+            _recursive_replace({"user": {"name": "Bob"}}, {"name"}, "***"),
+            {"user": {"name": "***"}},
+        )
+
+        # list
+        self.assertEqual(
+            _recursive_replace([{"name": "Bob"}, {"name": "Ann"}], {"name"}, "***"),
+            [{"name": "***"}, {"name": "***"}],
+        )
+
+        # scalar passthrough
+        self.assertEqual(_recursive_replace("hello", {"name"}, "***"), "hello")
+
+    def test_variations(self):
+        from temba.utils.redact import _variations
+
+        # basic variations include original and encodings
+        variations = _variations("12345678")
+        self.assertIn("12345678", variations)
+        self.assertIn("+12345678", variations)
+        self.assertIn("012345678", variations)
+
+        # starts with +
+        variations = _variations("+12345678")
+        self.assertIn("+12345678", variations)
+        self.assertIn("012345678", variations)
+
+        # starts with 0
+        variations = _variations("012345678")
+        self.assertIn("012345678", variations)
+        self.assertIn("+12345678", variations)
+
+
+class AdditionalCacheTest(TembaTest):
+    def test_get_cacheable_force_dirty(self):
+        r = get_redis_connection()
+
+        call_count = [0]
+
+        def calculate():
+            call_count[0] += 1
+            return call_count[0], 60
+
+        result1 = get_cacheable("test_force_dirty", calculate, r=r)
+        self.assertEqual(result1, 1)
+
+        # cached, no new call
+        result2 = get_cacheable("test_force_dirty", calculate, r=r)
+        self.assertEqual(result2, 1)
+
+        # force dirty bypasses cache
+        result3 = get_cacheable("test_force_dirty", calculate, r=r, force_dirty=True)
+        self.assertEqual(result3, 2)
+
+
+class AdditionalGSM7Test(TestCase):
+    def test_is_gsm7_non_string(self):
+        self.assertFalse(is_gsm7(123))
+        self.assertFalse(is_gsm7(None))
+
+    def test_calculate_num_segments_ucs2(self):
+        # 70 UCS2 chars = 1 segment
+        self.assertEqual(1, calculate_num_segments("☺" * 70))
+
+        # 71 UCS2 chars = 2 segments (67 char segments)
+        self.assertEqual(2, calculate_num_segments("☺" * 71))
+
+        # 134 UCS2 chars = 2 segments
+        self.assertEqual(2, calculate_num_segments("☺" * 134))
+
+        # 135 UCS2 chars = 3 segments
+        self.assertEqual(3, calculate_num_segments("☺" * 135))
+
+    def test_calculate_num_segments_empty(self):
+        self.assertEqual(1, calculate_num_segments(""))
+
+
+class PipelineTest(TembaTest):
+    def test_require_pre_registered_user_no_email(self):
+        strategy = MagicMock()
+        result = require_pre_registered_user(strategy, {}, None)
+        self.assertIsInstance(result, HttpResponseRedirect)
+
+    def test_require_pre_registered_user_not_registered(self):
+        strategy = MagicMock()
+        result = require_pre_registered_user(strategy, {"email": "unknown@test.com"}, None)
+        self.assertIsInstance(result, HttpResponseRedirect)
+
+    def test_require_pre_registered_user_registered(self):
+        strategy = MagicMock()
+        result = require_pre_registered_user(strategy, {"email": self.admin.email}, None)
+        self.assertEqual(result, {"is_new": False})
+
+    def test_associate_by_email_found(self):
+        result = associate_by_email(None, {"email": self.admin.email})
+        self.assertEqual(result["user"], self.admin)
+
+    def test_associate_by_email_not_found(self):
+        result = associate_by_email(None, {"email": "nonexistent@test.com"})
+        self.assertIsNone(result)
+
+    def test_associate_by_email_no_email(self):
+        result = associate_by_email(None, {})
+        self.assertIsNone(result)
