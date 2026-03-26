@@ -16,6 +16,7 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_str
+import requests
 
 from temba.api.models import Resthook
 from temba.archives.models import Archive
@@ -53,7 +54,18 @@ from .models import (
     FlowVersionConflictException,
     get_flow_user,
 )
-from .tasks import squash_flowcounts, trim_flow_revisions, trim_flow_sessions_and_starts, update_session_wait_expires
+from .models import MergeFlowsTask
+from .tasks import (
+    download_flow_images_task,
+    merge_flow_failed,
+    merge_flows_task,
+    squash_flowcounts,
+    start_active_merge_flows,
+    trim_flow_revisions,
+    trim_flow_sessions_and_starts,
+    update_session_wait_expires,
+    validate_flow_links,
+)
 from .views import FlowCRUDL
 
 
@@ -5377,3 +5389,142 @@ class FlowRevisionTest(TembaTest):
         trim_flow_revisions()
         self.assertEqual(2, FlowRevision.objects.filter(flow=clinic).count())
         self.assertEqual(31, FlowRevision.objects.filter(flow=color).count())
+
+
+class FlowTasksTest(TembaTest):
+    def setUp(self):
+        super().setUp()
+        self.contact = self.create_contact("Eric", phone="+250788382382")
+
+    @patch("requests.get")
+    def test_validate_flow_links(self, mock_get):
+        """Test validate_flow_links task finds and validates URLs in send_msg actions."""
+        flow = self.get_flow("favorites_v13")
+
+        # inject a send_msg action with a URL into the flow definition
+        rev = flow.get_current_revision()
+        definition = rev.definition
+        definition["nodes"][0]["actions"][0]["text"] = "Visit https://example.com for more info"
+        rev.definition = definition
+        rev.save(update_fields=["definition"])
+
+        mock_get.return_value = MockResponse(200, "OK")
+        validate_flow_links(flow.id)
+
+        flow.refresh_from_db()
+        validated = flow.metadata.get("validated_links", {})
+        self.assertIn("links", validated)
+        self.assertEqual(len(validated["links"]), 1)
+        self.assertEqual(validated["links"][0]["status_code"], 200)
+
+    @patch("requests.get")
+    def test_validate_flow_links_with_error(self, mock_get):
+        """Test validate_flow_links handles connection errors."""
+        flow = self.get_flow("favorites_v13")
+
+        rev = flow.get_current_revision()
+        definition = rev.definition
+        definition["nodes"][0]["actions"][0]["text"] = "Visit https://broken.example.com now"
+        rev.definition = definition
+        rev.save(update_fields=["definition"])
+
+        mock_get.side_effect = requests.ConnectionError("connection failed")
+        validate_flow_links(flow.id)
+
+        flow.refresh_from_db()
+        validated = flow.metadata.get("validated_links", {})
+        self.assertIn("links", validated)
+        self.assertEqual(len(validated["links"]), 1)
+        self.assertIn("error", validated["links"][0])
+
+    @patch("requests.get")
+    def test_validate_flow_links_bad_response(self, mock_get):
+        """Test validate_flow_links handles non-ok responses."""
+        flow = self.get_flow("favorites_v13")
+
+        rev = flow.get_current_revision()
+        definition = rev.definition
+        definition["nodes"][0]["actions"][0]["text"] = "Visit https://example.com/404 now"
+        rev.definition = definition
+        rev.save(update_fields=["definition"])
+
+        mock_get.return_value = MockResponse(404, "Not Found")
+        validate_flow_links(flow.id)
+
+        flow.refresh_from_db()
+        validated = flow.metadata.get("validated_links", {})
+        self.assertEqual(validated["links"][0]["status_code"], 404)
+
+    def test_validate_flow_links_nonexistent_flow(self):
+        """Test validate_flow_links handles missing flow gracefully."""
+        validate_flow_links(999999)  # should not raise
+
+    def test_validate_flow_links_no_urls(self):
+        """Test validate_flow_links with a flow that has no URLs."""
+        flow = self.get_flow("favorites_v13")
+        validate_flow_links(flow.id)
+
+        flow.refresh_from_db()
+        validated = flow.metadata.get("validated_links", {})
+        self.assertEqual(validated.get("links", []), [])
+
+    @patch("temba.flows.models.MergeFlowsTask.process_merging")
+    def test_merge_flows_task(self, mock_process):
+        """Test merge_flows_task calls process_merging."""
+        flow1 = self.get_flow("favorites_v13")
+        flow2 = self.get_flow("color_v13")
+        task = MergeFlowsTask.objects.create(
+            source=flow1,
+            target=flow2,
+            merge_name="Merged",
+            definition={},
+            created_by=self.admin,
+            modified_by=self.admin,
+        )
+        merge_flows_task(str(task.uuid))
+        mock_process.assert_called_once()
+
+    def test_merge_flows_task_nonexistent(self):
+        """Test merge_flows_task with nonexistent UUID."""
+        merge_flows_task(str(uuid4()))  # should not raise
+
+    def test_merge_flow_failed(self):
+        """Test merge_flow_failed callback sets status to FAILED."""
+        flow1 = self.get_flow("favorites_v13")
+        flow2 = self.get_flow("color_v13")
+        task = MergeFlowsTask.objects.create(
+            source=flow1,
+            target=flow2,
+            merge_name="Merged",
+            definition={},
+            created_by=self.admin,
+            modified_by=self.admin,
+        )
+        merge_flow_failed(None, Exception("boom"), "task-id", [str(task.uuid)], {}, None)
+        task.refresh_from_db()
+        self.assertEqual(task.status, MergeFlowsTask.STATUS_FAILED)
+
+    def test_merge_flow_failed_nonexistent(self):
+        """Test merge_flow_failed with nonexistent UUID."""
+        merge_flow_failed(None, Exception("boom"), "task-id", [str(uuid4())], {}, None)
+
+    @patch("temba.flows.models.MergeFlowsTask.process_merging")
+    def test_start_active_merge_flows(self, mock_process):
+        """Test start_active_merge_flows processes active tasks."""
+        flow1 = self.get_flow("favorites_v13")
+        flow2 = self.get_flow("color_v13")
+        MergeFlowsTask.objects.create(
+            source=flow1,
+            target=flow2,
+            merge_name="Merged",
+            definition={},
+            status=MergeFlowsTask.STATUS_ACTIVE,
+            created_by=self.admin,
+            modified_by=self.admin,
+        )
+        start_active_merge_flows()
+        mock_process.assert_called_once()
+
+    def test_download_flow_images_task_no_task(self):
+        """Test download_flow_images_task with nonexistent task."""
+        download_flow_images_task(999999)  # should not raise
