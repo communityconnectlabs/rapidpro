@@ -10,6 +10,7 @@ def pytest_configure():
     settings.DEBUG = False
     settings.STORAGE_ROOT_DIR = "test_orgs"
     settings.REST_HANDLE_EXCEPTIONS = False
+    settings.AUTHENTICATION_BACKENDS = ("smartmin.backends.CaseInsensitiveBackend",)
     settings.MIDDLEWARE = tuple(
         m for m in settings.MIDDLEWARE if m != "temba.events.middleware.CustomerEventMiddleware"
     )

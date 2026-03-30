@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from unittest.mock import PropertyMock, patch
 
 import pytz
+import requests
 from django_redis import get_redis_connection
 from openpyxl import load_workbook
 
@@ -16,7 +17,6 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_str
-import requests
 
 from temba.api.models import Resthook
 from temba.archives.models import Archive
@@ -52,9 +52,9 @@ from .models import (
     FlowStartCount,
     FlowUserConflictException,
     FlowVersionConflictException,
+    MergeFlowsTask,
     get_flow_user,
 )
-from .models import MergeFlowsTask
 from .tasks import (
     download_flow_images_task,
     merge_flow_failed,
