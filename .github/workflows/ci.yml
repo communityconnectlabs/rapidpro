@@ -5,30 +5,32 @@ jobs:
     name: Test
     env:
       python-version: '3.12.x'
-      postgis-version: '3.1'
+      pg-version: '17'
+      postgis-version: '3.5'
       redis-version: '5.0.6'
       node-version: '10'
       elastic-version: '7.10.1'
-      rpindexer-version: '7.2.0'
+      rpindexer-version: '7.3.0'
       mailroom-version: '7.2.6'
       DJANGO_SETTINGS_MODULE: temba.settings_ci
-    strategy:
-      matrix:
-        pg-version: ['12', '13']
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: temba
+          POSTGRES_USER: temba
+          POSTGRES_PASSWORD: temba
+        options: >-
+          --health-cmd "pg_isready -U temba -d temba"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
     steps:
     - name: Checkout code
       uses: actions/checkout@v1
-
-    - name: Install PostgreSQL and PostGIS
-      uses: nyaruka/postgis-action@v2.1.0
-      with:
-        postgresql version: ${{ matrix.pg-version }}
-        postgis version: ${{ env.postgis-version }}
-        postgresql db: temba
-        postgresql user: temba
-        postgresql password: temba
-        postgresql arguments: '--jit=off'
 
     - name: Install Linux packages
       run: |
