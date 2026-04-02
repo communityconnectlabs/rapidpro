@@ -20,8 +20,8 @@ jobs:
       redis_version: '5'
       node_version: '10'
       elastic_version: '7.10.1'
-      rpindexer_version: '6.4.0'
-      mailroom_version: '6.5.36'
+      rpindexer_version: '7.3.0'
+      mailroom_version: '7.2.6'
       DJANGO_SETTINGS_MODULE: temba.settings_ci
       email_url: ${{secrets.MAIL_SERVER_ADDRESS}}
     services:
