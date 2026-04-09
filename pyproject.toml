@@ -91,6 +91,7 @@ isort = "^5.10.1"
 responses = "^0.12.1"
 beautifulsoup4 = "^4.9.3"
 djproxy = "^2.3.6"
+django-stubs = "^6.0.2"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "temba.settings"
@@ -99,6 +100,9 @@ python_classes = ["*Test"]
 python_functions = ["test_*"]
 testpaths = ["."]
 filterwarnings = ["ignore::DeprecationWarning", "ignore::PendingDeprecationWarning"]
+
+[tool.black]
+line-length = 119
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
