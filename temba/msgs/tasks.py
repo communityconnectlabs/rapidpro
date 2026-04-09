@@ -1,16 +1,15 @@
 import logging
-from datetime import timedelta
 from urllib.parse import urlencode
 
-from django_redis import get_redis_connection
-
 from django.conf import settings
+from django.contrib.postgres.aggregates import JSONBAgg
 from django.core.mail import send_mail
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Value, When
+from django.db.models.expressions import Subquery
+from django.db.models.functions import Coalesce, JSONObject
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext_lazy as _
 
 from celery import shared_task
@@ -176,42 +175,66 @@ def backfill_msg_flow(org_id):
 
 @nonoverlapping_task(track_started=True, name="send_unread_msgs_notification_email")
 def send_unread_msgs_notification_email():
-    r = get_redis_connection()
-    conversations = ConversationOwner.objects.filter(conversation__status=Conversation.ACTIVE, last_read__isnull=False)
-    for conversation in conversations:
-        count = (
-            Msg.objects.filter(
-                direction=Msg.DIRECTION_IN,
-                contact=conversation.conversation.contact,
-                created_on__gt=conversation.last_read,
+    msg_count_subquery = (
+        Msg.objects.filter(
+            direction=Msg.DIRECTION_IN,
+            contact=OuterRef("conversation__contact"),
+            created_on__gt=OuterRef("last_read"),
+        )
+        .values("contact")
+        .annotate(count=Count("id"))
+        .values("count")[:1]
+    )
+    owners = (
+        ConversationOwner.objects.filter(
+            conversation__status=Conversation.ACTIVE,
+            last_read__isnull=False,
+            owner__email__isnull=False,
+        )
+        .exclude(owner__email="")
+        .annotate(
+            unread_count=Coalesce(
+                Subquery(msg_count_subquery, output_field=IntegerField()),
+                Value(0),
             )
-            .values("contact")
-            .annotate(count=Count("id"))
-            .values_list("count", flat=True)[:1]
-            or [0]
-        )[0]
-        if count and conversation.owner.email:
-            email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % conversation.owner.pk
-            already_sent_datetime = r.get(email_notification_key)
-            already_sent_datetime = already_sent_datetime.decode("utf-8") if already_sent_datetime else ""
-            yesterday = timezone.now() - timedelta(days=1)
-            if already_sent_datetime and parse_datetime(already_sent_datetime) > yesterday:
-                # skip when email already sent today
-                continue
-
-            query = urlencode({"contactUUID": conversation.conversation.contact.uuid})
-            context = {
-                "username": conversation.owner.username,
-                "missing_count": count,
-                "site_url": f"https://{settings.HOSTNAME}{reverse('msgs.conversation_list')}?{query}",
-                "now": timezone.now(),
-            }
-            html_content = render_to_string("msgs/email/unread_messages.html", context)
-            send_mail(
-                subject=_("You have unread messages"),
-                message=html_content,
-                html_message=html_content,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[conversation.owner.email],
-            )
-            r.set(email_notification_key, timezone.now().isoformat())
+        )
+        .filter(unread_count__gt=0)
+        .values("owner_id", "owner__email", "owner__username")
+        .annotate(
+            total_unread=Count("id"),
+            conversations=JSONBAgg(
+                JSONObject(
+                    conversation_id="conversation_id",
+                    contact_uuid="conversation__contact__uuid",
+                    contact_name="conversation__contact__name",
+                    unread_count="unread_count",
+                ),
+                order_by="conversation_id",
+                default=Value([]),
+            ),
+        )
+    )
+    for owner in owners:
+        context = {
+            "username": owner["owner__username"],
+            "now": timezone.now(),
+            "missing": [
+                {
+                    "count": conversation["unread_count"],
+                    "contact_name": conversation["contact_name"] or "",
+                    "url": (
+                        f"https://{settings.HOSTNAME}{reverse('msgs.conversation_list')}?"
+                        + urlencode({"contactUUID": conversation["contact_uuid"]})
+                    ),
+                }
+                for conversation in owner["conversations"]
+            ],
+        }
+        html_content = render_to_string("msgs/email/unread_messages.html", context)
+        send_mail(
+            subject=_("You have unread messages"),
+            message=html_content,
+            html_message=html_content,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[owner["owner__email"]],
+        )

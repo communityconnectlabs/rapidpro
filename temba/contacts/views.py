@@ -5,7 +5,6 @@ from itertools import chain
 from urllib.parse import quote_plus
 
 import iso8601
-from django_redis import get_redis_connection
 from smartmin.views import (
     SmartCreateView,
     SmartCRUDL,
@@ -41,7 +40,7 @@ from temba.channels.models import Channel
 from temba.contacts.templatetags.contacts import MISSING_VALUE
 from temba.flows.models import Flow, FlowStart
 from temba.mailroom.events import Event
-from temba.msgs.models import Conversation, ConversationOwner
+from temba.msgs.models import ConversationOwner
 from temba.notifications.views import NotificationTargetMixin
 from temba.orgs.models import Org
 from temba.orgs.views import (
@@ -1089,11 +1088,6 @@ class ContactCRUDL(SmartCRUDL):
             if conversation:
                 conversation.last_read = timezone.now()
                 conversation.save(update_fields=["last_read"])
-
-                # clear email sending data to send email again when user goes offline and have unread messages
-                email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % self.request.user.pk
-                r = get_redis_connection()
-                r.delete(email_notification_key)
 
             context["recent_only"] = recent_only
             context["next_before"] = datetime_to_timestamp(after)
