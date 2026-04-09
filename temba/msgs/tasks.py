@@ -206,6 +206,7 @@ def send_unread_msgs_notification_email():
                 JSONObject(
                     conversation_id="conversation_id",
                     contact_uuid="conversation__contact__uuid",
+                    contact_name="conversation__contact__name",
                     unread_count="unread_count",
                 ),
                 order_by="conversation_id",
@@ -220,6 +221,7 @@ def send_unread_msgs_notification_email():
             "missing": [
                 {
                     "count": conversation["unread_count"],
+                    "contact_name": conversation["contact_name"] or "",
                     "url": (
                         f"https://{settings.HOSTNAME}{reverse('msgs.conversation_list')}?"
                         + urlencode({"contactUUID": conversation["contact_uuid"]})
