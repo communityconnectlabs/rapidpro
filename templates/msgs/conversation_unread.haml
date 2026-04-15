@@ -1,0 +1,10 @@
+-extends 'includes/modal.html'
+-load i18n temba
+
+-block modal
+  {{block.super}}
+    -trans "You are about to mark this conversation as unread. Are you sure?"
+
+    .hidden
+      %form(method="POST")
+        %input(type="submit" value="{{submit_button_name}}")
