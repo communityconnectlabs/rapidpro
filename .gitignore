@@ -142,3 +142,5 @@ docker.settings.aptible-stage
 docker.settings.prod
 Dockerfile
 .env
+
+pyrightconfig.json

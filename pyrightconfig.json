@@ -1,9 +1,0 @@
-{
-  "typeCheckingMode": "basic",
-  "reportMissingTypeStubs": false,
-  "plugins": [
-    {
-      "name": "django-stubs"
-    }
-  ]
-}
