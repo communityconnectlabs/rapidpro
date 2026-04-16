@@ -1590,5 +1590,5 @@ class ConversationCRUDL(SmartCRUDL):
         def get_context_data(self, **kwargs):
             self.object = self.get_object()
             context_data = super().get_context_data(**kwargs)
-            context_data["submit_button_name"] = _("Unread")
+            context_data["submit_button_name"] = _("Mark unread")
             return context_data

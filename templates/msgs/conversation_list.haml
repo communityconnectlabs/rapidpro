@@ -135,8 +135,8 @@
         chat.contactUUID = contactUUID;
         chat.customActions = [
           {
-            label: "Unread",
-            icon: "inbox",
+            label: "Mark unread",
+            icon: "repeat",
             callback: () => {
               const unreadModal = document.querySelector("#unread-modal");
               unreadModal.endpoint = unreadURL.replace("uuid", contactUUID);
