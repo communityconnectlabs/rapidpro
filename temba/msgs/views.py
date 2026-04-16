@@ -18,7 +18,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, IntegerField, Max, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.db.models.functions.text import Upper
 from django.forms import Form
@@ -63,6 +63,7 @@ from temba.utils.views import BulkActionMixin, ComponentFormMixin, SpaMixin
 from .models import (
     Broadcast,
     Conversation,
+    ConversationOwner,
     ConversationTemplate,
     ExportMessagesTask,
     Label,
@@ -1178,6 +1179,7 @@ class ConversationCRUDL(SmartCRUDL):
         "preview_template",
         "archive",
         "send_attachment",
+        "unread",
     )
 
     class Start(OrgPermsMixin, ModalMixin, SmartFormView):
@@ -1414,9 +1416,10 @@ class ConversationCRUDL(SmartCRUDL):
                     default=Value(0),
                     output_field=IntegerField(),
                 ),
+                last_created_msg=Max("contact__msgs__created_on"),
             )
 
-            queryset = queryset.order_by("-unread_count", *self.default_order).distinct()
+            queryset = queryset.order_by("-unread_count", "-last_created_msg", *self.default_order).distinct()
             context["chats"] = queryset
             context["ABLY_API_KEY"] = settings.ABLY_API_KEY
             return context
@@ -1555,3 +1558,38 @@ class ConversationCRUDL(SmartCRUDL):
                 },
             )
             return JsonResponse(serializer.data)
+
+    class Unread(ModalMixin, OrgObjPermsMixin, SmartDeleteView):
+        permission = "msgs.conversation_start"
+        slug_field = "contact__uuid"
+        slug_url_kwarg = "uuid"
+
+        success_url = "@msgs.conversation_list"
+        redirect_url = "@msgs.conversation_list"
+        cancel_url = "@msgs.conversation_list"
+        success_message = _("Operation completed successfully.")
+        fields = ("contact",)
+
+        def post(self, request, *args, **kwargs):
+            self.object = self.get_object()
+
+            # Set last_read to just before the last inbound message so it shows as unread
+            last_inbound = (
+                Msg.objects.filter(contact=self.object.contact, direction=Msg.DIRECTION_IN)
+                .order_by("-created_on")
+                .first()
+            )
+            if last_inbound:
+                ConversationOwner.objects.filter(conversation=self.object, owner=request.user).update(
+                    last_read=last_inbound.created_on - timedelta(microseconds=1)
+                )
+
+            response = HttpResponse()
+            response["Temba-Success"] = self.get_success_url()
+            return response
+
+        def get_context_data(self, **kwargs):
+            self.object = self.get_object()
+            context_data = super().get_context_data(**kwargs)
+            context_data["submit_button_name"] = _("Mark unread")
+            return context_data
