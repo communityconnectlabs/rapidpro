@@ -18,7 +18,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, IntegerField, Max, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.db.models.functions.text import Upper
 from django.forms import Form
@@ -1416,9 +1416,10 @@ class ConversationCRUDL(SmartCRUDL):
                     default=Value(0),
                     output_field=IntegerField(),
                 ),
+                last_created_msg=Max("contact__msgs__created_on"),
             )
 
-            queryset = queryset.order_by("-unread_count", *self.default_order).distinct()
+            queryset = queryset.order_by("-unread_count", "-last_created_msg", *self.default_order).distinct()
             context["chats"] = queryset
             context["ABLY_API_KEY"] = settings.ABLY_API_KEY
             return context
