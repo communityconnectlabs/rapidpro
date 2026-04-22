@@ -143,7 +143,13 @@
               unreadModal.open = true;
 
               // turn off history load to prevent reading alongside with making conversation unread
-              chat.getContactHistory().reset()
+              chat.getContactHistory().reset();
+              unreadModal.addEventListener("temba-button-clicked", (evt) => {
+                if (evt?.detail?.button?.secondary) {
+                  // turn on history when dialog cancel clicked
+                  chat.getContactHistory().updated(new Map([["uuid", chat.contactUUID]]));
+                }
+              });
             }
           },
           {
