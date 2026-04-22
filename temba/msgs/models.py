@@ -1448,6 +1448,14 @@ class ConversationOwner(models.Model):
     owner = models.ForeignKey(User, on_delete=models.PROTECT)
     last_read = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conversation", "owner"],
+                name="unique_conversation_owner",
+            )
+        ]
+
 
 class ConversationTemplate(models.Model):
     """
