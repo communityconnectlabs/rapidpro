@@ -141,6 +141,9 @@
               const unreadModal = document.querySelector("#unread-modal");
               unreadModal.endpoint = unreadURL.replace("uuid", contactUUID);
               unreadModal.open = true;
+
+              // turn off history load to prevent reading alongside with making conversation unread
+              chat.getContactHistory().reset()
             }
           },
           {

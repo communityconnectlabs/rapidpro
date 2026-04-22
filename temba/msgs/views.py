@@ -1585,9 +1585,12 @@ class ConversationCRUDL(SmartCRUDL):
                 .first()
             )
             if last_inbound:
-                ConversationOwner.objects.filter(conversation=self.object, owner=request.user).update(
-                    last_read=last_inbound.created_on - timedelta(microseconds=1)
+                owner, _ = ConversationOwner.objects.get_or_create(
+                    conversation=self.object,
+                    owner=request.user,
                 )
+                owner.last_read = last_inbound.created_on - timedelta(minutes=1)
+                owner.save(update_fields=["last_read"])
 
             response = HttpResponse()
             response["Temba-Success"] = self.get_success_url()
