@@ -3,6 +3,17 @@
 from django.db import migrations, models
 
 
+def delete_duplicate_conversation_owners(apps, schema_editor):
+    model = apps.get_model("msgs", "ConversationOwner")
+    duplicates = (
+        model.objects.values("conversation_id", "owner_id")
+        .annotate(keep_id=models.Min("id"), duplicate_count=models.Count("id"))
+        .filter(duplicate_count__gt=1)
+        .annotate(id=models.F("id"))
+    )
+    model.objects.filter(id__in=duplicates.values("id")).exclude(id__in=duplicates.values("keep_id")).delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,6 +21,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(
+            code=delete_duplicate_conversation_owners,
+            reverse_code=lambda apps, schema_editor: None,
+        ),
         migrations.AddConstraint(
             model_name="conversationowner",
             constraint=models.UniqueConstraint(fields=("conversation", "owner"), name="unique_conversation_owner"),
