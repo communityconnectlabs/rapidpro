@@ -1395,16 +1395,21 @@ class ConversationCRUDL(SmartCRUDL):
             if return_personal:
                 queryset = queryset.filter(owners=self.request.user)
 
+            last_read_subquery = ConversationOwner.objects.filter(
+                conversation=OuterRef("pk"),
+                owner=self.request.user,
+            ).values("last_read")[:1]
+            queryset = queryset.annotate(last_read=Subquery(last_read_subquery))
             queryset = queryset.annotate(
                 unread_count=Case(
                     When(
-                        Q(conversationowner__owner=self.request.user) & Q(conversationowner__last_read__isnull=False),
+                        last_read__isnull=False,
                         then=Coalesce(
                             Subquery(
                                 Msg.objects.filter(
                                     direction=Msg.DIRECTION_IN,
                                     contact=OuterRef("contact"),
-                                    created_on__gt=OuterRef("conversationowner__last_read"),
+                                    created_on__gt=OuterRef("last_read"),
                                 )
                                 .values("contact")
                                 .annotate(count=Count("id"))
@@ -1580,9 +1585,12 @@ class ConversationCRUDL(SmartCRUDL):
                 .first()
             )
             if last_inbound:
-                ConversationOwner.objects.filter(conversation=self.object, owner=request.user).update(
-                    last_read=last_inbound.created_on - timedelta(microseconds=1)
+                owner, _ = ConversationOwner.objects.get_or_create(
+                    conversation=self.object,
+                    owner=request.user,
                 )
+                owner.last_read = last_inbound.created_on - timedelta(minutes=1)
+                owner.save(update_fields=["last_read"])
 
             response = HttpResponse()
             response["Temba-Success"] = self.get_success_url()
