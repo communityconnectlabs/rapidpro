@@ -1425,7 +1425,6 @@ class Conversation(models.Model):
     A conversation is a collection of messages between a contact and manager
     """
 
-    EMAIL_NOTIFICATION_KEY = "unread_messages_email_sent_%d"
     ACTIVE = "ACT"
     ARCHIVED = "ARC"
     STATUS = (
@@ -1448,6 +1447,14 @@ class ConversationOwner(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.PROTECT)
     owner = models.ForeignKey(User, on_delete=models.PROTECT)
     last_read = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["conversation", "owner"],
+                name="unique_conversation_owner",
+            )
+        ]
 
 
 class ConversationTemplate(models.Model):

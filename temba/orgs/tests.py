@@ -2,7 +2,7 @@ import io
 import smtplib
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlencode
 
 import pytz
@@ -67,7 +67,16 @@ from temba.utils import json, languages
 
 from .context_processors import GroupPermWrapper
 from .models import CreditAlert, Invitation, Org, OrgRole, TopUp, TopUpCredits
-from .tasks import delete_orgs_task, resume_failed_tasks, squash_topupcredits
+from .tasks import (
+    apply_topups_task,
+    cache_twilio_stats_task,
+    check_outbound_inbound_per_org_task,
+    check_topup_expiration_task,
+    delete_orgs_task,
+    normalize_contact_tels_task,
+    resume_failed_tasks,
+    squash_topupcredits,
+)
 
 
 class OrgRoleTest(TembaTest):
@@ -3156,6 +3165,86 @@ class OrgTest(TembaTest):
         mock_export_contacts_task.assert_called_once()
         mock_export_flow_results_task.assert_called_once()
         mock_export_messages_task.assert_called_once()
+
+
+class OrgTaskTest(TembaTest):
+    @patch("temba.orgs.tasks.CreditAlert.check_topup_expiration")
+    def test_check_topup_expiration_task(self, mock_check_topup_expiration):
+        check_topup_expiration_task()
+
+        mock_check_topup_expiration.assert_called_once_with()
+
+    @patch("temba.orgs.tasks.Org.objects.get")
+    def test_apply_topups_task(self, mock_get_org):
+        org = Mock()
+        mock_get_org.return_value = org
+
+        apply_topups_task(self.org.id)
+
+        mock_get_org.assert_called_once_with(id=self.org.id)
+        org.apply_topups.assert_called_once_with()
+
+    @patch("temba.contacts.models.ContactURN.ensure_number_normalization", autospec=True)
+    def test_normalize_contact_tels_task(self, mock_ensure_number_normalization):
+        contact = self.create_contact(name="Joe")
+
+        local_urn = ContactURN.create(self.org, contact, "tel:0783835001")
+        ContactURN.create(self.org, contact, "tel:+250783835002")
+        ContactURN.create(self.org, contact, "twitter:joe")
+
+        normalize_contact_tels_task(self.org.id)
+
+        mock_ensure_number_normalization.assert_called_once_with(local_urn, self.org.default_country_code)
+
+    @patch("temba.orgs.tasks.get_redis_connection")
+    @patch("temba.orgs.tasks.Org.objects.filter")
+    def test_cache_twilio_stats_task(self, mock_filter_orgs, mock_get_redis_connection):
+        redis = Mock()
+        mock_get_redis_connection.return_value = redis
+
+        org_with_twilio = Mock(id=17)
+        org_with_twilio.get_twilio_client.return_value = Mock()
+        org_with_twilio.twilio_stats = {"sms-inbound": []}
+
+        org_without_twilio = Mock(id=18)
+        org_without_twilio.get_twilio_client.return_value = None
+
+        mock_filter_orgs.return_value = [org_with_twilio, org_without_twilio]
+
+        cache_twilio_stats_task()
+
+        mock_filter_orgs.assert_called_once_with(is_active=True)
+        redis.delete.assert_called_once_with("org__twilio_stats__17")
+        self.assertEqual({"sms-inbound": []}, org_with_twilio.twilio_stats)
+
+    @override_settings(CUSTOMER_DAILY_REPORT_WEBHOOK_URL="https://example.com/daily-report")
+    @patch("temba.orgs.tasks.requests.post")
+    @patch("temba.orgs.tasks.Org.objects.raw")
+    def test_check_outbound_inbound_per_org_task(self, mock_raw_orgs, mock_post):
+        reported_activity = Mock(outgoing_count=7, incoming_count=3, contact_count=10, active_contact_count=4)
+        org_with_activity = Mock(name="Org With Activity")
+        org_with_activity.name = "Org With Activity"
+        org_with_activity.contact_activity.last.return_value = reported_activity
+
+        org_without_activity = Mock(name="Org Without Activity")
+        org_without_activity.name = "Org Without Activity"
+        org_without_activity.contact_activity.last.return_value = None
+
+        mock_raw_orgs.return_value = [org_with_activity, org_without_activity]
+        mock_post.return_value.status_code = 200
+
+        check_outbound_inbound_per_org_task()
+
+        mock_raw_orgs.assert_called_once()
+        mock_post.assert_called_once()
+        self.assertEqual("https://example.com/daily-report", mock_post.call_args.args[0])
+        self.assertEqual({"Content-Type": "application/json"}, mock_post.call_args.kwargs["headers"])
+        posted_text = mock_post.call_args.kwargs["json"]["text"]
+        self.assertIn("*CCL Customer Daily Report - ", posted_text)
+        self.assertIn("*Org With Activity*", posted_text)
+        self.assertIn("_Outbound: 7_", posted_text)
+        self.assertIn("_Incoming: 3_", posted_text)
+        self.assertNotIn("Org Without Activity", posted_text)
 
 
 class AnonOrgTest(TembaTest):

@@ -1,8 +1,19 @@
 {% extends "email_base.html" %}
 {% load i18n %}
-
 {% block body %}
-  <p>Hello {{ username }},</p>
-  <p>We noticed you have {{ missing_count }} unread message{% if missing_count > 1 %}s{% endif %} waiting for you.</p>
-  <p>Don’t miss out — log in to your account and catch up now: {{ site_url }}</p>
+    <p>Hello {{ username }},</p>
+    <p>You have unread messages in the following conversations:</p>
+    <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 16px 0;">
+        {% for item in missing %}
+        <tr>
+            <td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0;">
+                <p style="margin: 0 0 4px; font-size: 14px; color: #505050;">
+                    <strong>{{ item.count }}</strong> unread message{% if item.count > 1 %}s{% endif %}{% if item.contact_name %} from <strong>{{ item.contact_name }}</strong>{% endif %}
+                </p>
+                <a href="{{ item.url }}" style="color: #1a73e8; font-size: 13px; text-decoration: none;">View conversation &rarr;</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p style="margin-top: 16px;">Log in to your account to catch up on these messages.</p>
 {% endblock %}

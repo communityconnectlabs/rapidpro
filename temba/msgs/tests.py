@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from unittest.mock import PropertyMock, patch
 
 import pytz
-from django_redis import get_redis_connection
 from openpyxl import load_workbook
 
 from django.conf import settings
@@ -2990,7 +2989,6 @@ class ConversationTest(TembaTest):
         )
 
     def test_unread_messages_email(self):
-        r = get_redis_connection()
         hour_ago = timezone.now() - timedelta(hours=1)
         half_hour_ago = timezone.now() - timedelta(minutes=30)
         self.create_incoming_msg(self.contact, "How is it going?", created_on=half_hour_ago)
@@ -3007,35 +3005,117 @@ class ConversationTest(TembaTest):
         queryset = self.__annotate_unread_count(queryset).filter(unread_count__gt=0)
         self.assertEqual(queryset.count(), 1)
 
-        # have unread and no email sent yes
-        email_notification_key = Conversation.EMAIL_NOTIFICATION_KEY % self.admin.pk
-        sending_date = r.get(email_notification_key)
-        self.assertIsNone(sending_date, "Should not be any emails sent yet")
-
+        # have unread and no email sent yet
         with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
             send_unread_msgs_notification_email()
             send_mail_mock.assert_called_once()
-            self.assertEqual(
-                send_mail_mock.call_args[1]["message"][1914:1967],
-                "We noticed you have 1 unread message waiting for you.",
-                "Email does not contain correct message",
-            )
-
-        # have unread but email already sent
-        sending_date = r.get(email_notification_key)
-        self.assertEqual(sending_date.decode("utf-8")[:18], timezone.now().isoformat()[:18], "Email should be sent")
-
-        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
-            send_unread_msgs_notification_email()
-            send_mail_mock.assert_not_called()
+            html_content = send_mail_mock.call_args[1]["message"]
+            self.assertIn("unread messages in the following conversations", html_content)
+            self.assertIn("<strong>1</strong> unread message", html_content)
+            self.assertIn("from <strong>Bob</strong>", html_content, "Email should include contact name")
+            self.assertIn("View conversation", html_content)
+            self.assertIn(str(self.contact.uuid), html_content, "Email should include contact URL")
 
         # history viewed and all messages read
         self.login(self.admin)
         with patch("temba.utils.s3.s3.client", return_value=None):
             self.client.get(reverse("contacts.contact_history", args=[self.contact.uuid]) + "?limit=100")
 
-        sending_date = r.get(email_notification_key)
-        self.assertIsNone(sending_date, "Should not be any emails sent yet")
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+    def test_unread_messages_email_no_email(self):
+        """Owners without an email address should not receive notifications."""
+        hour_ago = timezone.now() - timedelta(hours=1)
+        self.create_incoming_msg(self.contact, "Hello", created_on=timezone.now() - timedelta(minutes=30))
+        self.admin.email = ""
+        self.admin.save(update_fields=["email"])
+        ConversationOwner.objects.create(conversation=self.conversation, owner=self.admin, last_read=hour_ago)
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+    def test_unread_messages_email_no_unread(self):
+        """No email when last_read is after all incoming messages."""
+        self.create_incoming_msg(self.contact, "Old msg", created_on=timezone.now() - timedelta(hours=2))
+        ConversationOwner.objects.create(conversation=self.conversation, owner=self.admin, last_read=timezone.now())
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+    def test_unread_messages_email_archived_conversation(self):
+        """Archived conversations should not trigger emails."""
+        self.conversation.status = Conversation.ARCHIVED
+        self.conversation.save(update_fields=["status"])
+        self.create_incoming_msg(self.contact, "Hello", created_on=timezone.now() - timedelta(minutes=10))
+        ConversationOwner.objects.create(
+            conversation=self.conversation, owner=self.admin, last_read=timezone.now() - timedelta(hours=1)
+        )
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_not_called()
+
+    def test_unread_messages_email_multiple_conversations(self):
+        """Owner with unread messages in multiple conversations gets a single email listing all."""
+        hour_ago = timezone.now() - timedelta(hours=1)
+        contact2 = self.create_contact("Alice", phone="0783835002")
+        conversation2 = Conversation.objects.create(
+            org=self.org, contact=contact2, status=Conversation.ACTIVE, created_on=timezone.now()
+        )
+        self.create_incoming_msg(self.contact, "Hi from Bob", created_on=timezone.now() - timedelta(minutes=30))
+        self.create_incoming_msg(contact2, "Hi from Alice", created_on=timezone.now() - timedelta(minutes=20))
+        self.create_incoming_msg(contact2, "Another from Alice", created_on=timezone.now() - timedelta(minutes=10))
+        ConversationOwner.objects.create(conversation=self.conversation, owner=self.admin, last_read=hour_ago)
+        ConversationOwner.objects.create(conversation=conversation2, owner=self.admin, last_read=hour_ago)
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_called_once()
+            html_content = send_mail_mock.call_args[1]["message"]
+            self.assertIn("<strong>1</strong> unread message", html_content)
+            self.assertIn("<strong>2</strong> unread messages", html_content)
+            self.assertIn("from <strong>Bob</strong>", html_content)
+            self.assertIn("from <strong>Alice</strong>", html_content)
+            self.assertEqual([self.admin.email], send_mail_mock.call_args[1]["recipient_list"])
+
+    def test_unread_messages_email_multiple_owners(self):
+        """Different owners each get their own email."""
+        hour_ago = timezone.now() - timedelta(hours=1)
+        self.create_incoming_msg(self.contact, "Hello", created_on=timezone.now() - timedelta(minutes=30))
+        ConversationOwner.objects.create(conversation=self.conversation, owner=self.admin, last_read=hour_ago)
+        ConversationOwner.objects.create(conversation=self.conversation, owner=self.editor, last_read=hour_ago)
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            self.assertEqual(send_mail_mock.call_count, 2)
+            recipients = {call[1]["recipient_list"][0] for call in send_mail_mock.call_args_list}
+            self.assertEqual(recipients, {self.admin.email, self.editor.email})
+
+    def test_unread_messages_email_contact_without_name(self):
+        """Contact with no name should still work, just without 'from <name>' text."""
+        hour_ago = timezone.now() - timedelta(hours=1)
+        nameless_contact = self.create_contact(None, phone="0783835099")
+        conversation = Conversation.objects.create(
+            org=self.org, contact=nameless_contact, status=Conversation.ACTIVE, created_on=timezone.now()
+        )
+        self.create_incoming_msg(nameless_contact, "Hi", created_on=timezone.now() - timedelta(minutes=30))
+        ConversationOwner.objects.create(conversation=conversation, owner=self.admin, last_read=hour_ago)
+
+        with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
+            send_unread_msgs_notification_email()
+            send_mail_mock.assert_called_once()
+            html_content = send_mail_mock.call_args[1]["message"]
+            self.assertIn("<strong>1</strong> unread message", html_content)
+            self.assertNotIn(" from <strong></strong>", html_content, "Should not have empty 'from' text")
+
+    def test_unread_messages_email_last_read_null(self):
+        """Owner with null last_read should not receive email."""
+        self.create_incoming_msg(self.contact, "Hello", created_on=timezone.now() - timedelta(minutes=30))
+        ConversationOwner.objects.create(conversation=self.conversation, owner=self.admin, last_read=None)
 
         with patch("temba.msgs.tasks.send_mail", return_value=0) as send_mail_mock:
             send_unread_msgs_notification_email()

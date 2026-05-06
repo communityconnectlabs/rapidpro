@@ -129,18 +129,39 @@
       // Modify or add query params
       var chat = document.querySelector("temba-contact-chat");
       var archiveURL = "{% url 'msgs.conversation_archive' 'uuid' %}";
+      var unreadURL = "{% url 'msgs.conversation_unread' 'uuid' %}";
       var sendAttachmentURL = "{% url 'msgs.conversation_send_attachment' 'uuid' %}";
       if(contactUUID && contactUUID !== "null") {
         chat.contactUUID = contactUUID;
-        chat.customActions = [{
-          label: "Archive",
-          icon: "archive",
-          callback: () => {
-            const archiveModal = document.querySelector("#archive-modal");
-            archiveModal.endpoint = archiveURL.replace("uuid", contactUUID);
-            archiveModal.open = true;
-          }
-        }];
+        chat.customActions = [
+          {
+            label: "Mark unread",
+            icon: "repeat",
+            callback: () => {
+              const unreadModal = document.querySelector("#unread-modal");
+              unreadModal.endpoint = unreadURL.replace("uuid", contactUUID);
+              unreadModal.open = true;
+
+              // turn off history load to prevent reading alongside with making conversation unread
+              chat.getContactHistory().reset();
+              unreadModal.addEventListener("temba-button-clicked", (evt) => {
+                if (evt?.detail?.button?.secondary) {
+                  // turn on history when dialog cancel clicked
+                  chat.getContactHistory().updated(new Map([["uuid", chat.contactUUID]]));
+                }
+              });
+            }
+          },
+          {
+            label: "Archive",
+            icon: "archive",
+            callback: () => {
+              const archiveModal = document.querySelector("#archive-modal");
+              archiveModal.endpoint = archiveURL.replace("uuid", contactUUID);
+              archiveModal.open = true;
+            }
+          },
+        ];
         chat.attachmentAccept = ".pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .txt, .odt, image/*, audio/*, video/*";
         chat.onAttachmentSelected = (e) => {
           let loading = document.createElement("temba-loading");
@@ -375,6 +396,7 @@
               .flex-grow.flex-col.h-full(class="{% if is_spa %}ml-4{%else%}py-4 pb-4 pr-4{% endif %}")
                 %temba-contact-chat.h-full(agent="{{request.user.email}}" monitor="true")
         %temba-modax#archive-modal{ header: '{% trans "Update Conversation" %}' }
+        %temba-modax#unread-modal{ header: '{% trans "Mark as Unread" %}' }
         %temba-dialog#info-dialog{ header: '{% trans "Attachment Error" %}' }
           #info-dialog-body.p-5
             -trans "Failed to send attachment."

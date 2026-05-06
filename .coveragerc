@@ -24,6 +24,8 @@ omit =
     */tests*
     *__init__*
     *settings*
+    */migrations/*
+    temba/wsgi.py
     temba/*/management/commands/*
 
 [html]
