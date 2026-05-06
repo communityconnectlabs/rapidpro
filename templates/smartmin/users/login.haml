@@ -38,7 +38,7 @@
 
     -if no_verification_code
       .mt-4
-        %temba-textinput(name='authy_code' placeholder='{{_("Verification Code")|escapejs}}')
+        %temba-textinput(name='verification_code' placeholder='{{_("Verification Code")|escapejs}}')
         -if allow_code_resend
           %a{href:"javascript:resendCode();", class:"mt-2"}
             -trans "Resend code"
@@ -66,6 +66,6 @@
     }
     function resendCode() {
       $('form#login-form').removeAttr('onsubmit');
-      $('[name="authy_code"]').val('');
+      $('[name="verification_code"]').val('');
       $('form#login-form').submit();
     }

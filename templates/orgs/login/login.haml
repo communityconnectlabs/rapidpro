@@ -95,6 +95,6 @@
     }
     function resendCode() {
       $('form#login-form').removeAttr('onsubmit');
-      $('[name="authy_code"]').val('');
+      $('[name="verification_code"]').val('');
       $('form#login-form').submit();
     }
