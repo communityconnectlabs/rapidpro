@@ -1156,26 +1156,40 @@ OUTGOING_PROXIES = {}
 # -----------------------------------------------------------------------------------
 # Caching using Redis
 # -----------------------------------------------------------------------------------
-REDIS_HOST = "localhost"
-REDIS_PORT = 6379
-REDIS_DB = 10 if TESTING else 15  # we use a redis db of 10 for testing so that we maintain caches for dev
+REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+REDIS_DB = 10 if TESTING else int(os.environ.get("REDIS_DB", "15"))
+
+# In-transit encryption (e.g. ElastiCache): set REDIS_USE_TLS=1 to use rediss://.
+# REDIS_SSL_CERT_REQS = required (prod, default) | optional | none (local self-signed).
+REDIS_USE_TLS = os.environ.get("REDIS_USE_TLS", "").lower() in ("1", "true", "yes")
+REDIS_SCHEME = "rediss" if REDIS_USE_TLS else "redis"
+REDIS_SSL_CERT_REQS = os.environ.get("REDIS_SSL_CERT_REQS", "required")
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://%s:%s/%s" % (REDIS_HOST, REDIS_PORT, REDIS_DB),
+        "LOCATION": "%s://%s:%s/%s" % (REDIS_SCHEME, REDIS_HOST, REDIS_PORT, REDIS_DB),
         "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
     }
 }
+if REDIS_USE_TLS:
+    CACHES["default"]["OPTIONS"]["CONNECTION_POOL_KWARGS"] = {"ssl_cert_reqs": REDIS_SSL_CERT_REQS}
 
 # -----------------------------------------------------------------------------------
 # Async tasks using Celery
 # -----------------------------------------------------------------------------------
 CELERY_RESULT_BACKEND = None
-CELERY_BROKER_URL = "redis://%s:%d/%d" % (REDIS_HOST, REDIS_PORT, REDIS_DB)
+CELERY_BROKER_URL = "%s://%s:%d/%d" % (REDIS_SCHEME, REDIS_HOST, REDIS_PORT, REDIS_DB)
 
 # by default, celery doesn't have any timeout on our redis connections, this fixes that
 CELERY_BROKER_TRANSPORT_OPTIONS = {"socket_timeout": 5}
+
+if REDIS_USE_TLS:
+    import ssl as _ssl
+
+    _CERT_REQS = {"required": _ssl.CERT_REQUIRED, "optional": _ssl.CERT_OPTIONAL, "none": _ssl.CERT_NONE}
+    CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": _CERT_REQS.get(REDIS_SSL_CERT_REQS, _ssl.CERT_REQUIRED)}
 
 CELERY_BEAT_SCHEDULE = {
     "check-channels": {"task": "check_channels_task", "schedule": timedelta(seconds=300)},

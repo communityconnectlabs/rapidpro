@@ -70,10 +70,12 @@ ALLOWED_HOSTS = ["*"]
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://%s:%s/%s" % (REDIS_HOST, REDIS_PORT, REDIS_DB),
+        "LOCATION": "%s://%s:%s/%s" % (REDIS_SCHEME, REDIS_HOST, REDIS_PORT, REDIS_DB),
         "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
     }
 }
+if REDIS_USE_TLS:
+    CACHES["default"]["OPTIONS"]["CONNECTION_POOL_KWARGS"] = {"ssl_cert_reqs": REDIS_SSL_CERT_REQS}
 
 INTERNAL_IPS = ("127.0.0.1",)
 
