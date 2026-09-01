@@ -83,9 +83,9 @@ REDIS_PW = os.environ.get("REDIS_PW", None)
 REDIS_DB = int(os.environ.get("REDIS_DB", 10))
 
 if REDIS_PW:
-    REDIS_LOCATION = "redis://:%s@%s:%s/%s" % (REDIS_PW, REDIS_HOST, REDIS_PORT, REDIS_DB)
+    REDIS_LOCATION = "%s://:%s@%s:%s/%s" % (REDIS_SCHEME, REDIS_PW, REDIS_HOST, REDIS_PORT, REDIS_DB)
 else:
-    REDIS_LOCATION = "redis://%s:%s/%s" % (REDIS_HOST, REDIS_PORT, REDIS_DB)
+    REDIS_LOCATION = "%s://%s:%s/%s" % (REDIS_SCHEME, REDIS_HOST, REDIS_PORT, REDIS_DB)
 
 # Use dummy cache for build-time operations (collectstatic, compress)
 if os.environ.get("USE_DUMMY_CACHE", "false") == "true":
@@ -104,9 +104,22 @@ else:
             }
         }
     }
+    if REDIS_USE_TLS:
+        CACHES["default"]["OPTIONS"]["CONNECTION_POOL_KWARGS"] = {
+            "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
+            "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
+        }
 
 BROKER_URL = REDIS_LOCATION
 CELERY_BROKER_URL = REDIS_LOCATION
+if REDIS_USE_TLS:
+    import ssl as _ssl
+
+    _CERT_REQS = {"required": _ssl.CERT_REQUIRED, "optional": _ssl.CERT_OPTIONAL, "none": _ssl.CERT_NONE}
+    CELERY_BROKER_USE_SSL = {
+        "ssl_cert_reqs": _CERT_REQS.get(REDIS_SSL_CERT_REQS, _ssl.CERT_REQUIRED),
+        "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
+    }
 
 _default_database_config = {
     "ENGINE": "django.contrib.gis.db.backends.postgis",

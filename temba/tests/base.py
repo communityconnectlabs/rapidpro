@@ -153,7 +153,14 @@ class TembaTestMixin:
         if settings.REDIS_HOST != "localhost":
             raise ValueError(f"Expected redis test server host to be: 'localhost', got '{settings.REDIS_HOST}'")
 
-        r = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=10)
+        redis_kwargs = {"host": settings.REDIS_HOST, "port": settings.REDIS_PORT, "db": 10}
+        if getattr(settings, "REDIS_USE_TLS", False):
+            redis_kwargs.update(
+                ssl=True,
+                ssl_cert_reqs=settings.REDIS_SSL_CERT_REQS,
+                ssl_check_hostname=settings.REDIS_SSL_CHECK_HOSTNAME,
+            )
+        r = redis.StrictRedis(**redis_kwargs)
         r.flushdb()
 
     def clear_storage(self):
