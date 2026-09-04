@@ -99,18 +99,18 @@ class InstagramTypeTest(TembaTest):
         )
 
         mock_get.assert_any_call(
-            "https://graph.facebook.com/v12.0/098765/accounts",
+            "https://graph.facebook.com/v26.0/098765/accounts",
             params={"access_token": self.long_life_user_token},
         )
 
         mock_post.assert_any_call(
-            "https://graph.facebook.com/v12.0/123456/subscribed_apps",
+            "https://graph.facebook.com/v26.0/123456/subscribed_apps",
             data={"subscribed_fields": "messages,messaging_postbacks"},
             params={"access_token": self.long_life_user_token},
         )
 
         mock_get.assert_any_call(
-            "https://graph.facebook.com/123456?fields=instagram_business_account",
+            "https://graph.facebook.com/v26.0/123456?fields=instagram_business_account",
             params={
                 "access_token": self.long_life_user_token,
             },
@@ -144,7 +144,7 @@ class InstagramTypeTest(TembaTest):
         self.channel.release(self.admin)
 
         mock_delete.assert_called_once_with(
-            "https://graph.facebook.com/v12.0/019283/subscribed_apps",
+            "https://graph.facebook.com/v26.0/019283/subscribed_apps",
             params={"access_token": "09876543"},
         )
 
@@ -223,12 +223,12 @@ class InstagramTypeTest(TembaTest):
         )
 
         mock_get.assert_any_call(
-            "https://graph.facebook.com/v12.0/098765/accounts",
+            "https://graph.facebook.com/v26.0/098765/accounts",
             params={"access_token": self.long_life_user_token},
         )
 
         mock_post.assert_any_call(
-            "https://graph.facebook.com/v12.0/123456/subscribed_apps",
+            "https://graph.facebook.com/v26.0/123456/subscribed_apps",
             data={"subscribed_fields": "messages,messaging_postbacks"},
             params={"access_token": self.long_life_user_token},
         )
